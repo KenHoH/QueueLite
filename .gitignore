@@ -1,0 +1,4 @@
+/backend/devenv.lock
+/backend/.devenv
+/backend/devenv.nix
+/backend/devenv.yaml
