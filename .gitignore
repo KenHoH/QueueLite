@@ -6,3 +6,4 @@
 /backend/tmp
 /frontend/devenv.nix
 /frontend/devenv.yaml
+/frontend/devenv.lock
