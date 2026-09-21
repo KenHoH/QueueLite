@@ -4,3 +4,5 @@
 /backend/devenv.yaml
 /backend/.env
 /backend/tmp
+/frontend/devenv.nix
+/frontend/devenv.yaml
