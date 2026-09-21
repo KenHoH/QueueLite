@@ -4,3 +4,8 @@
 /backend/devenv.yaml
 /backend/.env
 /backend/tmp
+/frontend/devenv.lock
+/frontend/devenv.nix
+/frontend/devenv.yaml
+/frontend/.devenv
+/frontend/node_modules
