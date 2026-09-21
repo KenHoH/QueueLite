@@ -10,6 +10,7 @@ type User struct {
 	ID          uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
 	Username    string    `gorm:"size:100;not null;uniqueIndex" json:"username"`
 	PhoneNumber string    `gorm:"size:30;not null;uniqueIndex" json:"phoneNumber"`
+	Password    *string   `gorm:"size:255;" json:"password"`
 	Email       *string   `gorm:"size:255;uniqueIndex" json:"email,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
