@@ -2,22 +2,33 @@ package postgres
 
 import (
 	"QueueLite/internal/adapter/postgres/model"
-	"log"
+	"fmt"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func NewConnection(database_url string) *gorm.DB {
-	db, err := gorm.Open(postgres.Open(database_url), &gorm.Config{})
+func NewConnection(databaseURL string) (*gorm.DB, error) {
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
 	if err != nil {
-		log.Fatal("failed to connect database")
+		return nil, fmt.Errorf("connect database: %w", err)
 	}
 
-	return db
+	return db, nil
 }
 
 func MigrateDatabase(db *gorm.DB) error {
-	err := db.AutoMigrate(&model.Business{}, &model.Counter{}, &model.Queue{}, &model.User{}, &model.Subscription{}, &model.SubscriptionPlan{}, &model.UserBusinessRelation{})
-	return err
+	if err := db.AutoMigrate(
+		&model.Business{},
+		&model.Counter{},
+		&model.Queue{},
+		&model.User{},
+		&model.Subscription{},
+		&model.SubscriptionPlan{},
+		&model.UserBusinessRelation{},
+	); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
+
+	return nil
 }

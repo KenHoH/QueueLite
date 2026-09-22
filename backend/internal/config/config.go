@@ -1,17 +1,32 @@
 package config
 
 import (
-	"log"
+	"errors"
 	"os"
 
 	"github.com/joho/godotenv"
 )
 
-func GetDatabaseUrl() string {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+type Config struct {
+	DatabaseURL string
+	HTTPAddr    string
+}
+
+func Load() (*Config, error) {
+	_ = godotenv.Load()
+
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return nil, errors.New("DATABASE_URL is required")
 	}
-	name := os.Getenv("DATABASE_URL")
-	return name
+
+	httpAddr := os.Getenv("HTTP_ADDR")
+	if httpAddr == "" {
+		httpAddr = ":8080"
+	}
+
+	return &Config{
+		DatabaseURL: databaseURL,
+		HTTPAddr:    httpAddr,
+	}, nil
 }
