@@ -14,8 +14,7 @@ type UserRegisterRequest struct {
 }
 
 type UpdateUserInformationRequest struct {
-	UserID      string `json:"id"`
-	PhoneNumber string `json:"phonenumber"`
-	Password    string `json:"password"`
-	Email       string `json:"email"`
+	PhoneNumber *string `json:"phonenumber"`
+	Password    *string `json:"password"`
+	Email       *string `json:"email"`
 }
