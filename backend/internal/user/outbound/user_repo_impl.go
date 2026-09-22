@@ -66,7 +66,7 @@ func (u *UserRepoImpl) GetUserByName(ctx context.Context, username string) (*dom
 		Error
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("%w: %s", app.ErrUserNotFound, id)
+		return nil, fmt.Errorf("%w: %s", app.ErrUserNotFound, username)
 	}
 
 	if err != nil {
