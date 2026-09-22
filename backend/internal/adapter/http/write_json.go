@@ -10,11 +10,13 @@ func WriteJSON(
 	status int,
 	data any,
 ) {
-	w.Header().Set("Content-Type", "application/json")
-
-	w.WriteHeader(status)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// log the error
+	body, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
