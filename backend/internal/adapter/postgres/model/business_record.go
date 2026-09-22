@@ -12,6 +12,8 @@ type Business struct {
 	Location    string    `gorm:"column:business_location;size:255;not null" json:"location"`
 	Description *string   `gorm:"column:business_description;type:text" json:"description,omitempty"`
 	Operational bool      `gorm:"column:business_operational;not null;default:true" json:"operational"`
+	OpenTime    time.Time `gorm:"column:business_open_time;type:time;not null" json:"openTime"`
+	CloseTime   time.Time `gorm:"column:business_close_time;type:time;not null" json:"closeTime"`
 	Email       string    `gorm:"column:business_email;size:255;not null" json:"email"`
 	PhoneNumber string    `gorm:"column:business_phone_number;size:30;not null" json:"phoneNumber"`
 
