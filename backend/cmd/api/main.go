@@ -1,19 +1,12 @@
 package main
 
 import (
-	"QueueLite/internal/adapter/postgres"
-	"QueueLite/internal/config"
-	"fmt"
+	"QueueLite/internal/bootstrap"
 	"log"
 )
 
 func main() {
-	url := config.GetDatabaseUrl()
-	db := postgres.NewConnection(url)
-
-	errMigration := postgres.MigrateDatabase(db)
-	if errMigration != nil {
-		log.Fatal("Database Migration failed")
+	if err := bootstrap.Run(); err != nil {
+		log.Fatal(err)
 	}
-	fmt.Println("Testing")
 }
