@@ -26,7 +26,6 @@ func (u *UserHandlerImpl) Routes() http.Handler {
 
 	router.Post("/", u.RegisterUser)
 	router.Post("/login", u.LoginUser)
-	router.Get("/{userID}/subscriptions", u.GetUserSubscriptions)
 	router.Get("/{userID}", u.GetUser)
 	router.Put("/{userID}", u.UpdateUser)
 
@@ -114,21 +113,6 @@ func (u *UserHandlerImpl) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpadapter.WriteJSON(w, http.StatusOK, NewUserResponse(user))
-}
-
-func (u *UserHandlerImpl) GetUserSubscriptions(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseUUIDParam(w, r, "userID", "INVALID_USER_ID", "invalid user id")
-	if !ok {
-		return
-	}
-
-	subscriptions, err := u.s.GetUserSubscriptions(r.Context(), id)
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-
-	httpadapter.WriteJSON(w, http.StatusOK, NewUserSubscriptionResponses(subscriptions))
 }
 
 func (u *UserHandlerImpl) UpdateUser(w http.ResponseWriter, r *http.Request) {

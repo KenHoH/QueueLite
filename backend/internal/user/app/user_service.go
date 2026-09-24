@@ -2,7 +2,6 @@ package app
 
 import (
 	"QueueLite/internal/apperror"
-	subscriptiondomain "QueueLite/internal/subscription/domain"
 	"QueueLite/internal/user/domain"
 	"context"
 	"errors"
@@ -89,18 +88,6 @@ func (s *UserService) GetUser(ctx context.Context, id uuid.UUID) (*domain.User, 
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
 	}
 	return user, nil
-}
-
-func (s *UserService) GetUserSubscriptions(ctx context.Context, id uuid.UUID) ([]subscriptiondomain.Subscription, error) {
-	if _, err := s.GetUser(ctx, id); err != nil {
-		return nil, err
-	}
-
-	subscriptions, err := s.repo.GetUserSubscriptions(ctx, id)
-	if err != nil {
-		return nil, apperror.Wrap(apperror.KindInternal, "GET_USER_SUBSCRIPTIONS_ERROR", "failed to get user subscriptions", err)
-	}
-	return subscriptions, nil
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain.User) error {
