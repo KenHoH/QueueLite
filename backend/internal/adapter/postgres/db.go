@@ -23,8 +23,9 @@ func MigrateDatabase(db *gorm.DB) error {
 		&model.Counter{},
 		&model.Queue{},
 		&model.User{},
+		&model.BusinessPlan{},
+		&model.UserPlan{},
 		&model.Subscription{},
-		&model.SubscriptionPlan{},
 		&model.UserBusinessRelation{},
 	); err != nil {
 		return fmt.Errorf("migrate database: %w", err)

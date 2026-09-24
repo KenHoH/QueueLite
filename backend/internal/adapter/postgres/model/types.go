@@ -1,5 +1,39 @@
 package model
 
+type BusinessPlanType string
+
+const (
+	BusinessPlanTypeFree BusinessPlanType = "free"
+	BusinessPlanTypePlus BusinessPlanType = "plus"
+	BusinessPlanTypePro  BusinessPlanType = "pro"
+	BusinessPlanTypeMax  BusinessPlanType = "max"
+)
+
+func IsValidBusinessPlanType(value BusinessPlanType) bool {
+	switch value {
+	case BusinessPlanTypeFree, BusinessPlanTypePlus, BusinessPlanTypePro, BusinessPlanTypeMax:
+		return true
+	default:
+		return false
+	}
+}
+
+type UserPlanType string
+
+const (
+	UserPlanTypeStandard UserPlanType = "standard"
+	UserPlanTypePremium  UserPlanType = "premium"
+)
+
+func IsValidUserPlanType(value UserPlanType) bool {
+	switch value {
+	case UserPlanTypeStandard, UserPlanTypePremium:
+		return true
+	default:
+		return false
+	}
+}
+
 type BusinessRole string
 
 const (
@@ -28,6 +62,6 @@ const (
 type SubscriptionType string
 
 const (
-	SubscriptionTypeMonthly SubscriptionType = "business"
-	SubscriptionTypeYearly  SubscriptionType = "person"
+	SubscriptionTypeBusiness SubscriptionType = "business"
+	SubscriptionTypeUser     SubscriptionType = "user"
 )
