@@ -7,6 +7,7 @@ import (
 	counterapp "QueueLite/internal/counter/app"
 	counterhttp "QueueLite/internal/counter/inbound/http"
 	counteroutbound "QueueLite/internal/counter/outbound"
+	"QueueLite/internal/middleware"
 	queueapp "QueueLite/internal/queue/app"
 	queuehttp "QueueLite/internal/queue/inbound/http"
 	queueoutbound "QueueLite/internal/queue/outbound"
@@ -25,6 +26,7 @@ func NewRouter(db *gorm.DB) *chi.Mux {
 	router := chi.NewRouter()
 
 	userRepo := useroutbound.NewUserRepo(db)
+	router.Use(middleware.AuthMiddleware(userRepo))
 	userService := userapp.NewUserService(userRepo)
 	userHandler := userhttp.NewUserHandler(userService)
 

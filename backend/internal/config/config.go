@@ -10,6 +10,7 @@ import (
 type Config struct {
 	DatabaseURL string
 	HTTPAddr    string
+	SecretKey   string
 }
 
 func Load() (*Config, error) {
@@ -25,8 +26,14 @@ func Load() (*Config, error) {
 		httpAddr = ":8080"
 	}
 
+	secretKey := os.Getenv("SECRET")
+	if secretKey == "" {
+		return nil, errors.New("Secret key is required")
+	}
+
 	return &Config{
 		DatabaseURL: databaseURL,
 		HTTPAddr:    httpAddr,
+		SecretKey:   secretKey,
 	}, nil
 }
