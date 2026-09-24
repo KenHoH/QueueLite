@@ -26,12 +26,13 @@ func NewSubscriptionHandler(s *app.SubscriptionService) *SubscriptionHandlerImpl
 func (h *SubscriptionHandlerImpl) Routes() http.Handler {
 	router := chi.NewRouter()
 
-	router.Post("/plans", h.CreatePlan)
-	router.Get("/plans/{planID}", h.GetPlan)
-	router.Put("/plans/{planID}", h.UpdatePlan)
-	router.Delete("/plans/{planID}", h.DeletePlan)
 	router.Get("/", h.GetAllSubscription)
 	router.Post("/", h.CreateSubscription)
+	router.Get("/businesses/{businessID}", h.GetBusinessSubscriptionInfo)
+	router.Get("/users/{userID}", h.GetUserSubscriptionInfo)
+	router.Post("/users/{userID}/use", h.UseUserSubscription)
+	router.Patch("/users/{userID}/slots", h.AddUserSlot)
+	router.Patch("/businesses/{businessID}/capacity/decrease", h.DecreaseBusinessCapacity)
 	router.Get("/{subscriptionID}", h.GetSubscription)
 	router.Put("/{subscriptionID}", h.UpdateSubscription)
 	router.Patch("/{subscriptionID}/time", h.UpdateSubscriptionTime)
@@ -40,75 +41,6 @@ func (h *SubscriptionHandlerImpl) Routes() http.Handler {
 	router.Delete("/{subscriptionID}", h.DeleteSubscription)
 
 	return router
-}
-
-func (h *SubscriptionHandlerImpl) CreatePlan(w http.ResponseWriter, r *http.Request) {
-	var request CreateSubscriptionPlanRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
-		return
-	}
-
-	plan, err := h.s.CreatePlan(r.Context(), domain.SubscriptionPlan{Name: request.Name, Description: request.Description})
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-	httpadapter.WriteJSON(w, http.StatusCreated, NewSubscriptionPlanResponse(plan))
-}
-
-func (h *SubscriptionHandlerImpl) GetPlan(w http.ResponseWriter, r *http.Request) {
-	planID, ok := parseUUIDParam(w, r, "planID", "INVALID_PLAN_ID", "invalid plan id")
-	if !ok {
-		return
-	}
-	plan, err := h.s.GetPlan(r.Context(), planID)
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-	httpadapter.WriteJSON(w, http.StatusOK, NewSubscriptionPlanResponse(plan))
-}
-
-func (h *SubscriptionHandlerImpl) UpdatePlan(w http.ResponseWriter, r *http.Request) {
-	planID, ok := parseUUIDParam(w, r, "planID", "INVALID_PLAN_ID", "invalid plan id")
-	if !ok {
-		return
-	}
-	var request UpdateSubscriptionPlanRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
-		return
-	}
-	if request.Name == nil && request.Description == nil {
-		writeInvalid(w, "NO_PLAN_FIELDS", "no subscription plan fields provided")
-		return
-	}
-	if request.Name != nil {
-		if err := h.s.UpdatePlanName(r.Context(), planID, *request.Name); err != nil {
-			httpadapter.WriteError(w, err)
-			return
-		}
-	}
-	if request.Description != nil {
-		if err := h.s.UpdatePlanDescription(r.Context(), planID, *request.Description); err != nil {
-			httpadapter.WriteError(w, err)
-			return
-		}
-	}
-	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "subscription plan updated"})
-}
-
-func (h *SubscriptionHandlerImpl) DeletePlan(w http.ResponseWriter, r *http.Request) {
-	planID, ok := parseUUIDParam(w, r, "planID", "INVALID_PLAN_ID", "invalid plan id")
-	if !ok {
-		return
-	}
-	if err := h.s.DeletePlan(r.Context(), planID); err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "subscription plan deleted"})
 }
 
 func (h *SubscriptionHandlerImpl) GetAllSubscription(w http.ResponseWriter, r *http.Request) {
@@ -130,17 +62,29 @@ func (h *SubscriptionHandlerImpl) CreateSubscription(w http.ResponseWriter, r *h
 		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
-	businessID, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
-	if !ok {
-		return
+	var businessID *uuid.UUID
+	if strings.TrimSpace(request.BusinessID) != "" {
+		parsed, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
+		if !ok {
+			return
+		}
+		businessID = &parsed
 	}
-	planID, ok := parseUUIDValue(w, request.SubscriptionPlanID, "INVALID_PLAN_ID", "invalid plan id")
-	if !ok {
-		return
+	var userID *uuid.UUID
+	if strings.TrimSpace(request.UserID) != "" {
+		parsed, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
+		if !ok {
+			return
+		}
+		userID = &parsed
 	}
-	startDate, ok := parseDateTime(w, request.StartDate, "INVALID_START_DATE", "invalid start date")
-	if !ok {
-		return
+	startDate := time.Now()
+	if strings.TrimSpace(request.StartDate) != "" {
+		parsed, ok := parseDateTime(w, request.StartDate, "INVALID_START_DATE", "invalid start date")
+		if !ok {
+			return
+		}
+		startDate = parsed
 	}
 	endDate, ok := parseOptionalDateTime(w, request.EndDate, "INVALID_END_DATE", "invalid end date")
 	if !ok {
@@ -148,13 +92,13 @@ func (h *SubscriptionHandlerImpl) CreateSubscription(w http.ResponseWriter, r *h
 	}
 
 	subscription, err := h.s.CreateSubscription(r.Context(), domain.Subscription{
-		BusinessID:         businessID,
-		SubscriptionPlanID: planID,
-		Type:               domain.SubscriptionType(strings.TrimSpace(request.Type)),
-		StartDate:          startDate,
-		EndDate:            endDate,
-		Status:             domain.SubscriptionStatus(strings.TrimSpace(request.Status)),
-	})
+		BusinessID: businessID,
+		UserID:     userID,
+		Type:       domain.SubscriptionType(strings.TrimSpace(request.Type)),
+		StartDate:  startDate,
+		EndDate:    endDate,
+		Status:     domain.SubscriptionStatus(strings.TrimSpace(request.Status)),
+	}, domain.BusinessPlanType(strings.TrimSpace(request.BusinessPlanType)), domain.UserPlanType(strings.TrimSpace(request.UserPlanType)))
 	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
@@ -185,11 +129,23 @@ func (h *SubscriptionHandlerImpl) UpdateSubscription(w http.ResponseWriter, r *h
 		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
-	planID, ok := parseUUIDValue(w, request.SubscriptionPlanID, "INVALID_PLAN_ID", "invalid plan id")
-	if !ok {
-		return
+	var businessPlanID *uuid.UUID
+	if strings.TrimSpace(request.BusinessPlanID) != "" {
+		parsed, ok := parseUUIDValue(w, request.BusinessPlanID, "INVALID_BUSINESS_PLAN_ID", "invalid business plan id")
+		if !ok {
+			return
+		}
+		businessPlanID = &parsed
 	}
-	if err := h.s.UpdateSubscription(r.Context(), subscriptionID, planID); err != nil {
+	var userPlanID *uuid.UUID
+	if strings.TrimSpace(request.UserPlanID) != "" {
+		parsed, ok := parseUUIDValue(w, request.UserPlanID, "INVALID_USER_PLAN_ID", "invalid user plan id")
+		if !ok {
+			return
+		}
+		userPlanID = &parsed
+	}
+	if err := h.s.UpdateSubscription(r.Context(), subscriptionID, businessPlanID, userPlanID); err != nil {
 		httpadapter.WriteError(w, err)
 		return
 	}
@@ -239,6 +195,83 @@ func (h *SubscriptionHandlerImpl) DeleteSubscription(w http.ResponseWriter, r *h
 		return
 	}
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "subscription deleted"})
+}
+
+func (h *SubscriptionHandlerImpl) GetBusinessSubscriptionInfo(w http.ResponseWriter, r *http.Request) {
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	info, err := h.s.GetBusinessSubscriptionInfo(r.Context(), businessID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewBusinessSubscriptionInfoResponse(info))
+}
+
+func (h *SubscriptionHandlerImpl) GetUserSubscriptionInfo(w http.ResponseWriter, r *http.Request) {
+	userID, ok := parseUUIDParam(w, r, "userID", "INVALID_USER_ID", "invalid user id")
+	if !ok {
+		return
+	}
+	info, err := h.s.GetUserSubscriptionInfo(r.Context(), userID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewUserSubscriptionInfoResponse(info))
+}
+
+func (h *SubscriptionHandlerImpl) UseUserSubscription(w http.ResponseWriter, r *http.Request) {
+	userID, ok := parseUUIDParam(w, r, "userID", "INVALID_USER_ID", "invalid user id")
+	if !ok {
+		return
+	}
+	var request UseUserSubscriptionRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+		return
+	}
+	businessID, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	result, err := h.s.UseUserSubscription(r.Context(), userID, businessID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewUseUserSubscriptionResponse(result))
+}
+
+func (h *SubscriptionHandlerImpl) AddUserSlot(w http.ResponseWriter, r *http.Request) {
+	userID, ok := parseUUIDParam(w, r, "userID", "INVALID_USER_ID", "invalid user id")
+	if !ok {
+		return
+	}
+	var request AddUserSlotRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+		return
+	}
+	if err := h.s.AddUserSlot(r.Context(), userID, request.Amount); err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "user slot added"})
+}
+
+func (h *SubscriptionHandlerImpl) DecreaseBusinessCapacity(w http.ResponseWriter, r *http.Request) {
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	if err := h.s.DecreaseBusinessCapacity(r.Context(), businessID); err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "business capacity decreased"})
 }
 
 func (h *SubscriptionHandlerImpl) updateSubscriptionStatus(w http.ResponseWriter, r *http.Request, active bool) {

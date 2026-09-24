@@ -9,17 +9,18 @@ import (
 )
 
 type SubscriptionRepo interface {
-	CreatePlan(ctx context.Context, plan *domain.SubscriptionPlan) (*domain.SubscriptionPlan, error)
-	UpdatePlanName(ctx context.Context, id uuid.UUID, name string) error
-	UpdatePlanDescription(ctx context.Context, id uuid.UUID, description string) error
-	GetPlan(ctx context.Context, id uuid.UUID) (*domain.SubscriptionPlan, error)
-	DeletePlan(ctx context.Context, id uuid.UUID) error
 	GetAllSubscription(ctx context.Context, cursor *domain.SubscriptionCursor, limit int) ([]domain.Subscription, *domain.SubscriptionCursor, error)
-	CreateSubscription(ctx context.Context, subscription *domain.Subscription) (*domain.Subscription, error)
+	CreateSubscription(ctx context.Context, subscription *domain.Subscription, businessPlan *domain.BusinessPlan, userPlan *domain.UserPlan) (*domain.Subscription, error)
 	GetSubscription(ctx context.Context, id uuid.UUID) (*domain.Subscription, error)
-	UpdateSubscription(ctx context.Context, id uuid.UUID, planID uuid.UUID) error
+	UpdateSubscription(ctx context.Context, id uuid.UUID, businessPlanID *uuid.UUID, userPlanID *uuid.UUID) error
 	UpdateSubscriptionTime(ctx context.Context, id uuid.UUID, startTime time.Time, endTime *time.Time) error
 	ActivateUserSubscription(ctx context.Context, id uuid.UUID) error
 	DeactivateUserSubscription(ctx context.Context, id uuid.UUID) error
 	DeleteSubscription(ctx context.Context, id uuid.UUID) error
+
+	GetBusinessSubscriptionInfo(ctx context.Context, businessID uuid.UUID) (*domain.BusinessSubscriptionInfo, error)
+	GetUserSubscriptionInfo(ctx context.Context, userID uuid.UUID) (*domain.UserSubscriptionInfo, error)
+	UseUserSubscription(ctx context.Context, userID uuid.UUID, businessID uuid.UUID) (*domain.UseUserSubscriptionResult, error)
+	AddUserSlot(ctx context.Context, userID uuid.UUID, amount int) error
+	DecreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error
 }
