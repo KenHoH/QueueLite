@@ -21,14 +21,22 @@ func NewCounterHandler(s *app.CounterService) *CounterHandlerImpl {
 	return &CounterHandlerImpl{s: s}
 }
 
-func (h *CounterHandlerImpl) Routes() http.Handler {
+func (h *CounterHandlerImpl) PublicRoutes() http.Handler {
+	router := chi.NewRouter()
+
+	router.Get("/{counterID}", h.GetCounter)
+	return router
+}
+
+func (h *CounterHandlerImpl) PrivateRoutes() http.Handler {
 	router := chi.NewRouter()
 
 	router.Post("/", h.CreateCounter)
-	router.Get("/{counterID}", h.GetCounter)
+	router.Post("/{counterID}/business/{businessID}/call-next", h.CallNextQueue)
+	router.Post("/{counterID}/queues/{queueID}/process", h.ProcessCalledQueue)
+	router.Post("/{counterID}/queues/{queueID}/skip", h.SkipQueue)
 	router.Put("/{counterID}", h.UpdateCounter)
 	router.Delete("/{counterID}", h.DeleteCounter)
-
 	return router
 }
 
@@ -138,6 +146,69 @@ func (h *CounterHandlerImpl) UpdateCounter(w http.ResponseWriter, r *http.Reques
 	}
 
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "counter updated"})
+}
+
+func (h *CounterHandlerImpl) CallNextQueue(w http.ResponseWriter, r *http.Request) {
+	counterID, ok := parseUUIDParam(w, r, "counterID", "INVALID_COUNTER_ID", "invalid counter id")
+	if !ok {
+		return
+	}
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	queue, err := h.s.CallNextQueue(r.Context(), counterID, businessID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	if queue == nil {
+		httpadapter.WriteJSON(w, http.StatusOK, map[string]any{"queue": nil})
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"queueId": queue.ID.String(), "queueName": queue.Name})
+}
+
+func (h *CounterHandlerImpl) ProcessCalledQueue(w http.ResponseWriter, r *http.Request) {
+	counterID, queueID, ok := h.parseCounterQueueParams(w, r)
+	if !ok {
+		return
+	}
+	queue, err := h.s.ProcessCalledQueue(r.Context(), counterID, queueID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"queueId": queue.ID.String(), "state": string(queue.State)})
+}
+
+func (h *CounterHandlerImpl) SkipQueue(w http.ResponseWriter, r *http.Request) {
+	counterID, queueID, ok := h.parseCounterQueueParams(w, r)
+	if !ok {
+		return
+	}
+	queue, err := h.s.SkipQueue(r.Context(), counterID, queueID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	if queue == nil {
+		httpadapter.WriteJSON(w, http.StatusOK, map[string]any{"queue": nil})
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"queueId": queue.ID.String(), "queueName": queue.Name})
+}
+
+func (h *CounterHandlerImpl) parseCounterQueueParams(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+	counterID, ok := parseUUIDParam(w, r, "counterID", "INVALID_COUNTER_ID", "invalid counter id")
+	if !ok {
+		return uuid.Nil, uuid.Nil, false
+	}
+	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
+	if !ok {
+		return uuid.Nil, uuid.Nil, false
+	}
+	return counterID, queueID, true
 }
 
 func (h *CounterHandlerImpl) DeleteCounter(w http.ResponseWriter, r *http.Request) {
