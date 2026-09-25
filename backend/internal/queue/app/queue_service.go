@@ -3,33 +3,59 @@ package app
 import (
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/queue/domain"
+	subscriptionapp "QueueLite/internal/subscription/app"
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type QueueService struct {
-	repo QueueRepo
+	repo                QueueRepo
+	subscriptionService *subscriptionapp.SubscriptionService
 }
 
-func NewQueueService(repo QueueRepo) *QueueService {
-	return &QueueService{
-		repo: repo,
+func NewQueueService(repo QueueRepo, subscriptionService ...*subscriptionapp.SubscriptionService) *QueueService {
+	service := &QueueService{repo: repo}
+	if len(subscriptionService) > 0 {
+		service.subscriptionService = subscriptionService[0]
 	}
+	return service
 }
 
 func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*domain.Queue, error) {
+	if queue.BusinessID == uuid.Nil {
+		return nil, apperror.New(apperror.KindInvalid, "BUSINESS_ID_REQUIRED", "business id is required")
+	}
+	if queue.UserID == nil {
+		return nil, apperror.New(apperror.KindInvalid, "QUEUE_OWNER_REQUIRED", "user id is required")
+	}
+
+	active, err := s.repo.GetActiveQueueByUserAndBusiness(ctx, *queue.UserID, queue.BusinessID)
+	if err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "GET_ACTIVE_QUEUE_ERROR", "failed to check active queue", err)
+	}
+	if active != nil {
+		return nil, apperror.New(apperror.KindInvalid, "ACTIVE_QUEUE_EXISTS", "user already has active queue in this business")
+	}
+
 	if queue.State == "" {
 		queue.State = domain.QueueStateWaiting
+	}
+	if strings.TrimSpace(queue.Name) == "" {
+		name, err := s.repo.GenerateDailyQueueName(ctx, queue.BusinessID, time.Now())
+		if err != nil {
+			return nil, apperror.Wrap(apperror.KindInternal, "GENERATE_QUEUE_NAME_ERROR", "failed to generate queue name", err)
+		}
+		queue.Name = name
 	}
 
 	record, err := s.repo.CreateQueue(ctx, &queue)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "REGISTER_QUEUE_ERROR", "failed to register queue", err)
 	}
-
 	return record, nil
 }
 
@@ -49,7 +75,6 @@ func (s *QueueService) GetQueueState(ctx context.Context, queueID uuid.UUID) (do
 	if err != nil {
 		return "", err
 	}
-
 	return queue.State, nil
 }
 
@@ -58,7 +83,6 @@ func (s *QueueService) GetAllQueueByBusiness(ctx context.Context, businessID uui
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_QUEUES_ERROR", "failed to get business queues", err)
 	}
-
 	return queues, nil
 }
 
@@ -67,8 +91,15 @@ func (s *QueueService) GetAllQueueByBusinessFilterState(ctx context.Context, bus
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_QUEUES_BY_STATE_ERROR", "failed to get business queues by state", err)
 	}
-
 	return queues, nil
+}
+
+func (s *QueueService) GetBusinessPublicQueueSummary(ctx context.Context, businessID uuid.UUID) (*domain.PublicQueueSummary, error) {
+	summary, err := s.repo.GetBusinessPublicQueueSummary(ctx, businessID)
+	if err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "GET_PUBLIC_QUEUE_SUMMARY_ERROR", "failed to get public queue summary", err)
+	}
+	return summary, nil
 }
 
 func (s *QueueService) UpdateState(ctx context.Context, queueID uuid.UUID, state domain.QueueState) error {
@@ -76,20 +107,10 @@ func (s *QueueService) UpdateState(ctx context.Context, queueID uuid.UUID, state
 	if err != nil {
 		return err
 	}
-
-	now := time.Now()
 	queue.State = state
-	if state == domain.QueueStateProcess && queue.StartTime == nil {
-		queue.StartTime = &now
-	}
-	if state == domain.QueueStateCompleted || state == domain.QueueStateCanceled {
-		queue.EndTime = &now
-	}
-
 	if err := s.repo.UpdateQueue(ctx, queue); err != nil {
 		return apperror.Wrap(apperror.KindInternal, "UPDATE_QUEUE_STATE_ERROR", "failed to update queue state", err)
 	}
-
 	return nil
 }
 
@@ -97,44 +118,16 @@ func (s *QueueService) MarkAsDone(ctx context.Context, queueID uuid.UUID) error 
 	return s.UpdateState(ctx, queueID, domain.QueueStateCompleted)
 }
 
-func (s *QueueService) AssignToCounter(ctx context.Context, queueID uuid.UUID, counterID uuid.UUID) error {
-	queue, err := s.GetQueue(ctx, queueID)
-	if err != nil {
-		return err
-	}
-
-	queue.CounterID = &counterID
-	if queue.State == "" || queue.State == domain.QueueStateWaiting {
-		queue.State = domain.QueueStateCalled
-	}
-
-	if err := s.repo.UpdateQueue(ctx, queue); err != nil {
-		return apperror.Wrap(apperror.KindInternal, "ASSIGN_QUEUE_COUNTER_ERROR", "failed to assign queue to counter", err)
-	}
-
-	return nil
+func (s *QueueService) MarkAsProcessing(ctx context.Context, queueID uuid.UUID) error {
+	return s.UpdateState(ctx, queueID, domain.QueueStateProcessing)
 }
 
-func (s *QueueService) RemoveFromCounter(ctx context.Context, queueID uuid.UUID, counterID uuid.UUID) error {
-	queue, err := s.GetQueue(ctx, queueID)
-	if err != nil {
-		return err
-	}
+func (s *QueueService) MarkAsCancelled(ctx context.Context, queueID uuid.UUID) error {
+	return s.UpdateState(ctx, queueID, domain.QueueStateCancelled)
+}
 
-	if queue.CounterID == nil || *queue.CounterID != counterID {
-		return apperror.New(apperror.KindInvalid, "QUEUE_COUNTER_MISMATCH", "queue is not assigned to counter")
-	}
-
-	queue.CounterID = nil
-	if queue.State == domain.QueueStateCalled {
-		queue.State = domain.QueueStateWaiting
-	}
-
-	if err := s.repo.UpdateQueue(ctx, queue); err != nil {
-		return apperror.Wrap(apperror.KindInternal, "REMOVE_QUEUE_COUNTER_ERROR", "failed to remove queue from counter", err)
-	}
-
-	return nil
+func (s *QueueService) MarkAsSkipped(ctx context.Context, queueID uuid.UUID) error {
+	return s.UpdateState(ctx, queueID, domain.QueueStateSkipped)
 }
 
 func (s *QueueService) UpdateQueue(ctx context.Context, queue domain.Queue) error {
@@ -160,5 +153,10 @@ func (s *QueueService) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 		}
 		return apperror.Wrap(apperror.KindInternal, "DELETE_QUEUE_ERROR", "failed to delete queue", err)
 	}
+	return nil
+}
+
+// TODO:implement
+func PublishQueueEvent(ctx context.Context, eventName string, payload any) error {
 	return nil
 }

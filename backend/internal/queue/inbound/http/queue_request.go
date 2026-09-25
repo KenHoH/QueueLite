@@ -1,18 +1,16 @@
 package inbound
 
 type CreateQueueRequest struct {
-	BusinessID string  `json:"businessId"`
-	UserID     string  `json:"userId"`
-	CounterID  *string `json:"counterId,omitempty"`
-	Name       string  `json:"name"`
-	Priority   bool    `json:"priority"`
+	BusinessID string `json:"businessId"`
+	UserID     string `json:"userId,omitempty"`
+	Name       string `json:"name"`
+	Priority   bool   `json:"priority"`
 }
 
 type UpdateQueueRequest struct {
-	CounterID *string `json:"counterId,omitempty"`
-	Name      *string `json:"name"`
-	State     *string `json:"state"`
-	Priority  *bool   `json:"priority"`
+	Name     *string `json:"name"`
+	State    *string `json:"state"`
+	Priority *bool   `json:"priority"`
 }
 
 type UpdateQueueStateRequest struct {
