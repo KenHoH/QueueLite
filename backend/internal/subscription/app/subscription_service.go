@@ -238,6 +238,22 @@ func (s *SubscriptionService) AddUserSlot(ctx context.Context, userID uuid.UUID,
 	return nil
 }
 
+func (s *SubscriptionService) DecreaseUserSlot(ctx context.Context, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return apperror.New(apperror.KindInvalid, "USER_ID_REQUIRED", "user id is required")
+	}
+	if err := s.repo.DecreaseUserSlot(ctx, userID); err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "SUBSCRIPTION_NOT_FOUND", "user subscription not found", err)
+		}
+		if errors.Is(err, ErrUserPlanNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "USER_PLAN_NOT_FOUND", "user plan not found", err)
+		}
+		return apperror.Wrap(apperror.KindInternal, "DECREASE_USER_SLOT_ERROR", "failed to decrease user slot", err)
+	}
+	return nil
+}
+
 func (s *SubscriptionService) CheckUserPrioritySlot(ctx context.Context, userID uuid.UUID) error {
 	info, err := s.GetUserSubscriptionInfo(ctx, userID)
 	if err != nil {
