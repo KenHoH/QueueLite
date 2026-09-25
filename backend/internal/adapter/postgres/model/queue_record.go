@@ -23,11 +23,6 @@ type Queue struct {
 	CreatedAt time.Time `gorm:"index:idx_queue_business_state_created,priority:3" json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
-	CalledAt     *time.Time `json:"calledAt,omitempty"`
-	ProcessingAt *time.Time `json:"processingAt,omitempty"`
-	DoneAt       *time.Time `json:"doneAt,omitempty"`
-	CancelledAt  *time.Time `json:"cancelledAt,omitempty"`
-
 	Business        Business `gorm:"foreignKey:BusinessID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"-"`
 	CalledByCounter *Counter `gorm:"foreignKey:CalledByCounterID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"calledByCounter,omitempty"`
 }
