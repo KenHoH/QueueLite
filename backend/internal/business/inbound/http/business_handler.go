@@ -30,17 +30,9 @@ func (h *BusinessHandlerImpl) PublicRoutes() http.Handler {
 	router.Post("/", h.CreateBusiness)
 	router.Put("/{businessID}", h.UpdateBusiness)
 	router.Delete("/{businessID}", h.DeleteBusiness)
-
-	return router
-}
-
-func (h *BusinessHandlerImpl) PrivateRoutes() http.Handler {
-	router := chi.NewRouter()
-
 	router.Get("/", h.GetBusinessAll)
 	router.Get("/search", h.SearchBusiness)
 	router.Get("/{businessID}", h.GetBusiness)
-
 	return router
 }
 

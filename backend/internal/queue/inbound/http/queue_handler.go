@@ -27,14 +27,9 @@ func (h *QueueHandlerImpl) PublicRoutes() http.Handler {
 	router := chi.NewRouter()
 
 	router.Put("/{queueID}", h.UpdateQueue)
+	router.Post("/qr/{businessID}", h.RegisterQueueByQr)
 	router.Patch("/{queueID}/state", h.UpdateState)
 	router.Patch("/{queueID}/done", h.MarkAsDone)
-
-	return router
-}
-func (h *QueueHandlerImpl) PrivateRoutes() http.Handler {
-	router := chi.NewRouter()
-
 	router.Post("/", h.RegisterQueue)
 	router.Get("/business/{businessID}", h.GetAllQueueByBusiness)
 	router.Get("/business/{businessID}/summary", h.GetBusinessPublicQueueSummary)
@@ -50,6 +45,50 @@ func (h *QueueHandlerImpl) ProtectedRoutes() http.Handler {
 	return router
 }
 
+// TODO: implement
+func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Request) {
+	// check from context if the userId exist
+	// if exist then pass it to normal RegisterQueue function
+	// else create a temp user with redis
+}
+
+func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request) {
+	var request CreateQueueRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+		return
+	}
+
+	request.Name = strings.TrimSpace(request.Name)
+	businessID, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	var userID *uuid.UUID
+	if strings.TrimSpace(request.UserID) != "" {
+		parsed, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
+		if !ok {
+			return
+		}
+		userID = &parsed
+	} else {
+		generated := uuid.New()
+		userID = &generated
+	}
+
+	queue, err := h.s.RegisterQueue(r.Context(), domain.Queue{
+		BusinessID: businessID,
+		UserID:     userID,
+		Name:       request.Name,
+		Priority:   request.Priority,
+	})
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	httpadapter.WriteJSON(w, http.StatusCreated, NewQueueResponse(queue))
+}
 func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request) {
 	var request CreateQueueRequest
 	if err := decodeJSON(r, &request); err != nil {

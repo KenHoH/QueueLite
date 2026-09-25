@@ -57,9 +57,10 @@ func NewRouter(db *gorm.DB) *chi.Mux {
 
 	// public group: no authentication required.
 	router.Group(func(public chi.Router) {
+		public.Use(middleware.PublicMiddleware(userRepo))
 		public.Mount("/users", userHandler.PublicRoutes())
-		public.Mount("/businesses", businessHandler.PrivateRoutes())
-		public.Mount("/queues", queueHandler.PrivateRoutes())
+		public.Mount("/businesses", businessHandler.PublicRoutes())
+		public.Mount("/queues", queueHandler.PublicRoutes())
 		public.Mount("/counters", counterHandler.PublicRoutes())
 	})
 
