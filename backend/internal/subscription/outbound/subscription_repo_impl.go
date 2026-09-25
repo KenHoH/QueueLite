@@ -243,6 +243,14 @@ func (r *SubscriptionRepoImpl) UseUserSubscription(ctx context.Context, userID u
 }
 
 func (r *SubscriptionRepoImpl) AddUserSlot(ctx context.Context, userID uuid.UUID, amount int) error {
+	return r.updateUserSlots(ctx, userID, amount)
+}
+
+func (r *SubscriptionRepoImpl) DecreaseUserSlot(ctx context.Context, userID uuid.UUID) error {
+	return r.updateUserSlots(ctx, userID, -1)
+}
+
+func (r *SubscriptionRepoImpl) updateUserSlots(ctx context.Context, userID uuid.UUID, delta int) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var record model.Subscription
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("UserPlan").Where("user_id = ? AND type = ?", userID, model.SubscriptionTypeUser).Take(&record).Error; err != nil {
@@ -254,9 +262,12 @@ func (r *SubscriptionRepoImpl) AddUserSlot(ctx context.Context, userID uuid.UUID
 		if record.UserPlan == nil {
 			return fmt.Errorf("%w: %s", app.ErrUserPlanNotFound, userID)
 		}
-		record.UserPlan.Slots += amount
+		if delta < 0 && record.UserPlan.Slots+delta < 0 {
+			return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, userID)
+		}
+		record.UserPlan.Slots += delta
 		if err := tx.Save(record.UserPlan).Error; err != nil {
-			return fmt.Errorf("add user slot: %w", err)
+			return fmt.Errorf("update user slot: %w", err)
 		}
 		return nil
 	})
@@ -285,6 +296,26 @@ func (r *SubscriptionRepoImpl) DecreaseBusinessCapacity(ctx context.Context, bus
 		record.BusinessPlan.Capacity--
 		if err := tx.Save(record.BusinessPlan).Error; err != nil {
 			return fmt.Errorf("decrease business capacity: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *SubscriptionRepoImpl) IncreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var record model.Subscription
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("BusinessPlan").Where("business_id = ? AND type = ?", businessID, model.SubscriptionTypeBusiness).Take(&record).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, businessID)
+			}
+			return fmt.Errorf("get business subscription: %w", err)
+		}
+		if record.BusinessPlan == nil {
+			return fmt.Errorf("%w: %s", app.ErrBusinessPlanNotFound, businessID)
+		}
+		record.BusinessPlan.Capacity++
+		if err := tx.Save(record.BusinessPlan).Error; err != nil {
+			return fmt.Errorf("increase business capacity: %w", err)
 		}
 		return nil
 	})

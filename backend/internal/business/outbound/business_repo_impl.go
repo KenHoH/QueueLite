@@ -35,6 +35,14 @@ func (r *BusinessRepoImpl) CreateBusiness(ctx context.Context, business *domain.
 	return business, nil
 }
 
+func (r *BusinessRepoImpl) CreateUserBusinessRelation(ctx context.Context, businessID uuid.UUID, userID uuid.UUID, role string) error {
+	record := model.UserBusinessRelation{BusinessID: businessID, UserID: userID, Role: model.BusinessRole(role)}
+	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
+		return fmt.Errorf("create user business relation: %w", err)
+	}
+	return nil
+}
+
 func (r *BusinessRepoImpl) UpdateBusiness(ctx context.Context, businessId uuid.UUID, input *domain.UpdateBusiness) error {
 	updates := map[string]any{}
 

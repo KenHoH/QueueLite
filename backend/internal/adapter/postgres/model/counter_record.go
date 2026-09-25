@@ -24,6 +24,4 @@ type Counter struct {
 	Business        Business `gorm:"foreignKey:BusinessID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	CurrentEmployee *User    `gorm:"foreignKey:CurrentEmployeeID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"currentEmployee,omitempty"`
 	CurrentQueue    *Queue   `gorm:"foreignKey:CurrentQueueID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"currentQueue,omitempty"`
-
-	Queues []Queue `gorm:"foreignKey:CounterID" json:"queues,omitempty"`
 }

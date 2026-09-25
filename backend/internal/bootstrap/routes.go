@@ -25,32 +25,50 @@ import (
 func NewRouter(db *gorm.DB) *chi.Mux {
 	router := chi.NewRouter()
 
-	userRepo := useroutbound.NewUserRepo(db)
-	router.Use(middleware.AuthMiddleware(userRepo))
-	userService := userapp.NewUserService(userRepo)
-	userHandler := userhttp.NewUserHandler(userService)
-
-	businessRepo := businessoutbound.NewBusinessRepo(db)
-	businessService := businessapp.NewBusinessService(businessRepo)
-	businessHandler := businesshttp.NewBusinessHandler(businessService)
-
-	queueRepo := queueoutbound.NewQueueRepo(db)
-	queueService := queueapp.NewQueueService(queueRepo)
-	queueHandler := queuehttp.NewQueueHandler(queueService)
-
-	counterRepo := counteroutbound.NewCounterRepo(db)
-	counterService := counterapp.NewCounterService(counterRepo, queueRepo)
-	counterHandler := counterhttp.NewCounterHandler(counterService)
-
 	subscriptionRepo := subscriptionoutbound.NewSubscriptionRepo(db)
 	subscriptionService := subscriptionapp.NewSubscriptionService(subscriptionRepo)
 	subscriptionHandler := subscriptionhttp.NewSubscriptionHandler(subscriptionService)
 
-	router.Mount("/users", userHandler.Routes())
-	router.Mount("/businesses", businessHandler.Routes())
-	router.Mount("/queues", queueHandler.Routes())
-	router.Mount("/counters", counterHandler.Routes())
-	router.Mount("/subscriptions", subscriptionHandler.Routes())
+	userRepo := useroutbound.NewUserRepo(db)
+	userService := userapp.NewUserService(userRepo, subscriptionService)
+	userHandler := userhttp.NewUserHandler(userService)
+
+	queueRepo := queueoutbound.NewQueueRepo(db)
+	queueService := queueapp.NewQueueService(queueRepo, subscriptionService)
+	queueHandler := queuehttp.NewQueueHandler(queueService)
+
+	counterRepo := counteroutbound.NewCounterRepo(db)
+	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService)
+	counterHandler := counterhttp.NewCounterHandler(counterService)
+
+	businessRepo := businessoutbound.NewBusinessRepo(db)
+	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
+	businessHandler := businesshttp.NewBusinessHandler(businessService)
+
+	// private group: requires a real registered user token.
+	router.Group(func(private chi.Router) {
+		private.Use(middleware.AuthMiddleware(userRepo))
+		private.Mount("/users", userHandler.PrivateRoutes())
+		private.Mount("/businesses", businessHandler.PublicRoutes())
+		private.Mount("/queues", queueHandler.PublicRoutes())
+		private.Mount("/counters", counterHandler.PrivateRoutes())
+		private.Mount("/subscriptions", subscriptionHandler.Routes())
+	})
+
+	// public group: no authentication required.
+	router.Group(func(public chi.Router) {
+		public.Use(middleware.PublicMiddleware(userRepo))
+		public.Mount("/users", userHandler.PublicRoutes())
+		public.Mount("/businesses", businessHandler.PublicRoutes())
+		public.Mount("/queues", queueHandler.PublicRoutes())
+		public.Mount("/counters", counterHandler.PublicRoutes())
+	})
+
+	// protected group: requires a valid queue token.
+	router.Group(func(protected chi.Router) {
+		protected.Use(middleware.ProtectedMiddleware(*queueService))
+		protected.Mount("/queues", queueHandler.ProtectedRoutes())
+	})
 
 	return router
 }

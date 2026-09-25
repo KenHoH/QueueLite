@@ -3,11 +3,13 @@ package inbound
 import (
 	httpadapter "QueueLite/internal/adapter/http"
 	"QueueLite/internal/apperror"
+	"QueueLite/internal/middleware"
 	"QueueLite/internal/user/app"
 	"QueueLite/internal/user/domain"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,11 +23,16 @@ func NewUserHandler(s *app.UserService) *UserHandlerImpl {
 	return &UserHandlerImpl{s: s}
 }
 
-func (u *UserHandlerImpl) Routes() http.Handler {
+func (u *UserHandlerImpl) PublicRoutes() http.Handler {
 	router := chi.NewRouter()
-
 	router.Post("/", u.RegisterUser)
 	router.Post("/login", u.LoginUser)
+
+	return router
+}
+
+func (u *UserHandlerImpl) PrivateRoutes() http.Handler {
+	router := chi.NewRouter()
 	router.Get("/{userID}", u.GetUser)
 	router.Put("/{userID}", u.UpdateUser)
 
@@ -92,10 +99,24 @@ func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := u.s.LoginUser(r.Context(), domain.User{Username: request.Username, Password: request.Password}); err != nil {
+	userEntity, err := u.s.LoginUser(r.Context(), domain.User{Username: request.Username, Password: request.Password})
+	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
 	}
+
+	userStringID := userEntity.ID.String()
+	tokenString, err := middleware.CreateToken(userEntity.Username, userStringID)
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    tokenString,
+		Expires:  time.Now().Add(time.Hour * 24),
+		HttpOnly: true,                 // Prevents JavaScript from reading the cookie (Mitigates XSS)
+		Secure:   false,                // Set to true in production to force HTTPS
+		Path:     "/",                  // Accessible across the entire domain
+		SameSite: http.SameSiteLaxMode, // Controls cross-site cookie behavior
+	})
 
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "login successful"})
 }

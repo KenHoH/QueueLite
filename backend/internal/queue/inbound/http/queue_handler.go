@@ -23,22 +23,33 @@ func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 	}
 }
 
-func (h *QueueHandlerImpl) Routes() http.Handler {
+func (h *QueueHandlerImpl) PublicRoutes() http.Handler {
 	router := chi.NewRouter()
 
-	router.Post("/", h.RegisterQueue)
-	router.Get("/business/{businessID}", h.GetAllQueueByBusiness)
-	router.Get("/business/{businessID}/state/{state}", h.GetAllQueueByBusinessFilterState)
-	router.Get("/{queueID}", h.GetQueue)
-	router.Get("/{queueID}/state", h.GetQueueState)
 	router.Put("/{queueID}", h.UpdateQueue)
+	router.Post("/qr/{businessID}", h.RegisterQueueByQr)
 	router.Patch("/{queueID}/state", h.UpdateState)
 	router.Patch("/{queueID}/done", h.MarkAsDone)
-	router.Patch("/{queueID}/counter/{counterID}", h.AssignToCounter)
-	router.Delete("/{queueID}/counter/{counterID}", h.RemoveFromCounter)
-	router.Delete("/{queueID}", h.DeleteQueue)
-
+	router.Post("/", h.RegisterQueue)
+	router.Get("/business/{businessID}", h.GetAllQueueByBusiness)
+	router.Get("/business/{businessID}/summary", h.GetBusinessPublicQueueSummary)
+	router.Get("/business/{businessID}/state/{state}", h.GetAllQueueByBusinessFilterState)
 	return router
+}
+
+func (h *QueueHandlerImpl) ProtectedRoutes() http.Handler {
+	router := chi.NewRouter()
+	router.Get("/{queueID}", h.GetQueue)
+	router.Get("/{queueID}/state", h.GetQueueState)
+	router.Delete("/{queueID}", h.DeleteQueue)
+	return router
+}
+
+// TODO: implement
+func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Request) {
+	// check from context if the userId exist
+	// if exist then pass it to normal RegisterQueue function
+	// else create a temp user with redis
 }
 
 func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request) {
@@ -53,29 +64,58 @@ func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	userID, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
-	if !ok {
-		return
-	}
-
-	var counterID *uuid.UUID
-	if request.CounterID != nil && strings.TrimSpace(*request.CounterID) != "" {
-		parsed, ok := parseUUIDValue(w, *request.CounterID, "INVALID_COUNTER_ID", "invalid counter id")
+	var userID *uuid.UUID
+	if strings.TrimSpace(request.UserID) != "" {
+		parsed, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
 		if !ok {
 			return
 		}
-		counterID = &parsed
-	}
-
-	if request.Name == "" {
-		writeInvalid(w, "QUEUE_NAME_REQUIRED", "Missing queue name")
-		return
+		userID = &parsed
+	} else {
+		generated := uuid.New()
+		userID = &generated
 	}
 
 	queue, err := h.s.RegisterQueue(r.Context(), domain.Queue{
 		BusinessID: businessID,
 		UserID:     userID,
-		CounterID:  counterID,
+		Name:       request.Name,
+		Priority:   request.Priority,
+	})
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	httpadapter.WriteJSON(w, http.StatusCreated, NewQueueResponse(queue))
+}
+func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request) {
+	var request CreateQueueRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+		return
+	}
+
+	request.Name = strings.TrimSpace(request.Name)
+	businessID, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	var userID *uuid.UUID
+	if strings.TrimSpace(request.UserID) != "" {
+		parsed, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
+		if !ok {
+			return
+		}
+		userID = &parsed
+	} else {
+		generated := uuid.New()
+		userID = &generated
+	}
+
+	queue, err := h.s.RegisterQueue(r.Context(), domain.Queue{
+		BusinessID: businessID,
+		UserID:     userID,
 		Name:       request.Name,
 		Priority:   request.Priority,
 	})
@@ -132,6 +172,21 @@ func (h *QueueHandlerImpl) GetAllQueueByBusiness(w http.ResponseWriter, r *http.
 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
 }
 
+func (h *QueueHandlerImpl) GetBusinessPublicQueueSummary(w http.ResponseWriter, r *http.Request) {
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+
+	summary, err := h.s.GetBusinessPublicQueueSummary(r.Context(), businessID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	httpadapter.WriteJSON(w, http.StatusOK, NewPublicQueueSummaryResponse(summary))
+}
+
 func (h *QueueHandlerImpl) GetAllQueueByBusinessFilterState(w http.ResponseWriter, r *http.Request) {
 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
@@ -162,7 +217,7 @@ func (h *QueueHandlerImpl) UpdateQueue(w http.ResponseWriter, r *http.Request) {
 		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
-	if request.Name == nil && request.CounterID == nil && request.State == nil && request.Priority == nil {
+	if request.Name == nil && request.State == nil && request.Priority == nil {
 		writeInvalid(w, "NO_QUEUE_FIELDS", "no queue fields provided")
 		return
 	}
@@ -174,17 +229,6 @@ func (h *QueueHandlerImpl) UpdateQueue(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.Name != nil {
 		queue.Name = strings.TrimSpace(*request.Name)
-	}
-	if request.CounterID != nil {
-		if strings.TrimSpace(*request.CounterID) == "" {
-			queue.CounterID = nil
-		} else {
-			counterID, ok := parseUUIDValue(w, *request.CounterID, "INVALID_COUNTER_ID", "invalid counter id")
-			if !ok {
-				return
-			}
-			queue.CounterID = &counterID
-		}
 	}
 	if request.State != nil {
 		state, ok := parseQueueState(w, *request.State)
@@ -244,34 +288,6 @@ func (h *QueueHandlerImpl) MarkAsDone(w http.ResponseWriter, r *http.Request) {
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue marked as done"})
 }
 
-func (h *QueueHandlerImpl) AssignToCounter(w http.ResponseWriter, r *http.Request) {
-	queueID, counterID, ok := h.parseQueueCounterParams(w, r)
-	if !ok {
-		return
-	}
-
-	if err := h.s.AssignToCounter(r.Context(), queueID, counterID); err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-
-	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue assigned to counter"})
-}
-
-func (h *QueueHandlerImpl) RemoveFromCounter(w http.ResponseWriter, r *http.Request) {
-	queueID, counterID, ok := h.parseQueueCounterParams(w, r)
-	if !ok {
-		return
-	}
-
-	if err := h.s.RemoveFromCounter(r.Context(), queueID, counterID); err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-
-	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue removed from counter"})
-}
-
 func (h *QueueHandlerImpl) DeleteQueue(w http.ResponseWriter, r *http.Request) {
 	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
 	if !ok {
@@ -284,18 +300,6 @@ func (h *QueueHandlerImpl) DeleteQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue deleted"})
-}
-
-func (h *QueueHandlerImpl) parseQueueCounterParams(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
-	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
-	if !ok {
-		return uuid.Nil, uuid.Nil, false
-	}
-	counterID, ok := parseUUIDParam(w, r, "counterID", "INVALID_COUNTER_ID", "invalid counter id")
-	if !ok {
-		return uuid.Nil, uuid.Nil, false
-	}
-	return queueID, counterID, true
 }
 
 func parseUUIDParam(w http.ResponseWriter, r *http.Request, name string, code string, message string) (uuid.UUID, bool) {
@@ -316,8 +320,9 @@ func parseQueueState(w http.ResponseWriter, value string) (domain.QueueState, bo
 	switch state {
 	case domain.QueueStateWaiting,
 		domain.QueueStateCalled,
-		domain.QueueStateProcess,
-		domain.QueueStateCanceled,
+		domain.QueueStateProcessing,
+		domain.QueueStateCancelled,
+		domain.QueueStateSkipped,
 		domain.QueueStateCompleted:
 		return state, true
 	default:

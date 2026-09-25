@@ -1,17 +1,16 @@
 package middleware
 
 import (
+	"QueueLite/internal/queue/app"
 	"net/http"
-
-	userapp "QueueLite/internal/user/app"
 
 	"github.com/google/uuid"
 )
 
-func AuthMiddleware(userRepo userapp.UserRepo) func(http.Handler) http.Handler {
+func ProtectedMiddleware(queueService app.QueueService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie("token")
+			cookie, err := r.Cookie("queueToken")
 			if err != nil {
 				if err == http.ErrNoCookie {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -23,24 +22,24 @@ func AuthMiddleware(userRepo userapp.UserRepo) func(http.Handler) http.Handler {
 
 			token := cookie.Value
 
-			userIDString, err := ValidateToken(token)
+			queueIDString, err := ValidateQueueToken(token)
 			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			userID, err := uuid.Parse(userIDString)
+			queueID, err := uuid.Parse(queueIDString)
 			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			if _, err := userRepo.GetUser(r.Context(), userID); err != nil {
+			if _, err := queueService.GetQueue(r.Context(), queueID); err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			// inject the user id to the context
-			ctx := WithUserId(r.Context(), userIDString)
+			// inject the queue id to the context
+			ctx := WithQueueId(r.Context(), queueIDString)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

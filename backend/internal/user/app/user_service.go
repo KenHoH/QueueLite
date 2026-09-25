@@ -1,7 +1,9 @@
 package app
 
 import (
+	"QueueLite/internal/adapter/postgres/model"
 	"QueueLite/internal/apperror"
+	subscriptionapp "QueueLite/internal/subscription/app"
 	"QueueLite/internal/user/domain"
 	"context"
 	"errors"
@@ -12,11 +14,16 @@ import (
 )
 
 type UserService struct {
-	repo UserRepo
+	repo                UserRepo
+	subscriptionService *subscriptionapp.SubscriptionService
 }
 
-func NewUserService(repo UserRepo) *UserService {
-	return &UserService{repo: repo}
+func NewUserService(repo UserRepo, subscriptionService *subscriptionapp.SubscriptionService) *UserService {
+	service := &UserService{
+		repo:                repo,
+		subscriptionService: subscriptionService,
+	}
+	return service
 }
 
 func checkPassword(hashedPassword string, password string) bool {
@@ -59,24 +66,29 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to create user", err)
 	}
+	if s.subscriptionService != nil {
+		if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
+			return nil, err
+		}
+	}
 	return record, nil
 }
 
-func (s *UserService) LoginUser(ctx context.Context, user domain.User) error {
+func (s *UserService) LoginUser(ctx context.Context, user domain.User) (*model.User, error) {
 	user.Username = strings.TrimSpace(user.Username)
 	userRecord, err := s.repo.GetUserByName(ctx, user.Username)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			return apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", err)
+			return nil, apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", err)
 		}
-		return apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
+		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
 	}
 
-	if !checkPassword(userRecord.Password, user.Password) {
-		return apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", ErrInvalidPassword)
+	if !checkPassword(*userRecord.Password, user.Password) {
+		return nil, apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", ErrInvalidPassword)
 	}
 
-	return nil
+	return userRecord, nil
 }
 
 func (s *UserService) GetUser(ctx context.Context, id uuid.UUID) (*domain.User, error) {

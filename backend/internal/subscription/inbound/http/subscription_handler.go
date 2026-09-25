@@ -27,7 +27,6 @@ func (h *SubscriptionHandlerImpl) Routes() http.Handler {
 	router := chi.NewRouter()
 
 	router.Get("/", h.GetAllSubscription)
-	router.Post("/", h.CreateSubscription)
 	router.Get("/businesses/{businessID}", h.GetBusinessSubscriptionInfo)
 	router.Get("/users/{userID}", h.GetUserSubscriptionInfo)
 	router.Post("/users/{userID}/use", h.UseUserSubscription)
@@ -36,6 +35,7 @@ func (h *SubscriptionHandlerImpl) Routes() http.Handler {
 	router.Get("/{subscriptionID}", h.GetSubscription)
 	router.Put("/{subscriptionID}", h.UpdateSubscription)
 	router.Patch("/{subscriptionID}/time", h.UpdateSubscriptionTime)
+	// INFO: this should be the system, but for mockup test, the user just click buys and then we activate via api call
 	router.Patch("/{subscriptionID}/activate", h.ActivateUserSubscription)
 	router.Patch("/{subscriptionID}/deactivate", h.DeactivateUserSubscription)
 	router.Delete("/{subscriptionID}", h.DeleteSubscription)
@@ -54,56 +54,6 @@ func (h *SubscriptionHandlerImpl) GetAllSubscription(w http.ResponseWriter, r *h
 		"data":       NewSubscriptionResponses(subscriptions),
 		"nextCursor": NewSubscriptionCursorResponse(nextCursor),
 	})
-}
-
-func (h *SubscriptionHandlerImpl) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	var request CreateSubscriptionRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
-		return
-	}
-	var businessID *uuid.UUID
-	if strings.TrimSpace(request.BusinessID) != "" {
-		parsed, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
-		if !ok {
-			return
-		}
-		businessID = &parsed
-	}
-	var userID *uuid.UUID
-	if strings.TrimSpace(request.UserID) != "" {
-		parsed, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
-		if !ok {
-			return
-		}
-		userID = &parsed
-	}
-	startDate := time.Now()
-	if strings.TrimSpace(request.StartDate) != "" {
-		parsed, ok := parseDateTime(w, request.StartDate, "INVALID_START_DATE", "invalid start date")
-		if !ok {
-			return
-		}
-		startDate = parsed
-	}
-	endDate, ok := parseOptionalDateTime(w, request.EndDate, "INVALID_END_DATE", "invalid end date")
-	if !ok {
-		return
-	}
-
-	subscription, err := h.s.CreateSubscription(r.Context(), domain.Subscription{
-		BusinessID: businessID,
-		UserID:     userID,
-		Type:       domain.SubscriptionType(strings.TrimSpace(request.Type)),
-		StartDate:  startDate,
-		EndDate:    endDate,
-		Status:     domain.SubscriptionStatus(strings.TrimSpace(request.Status)),
-	}, domain.BusinessPlanType(strings.TrimSpace(request.BusinessPlanType)), domain.UserPlanType(strings.TrimSpace(request.UserPlanType)))
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-	httpadapter.WriteJSON(w, http.StatusCreated, NewSubscriptionResponse(subscription))
 }
 
 func (h *SubscriptionHandlerImpl) GetSubscription(w http.ResponseWriter, r *http.Request) {

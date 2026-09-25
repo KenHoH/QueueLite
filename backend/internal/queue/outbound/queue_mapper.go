@@ -7,29 +7,27 @@ import (
 
 func toQueueRecord(queue *domain.Queue) model.Queue {
 	return model.Queue{
-		ID:         queue.ID,
-		BusinessID: queue.BusinessID,
-		UserID:     queue.UserID,
-		CounterID:  queue.CounterID,
-		Name:       queue.Name,
-		State:      model.QueueState(queue.State),
-		Priority:   queue.Priority,
-		StartTime:  queue.StartTime,
-		EndTime:    queue.EndTime,
+		ID:                queue.ID,
+		BusinessID:        queue.BusinessID,
+		UserID:            queue.UserID,
+		CalledByCounterID: queue.CalledByCounterID,
+		Name:              queue.Name,
+		State:             model.QueueState(queue.State),
+		Priority:          queue.Priority,
 	}
 }
 
 func toDomainQueue(record *model.Queue) *domain.Queue {
 	return &domain.Queue{
-		ID:         record.ID,
-		BusinessID: record.BusinessID,
-		UserID:     record.UserID,
-		CounterID:  record.CounterID,
-		Name:       record.Name,
-		State:      domain.QueueState(record.State),
-		Priority:   record.Priority,
-		StartTime:  record.StartTime,
-		EndTime:    record.EndTime,
+		ID:                record.ID,
+		BusinessID:        record.BusinessID,
+		UserID:            record.UserID,
+		CalledByCounterID: record.CalledByCounterID,
+		Name:              record.Name,
+		State:             domain.QueueState(record.State),
+		Priority:          record.Priority,
+		CreatedAt:         record.CreatedAt,
+		UpdatedAt:         record.UpdatedAt,
 	}
 }
 
