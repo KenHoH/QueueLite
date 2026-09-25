@@ -22,5 +22,7 @@ type SubscriptionRepo interface {
 	GetUserSubscriptionInfo(ctx context.Context, userID uuid.UUID) (*domain.UserSubscriptionInfo, error)
 	UseUserSubscription(ctx context.Context, userID uuid.UUID, businessID uuid.UUID) (*domain.UseUserSubscriptionResult, error)
 	AddUserSlot(ctx context.Context, userID uuid.UUID, amount int) error
+	DecreaseUserSlot(ctx context.Context, userID uuid.UUID) error
 	DecreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error
+	IncreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error
 }
