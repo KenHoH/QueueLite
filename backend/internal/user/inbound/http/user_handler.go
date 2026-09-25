@@ -21,11 +21,16 @@ func NewUserHandler(s *app.UserService) *UserHandlerImpl {
 	return &UserHandlerImpl{s: s}
 }
 
-func (u *UserHandlerImpl) Routes() http.Handler {
+func (u *UserHandlerImpl) PublicRoutes() http.Handler {
 	router := chi.NewRouter()
-
 	router.Post("/", u.RegisterUser)
 	router.Post("/login", u.LoginUser)
+
+	return router
+}
+
+func (u *UserHandlerImpl) PrivateRoutes() http.Handler {
+	router := chi.NewRouter()
 	router.Get("/{userID}", u.GetUser)
 	router.Put("/{userID}", u.UpdateUser)
 

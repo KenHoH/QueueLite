@@ -2,6 +2,7 @@ package app
 
 import (
 	"QueueLite/internal/apperror"
+	subscriptionapp "QueueLite/internal/subscription/app"
 	"QueueLite/internal/user/domain"
 	"context"
 	"errors"
@@ -12,11 +13,16 @@ import (
 )
 
 type UserService struct {
-	repo UserRepo
+	repo                UserRepo
+	subscriptionService *subscriptionapp.SubscriptionService
 }
 
-func NewUserService(repo UserRepo) *UserService {
-	return &UserService{repo: repo}
+func NewUserService(repo UserRepo, subscriptionService *subscriptionapp.SubscriptionService) *UserService {
+	service := &UserService{
+		repo:                repo,
+		subscriptionService: subscriptionService,
+	}
+	return service
 }
 
 func checkPassword(hashedPassword string, password string) bool {
@@ -58,6 +64,11 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	record, err := s.repo.CreateUser(ctx, &user)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to create user", err)
+	}
+	if s.subscriptionService != nil {
+		if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
+			return nil, err
+		}
 	}
 	return record, nil
 }
