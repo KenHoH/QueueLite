@@ -5,6 +5,7 @@ import (
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/business/app"
 	"QueueLite/internal/business/domain"
+	"QueueLite/internal/middleware"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -23,15 +24,22 @@ func NewBusinessHandler(s *app.BusinessService) *BusinessHandlerImpl {
 	return &BusinessHandlerImpl{s: s}
 }
 
-func (h *BusinessHandlerImpl) Routes() http.Handler {
+func (h *BusinessHandlerImpl) PublicRoutes() http.Handler {
 	router := chi.NewRouter()
 
 	router.Post("/", h.CreateBusiness)
+	router.Put("/{businessID}", h.UpdateBusiness)
+	router.Delete("/{businessID}", h.DeleteBusiness)
+
+	return router
+}
+
+func (h *BusinessHandlerImpl) PrivateRoutes() http.Handler {
+	router := chi.NewRouter()
+
 	router.Get("/", h.GetBusinessAll)
 	router.Get("/search", h.SearchBusiness)
 	router.Get("/{businessID}", h.GetBusiness)
-	router.Put("/{businessID}", h.UpdateBusiness)
-	router.Delete("/{businessID}", h.DeleteBusiness)
 
 	return router
 }
@@ -52,7 +60,17 @@ func (h *BusinessHandlerImpl) CreateBusiness(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	business, err := h.s.CreateBusiness(r.Context(), domain.Business{
+	ownerID := uuid.Nil
+	if ownerIDString, ok := middleware.UserIdFromContext(r.Context()); ok {
+		parsed, err := uuid.Parse(ownerIDString)
+		if err != nil {
+			writeInvalid(w, "INVALID_OWNER_ID", "invalid owner id")
+			return
+		}
+		ownerID = parsed
+	}
+
+	business, err := h.s.RegisterBusiness(r.Context(), ownerID, domain.Business{
 		Name:        request.Name,
 		Location:    request.Location,
 		Description: request.Description,

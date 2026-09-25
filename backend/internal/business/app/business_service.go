@@ -3,6 +3,9 @@ package app
 import (
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/business/domain"
+	counterapp "QueueLite/internal/counter/app"
+	counterdomain "QueueLite/internal/counter/domain"
+	subscriptionapp "QueueLite/internal/subscription/app"
 	"context"
 	"errors"
 	"strings"
@@ -11,11 +14,17 @@ import (
 )
 
 type BusinessService struct {
-	repo BusinessRepo
+	repo                BusinessRepo
+	subscriptionService *subscriptionapp.SubscriptionService
+	counterService      *counterapp.CounterService
 }
 
-func NewBusinessService(repo BusinessRepo) *BusinessService {
-	return &BusinessService{repo: repo}
+func NewBusinessService(repo BusinessRepo, subscriptionService *subscriptionapp.SubscriptionService, counterService ...*counterapp.CounterService) *BusinessService {
+	service := &BusinessService{repo: repo, subscriptionService: subscriptionService}
+	if len(counterService) > 0 {
+		service.counterService = counterService[0]
+	}
+	return service
 }
 
 func (s *BusinessService) CreateBusiness(ctx context.Context, business domain.Business) (*domain.Business, error) {
@@ -43,6 +52,27 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, business domain.Bu
 	record, err := s.repo.CreateBusiness(ctx, &business)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "CREATE_BUSINESS_ERROR", "failed to create business", err)
+	}
+	if s.subscriptionService != nil {
+		if _, err := s.subscriptionService.CreateDefaultBusinessSubscriptionPlan(ctx, record.ID); err != nil {
+			return nil, err
+		}
+	}
+	return record, nil
+}
+
+func (s *BusinessService) RegisterBusiness(ctx context.Context, ownerUserID uuid.UUID, business domain.Business) (*domain.Business, error) {
+	record, err := s.CreateBusiness(ctx, business)
+	if err != nil {
+		return nil, err
+	}
+	if ownerUserID != uuid.Nil {
+		if err := s.repo.CreateUserBusinessRelation(ctx, record.ID, ownerUserID, "owner"); err != nil {
+			return nil, apperror.Wrap(apperror.KindInternal, "CREATE_BUSINESS_OWNER_ERROR", "failed to create business owner relation", err)
+		}
+	}
+	if s.counterService != nil {
+		_, _ = s.counterService.CreateCounter(ctx, counterdomain.Counter{BusinessID: record.ID, Name: "Default Counter"})
 	}
 	return record, nil
 }
