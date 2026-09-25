@@ -37,19 +37,20 @@ func IsValidUserPlanType(value UserPlanType) bool {
 type BusinessRole string
 
 const (
-	BusinessRoleOwner    BusinessRole = "owner"
-	BusinessRoleAdmin    BusinessRole = "admin"
-	BusinessRoleEmployee BusinessRole = "employee"
+	BusinessRoleOwner   BusinessRole = "owner"
+	BusinessRoleAdmin   BusinessRole = "admin"
+	BusinessRoleCounter BusinessRole = "counter"
 )
 
 type QueueState string
 
 const (
-	QueueStateWaiting   QueueState = "waiting"
-	QueueStateCalled    QueueState = "called"
-	QueueStateProcess   QueueState = "process"
-	QueueStateCanceled  QueueState = "canceled"
-	QueueStateCompleted QueueState = "done"
+	QueueStateWaiting    QueueState = "waiting"
+	QueueStateCalled     QueueState = "called"
+	QueueStateProcessing QueueState = "processing"
+	QueueStateCancelled  QueueState = "cancelled"
+	QueueStateSkipped    QueueState = "skipped"
+	QueueStateCompleted  QueueState = "done"
 )
 
 type SubscriptionStatus string

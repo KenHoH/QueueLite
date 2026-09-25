@@ -9,10 +9,10 @@ import (
 type Queue struct {
 	ID uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
 
-	BusinessID uuid.UUID `gorm:"type:uuid;not null;index:idx_queue_business_state_created,priority:1" json:"businessId"`
-	UserID     uuid.UUID `gorm:"type:uuid;not null;index" json:"userId"`
+	BusinessID uuid.UUID  `gorm:"type:uuid;not null;index:idx_queue_business_state_created,priority:1" json:"businessId"`
+	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"userId,omitempty"`
 
-	CounterID *uuid.UUID `gorm:"type:uuid;index" json:"counterId,omitempty"`
+	CalledByCounterID *uuid.UUID `gorm:"type:uuid;index" json:"calledByCounterId,omitempty"`
 
 	Name string `gorm:"size:100;not null" json:"name"`
 
@@ -23,13 +23,11 @@ type Queue struct {
 	CreatedAt time.Time `gorm:"index:idx_queue_business_state_created,priority:3" json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
-	// Set when service actually begins.
-	StartTime *time.Time `json:"startTime,omitempty"`
+	CalledAt     *time.Time `json:"calledAt,omitempty"`
+	ProcessingAt *time.Time `json:"processingAt,omitempty"`
+	DoneAt       *time.Time `json:"doneAt,omitempty"`
+	CancelledAt  *time.Time `json:"cancelledAt,omitempty"`
 
-	// Set when completed or canceled.
-	EndTime *time.Time `json:"endTime,omitempty"`
-
-	Business Business `gorm:"foreignKey:BusinessID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"-"`
-	User     User     `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"user,omitempty"`
-	Counter  *Counter `gorm:"foreignKey:CounterID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"counter,omitempty"`
+	Business        Business `gorm:"foreignKey:BusinessID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"-"`
+	CalledByCounter *Counter `gorm:"foreignKey:CalledByCounterID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"calledByCounter,omitempty"`
 }
