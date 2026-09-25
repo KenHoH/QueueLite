@@ -35,6 +35,7 @@ func (h *CounterHandlerImpl) PrivateRoutes() http.Handler {
 	router.Post("/{counterID}/business/{businessID}/call-next", h.CallNextQueue)
 	router.Post("/{counterID}/queues/{queueID}/process", h.ProcessCalledQueue)
 	router.Post("/{counterID}/queues/{queueID}/skip", h.SkipQueue)
+	router.Delete("/{counterID}/queues/{queueID}", h.RemoveQueueFromCounter)
 	router.Put("/{counterID}", h.UpdateCounter)
 	router.Delete("/{counterID}", h.DeleteCounter)
 	return router
@@ -197,6 +198,20 @@ func (h *CounterHandlerImpl) SkipQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"queueId": queue.ID.String(), "queueName": queue.Name})
+}
+
+func (h *CounterHandlerImpl) RemoveQueueFromCounter(w http.ResponseWriter, r *http.Request) {
+	counterID, queueID, ok := h.parseCounterQueueParams(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.s.RemoveQueueFromCounter(r.Context(), counterID, queueID); err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue removed from counter"})
 }
 
 func (h *CounterHandlerImpl) parseCounterQueueParams(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {

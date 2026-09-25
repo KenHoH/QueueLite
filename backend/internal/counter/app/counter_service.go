@@ -129,6 +129,42 @@ func (s *CounterService) ClearCounterCustomer(ctx context.Context, counterID uui
 	return nil
 }
 
+func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) error {
+	if s.queueRepo == nil {
+		return apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
+	}
+
+	counter, err := s.GetCounter(ctx, counterID)
+	if err != nil {
+		return err
+	}
+
+	queue, err := s.queueRepo.GetQueue(ctx, queueID)
+	if err != nil {
+		if errors.Is(err, queueapp.ErrQueueNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "QUEUE_NOT_FOUND", "queue not found", err)
+		}
+		return apperror.Wrap(apperror.KindInternal, "GET_QUEUE_ERROR", "failed to get queue", err)
+	}
+
+	if queue.CalledByCounterID == nil || *queue.CalledByCounterID != counterID {
+		return apperror.New(apperror.KindInvalid, "QUEUE_COUNTER_MISMATCH", "queue was not called by this counter")
+	}
+
+	queue.CalledByCounterID = nil
+	if queue.State == queuedomain.QueueStateCalled {
+		queue.State = queuedomain.QueueStateWaiting
+	}
+	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
+		return apperror.Wrap(apperror.KindInternal, "REMOVE_QUEUE_COUNTER_ERROR", "failed to remove queue from counter", err)
+	}
+
+	if counter.CurrentQueueID != nil && *counter.CurrentQueueID == queueID {
+		return s.ClearCounterCustomer(ctx, counterID)
+	}
+	return nil
+}
+
 func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID, businessID uuid.UUID) (*queuedomain.Queue, error) {
 	if s.queueRepo == nil {
 		return nil, apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
