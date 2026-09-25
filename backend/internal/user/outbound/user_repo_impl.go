@@ -62,7 +62,7 @@ func (u *UserRepoImpl) UpdateUser(ctx context.Context, user *domain.User) error 
 	return nil
 }
 
-func (u *UserRepoImpl) GetUserByName(ctx context.Context, username string) (*domain.User, error) {
+func (u *UserRepoImpl) GetUserByName(ctx context.Context, username string) (*model.User, error) {
 	var record model.User
 	err := u.db.
 		WithContext(ctx).
@@ -78,7 +78,7 @@ func (u *UserRepoImpl) GetUserByName(ctx context.Context, username string) (*dom
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
-	return toDomainUser(&record), nil
+	return &record, nil
 }
 
 func (u *UserRepoImpl) GetUser(ctx context.Context, id uuid.UUID) (*domain.User, error) {

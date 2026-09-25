@@ -1,6 +1,7 @@
 package app
 
 import (
+	"QueueLite/internal/adapter/postgres/model"
 	"QueueLite/internal/apperror"
 	subscriptionapp "QueueLite/internal/subscription/app"
 	"QueueLite/internal/user/domain"
@@ -73,21 +74,21 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	return record, nil
 }
 
-func (s *UserService) LoginUser(ctx context.Context, user domain.User) error {
+func (s *UserService) LoginUser(ctx context.Context, user domain.User) (*model.User, error) {
 	user.Username = strings.TrimSpace(user.Username)
 	userRecord, err := s.repo.GetUserByName(ctx, user.Username)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			return apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", err)
+			return nil, apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", err)
 		}
-		return apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
+		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
 	}
 
-	if !checkPassword(userRecord.Password, user.Password) {
-		return apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", ErrInvalidPassword)
+	if !checkPassword(*userRecord.Password, user.Password) {
+		return nil, apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", ErrInvalidPassword)
 	}
 
-	return nil
+	return userRecord, nil
 }
 
 func (s *UserService) GetUser(ctx context.Context, id uuid.UUID) (*domain.User, error) {

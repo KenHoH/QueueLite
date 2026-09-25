@@ -3,7 +3,6 @@ package middleware
 import (
 	"QueueLite/internal/queue/app"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -11,13 +10,17 @@ import (
 func ProtectedMiddleware(queueService app.QueueService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := strings.TrimSpace(r.Header.Get("Authorization"))
-			if token == "" {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+			cookie, err := r.Cookie("queueToken")
+			if err != nil {
+				if err == http.ErrNoCookie {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				http.Error(w, "bad request", http.StatusBadRequest)
 				return
 			}
 
-			token = strings.TrimPrefix(token, "Bearer ")
+			token := cookie.Value
 
 			queueIDString, err := ValidateQueueToken(token)
 			if err != nil {
