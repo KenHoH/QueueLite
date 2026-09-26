@@ -6,8 +6,10 @@ import (
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -20,6 +22,50 @@ type QueueHandlerImpl struct {
 func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 	return &QueueHandlerImpl{
 		s: s,
+	}
+}
+
+func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
+	// sse header
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok { // this to check if w is also Flusher as well, or can be changed to Flusher
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ticker := time.NewTicker(2 * time.Second) // create a new ticker that triggers every 2 seconds
+	defer ticker.Stop()                       // to stop the ticker if the sse handler finished
+
+	// select if like switch to check whos channel is faster that receives data
+	select {
+	case <-r.Context().Done():
+		// Client disconnected
+		return
+
+	// every ticks -> triggers.
+	case <-ticker.C:
+		pubsub := h.s.SubscribeQueueChannel()
+		// Always close the PubSub client to prevent connection leaks
+		defer pubsub.Close()
+
+		// 2. Start a background goroutine to consume messages
+		go func() {
+			// pubsub.Channel() returns a Go channel (*redis.Message)
+			ch := pubsub.Channel()
+
+			fmt.Println("Waiting for messages...")
+			for msg := range ch {
+				fmt.Printf("Received message from channel '%s': %s\n", msg.Channel, msg.Payload)
+			}
+		}()
+		// immediately sends buffer data
+		flusher.Flush()
 	}
 }
 

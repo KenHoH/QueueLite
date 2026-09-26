@@ -14,3 +14,7 @@ func PublishMessage(ctx context.Context, rdt *redis.Client, channelName string, 
 
 	return nil
 }
+
+func SubscribeChannel(ctx context.Context, rdt *redis.Client, channelName string) *redis.PubSub {
+	return rdt.Subscribe(ctx, channelName)
+}

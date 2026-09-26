@@ -31,6 +31,10 @@ func NewQueueService(repo QueueRepo, subscriptionService *subscriptionapp.Subscr
 	return service
 }
 
+func (s *QueueService) SubscribeQueueChannel(ctx context.Context, channelName string) *redis.PubSub {
+	return cache.SubscribeChannel(ctx, s.rdt, channelName)
+}
+
 func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*domain.Queue, error) {
 	if queue.BusinessID == uuid.Nil {
 		return nil, apperror.New(apperror.KindInvalid, "BUSINESS_ID_REQUIRED", "business id is required")
