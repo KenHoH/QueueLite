@@ -1,11 +1,14 @@
 package app
 
 import (
+	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
+	"QueueLite/internal/config"
 	"QueueLite/internal/queue/domain"
 	subscriptionapp "QueueLite/internal/subscription/app"
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -16,14 +19,14 @@ import (
 type QueueService struct {
 	repo                QueueRepo
 	subscriptionService *subscriptionapp.SubscriptionService
-	redis               *redis.Client
+	rdt                 *redis.Client
 }
 
 func NewQueueService(repo QueueRepo, subscriptionService *subscriptionapp.SubscriptionService, redis *redis.Client) *QueueService {
 	service := &QueueService{
 		repo:                repo,
 		subscriptionService: subscriptionService,
-		redis:               redis,
+		rdt:                 redis,
 	}
 	return service
 }
@@ -55,16 +58,18 @@ func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*
 		queue.Name = name
 	}
 
-	record, err := s.repo.CreateQueue(ctx, &queue)
-	if err != nil {
-		return nil, apperror.Wrap(apperror.KindInternal, "REGISTER_QUEUE_ERROR", "failed to register queue", err)
+	if queue.ID == uuid.Nil {
+		queue.ID = uuid.New()
 	}
-	// END of create queue
+	if queue.CreatedAt.IsZero() {
+		queue.CreatedAt = time.Now()
+	}
 
-	// channels
-	// cache
-	// stream
-	return record, nil
+	if err := cache.AddQueueStream(ctx, s.rdt, queue); err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "REGISTER_QUEUE_STREAM_ERROR", "failed to queue registration for database worker", err)
+	}
+
+	return &queue, nil
 }
 
 func (s *QueueService) GetQueue(ctx context.Context, id uuid.UUID) (*domain.Queue, error) {
@@ -164,7 +169,64 @@ func (s *QueueService) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// TODO:implement
-func PublishQueueEvent(ctx context.Context, eventName string, payload any) error {
-	return nil
+func RunDatabaseWorkerStream(ctx context.Context, rdt *redis.Client, repo QueueRepo) {
+	lastSeenID := "0"
+
+	for {
+		streams, err := rdt.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{config.StreamName, lastSeenID},
+			Count:   10,              // max total events that enter the stream to be processed
+			Block:   2 * time.Second, // max idle time no events in
+		}).Result()
+
+		// if the timer hits 2 second
+		if errors.Is(err, redis.Nil) {
+			continue
+		} else if err != nil {
+			log.Printf("[WORKER ERROR] Error reading stream: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		var batch []domain.Queue
+		lastBatchID := ""
+
+		for _, stream := range streams {
+			for _, message := range stream.Messages {
+				record, err := queueFromStreamValues(message.Values)
+				if err != nil {
+					log.Printf("[WORKER ERROR] invalid queue stream message %s: %v", message.ID, err)
+					lastSeenID = message.ID
+					continue
+				}
+
+				batch = append(batch, *record)
+				lastBatchID = message.ID
+			}
+		}
+
+		if len(batch) == 0 {
+			continue
+		}
+
+		if err := repo.CreateQueues(ctx, batch); err != nil {
+			log.Printf("[WORKER ERROR] failed to create queue batch: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		for i := range batch {
+			queueKey := batch[i].BusinessID.String()
+			if err := cache.AddQueue(ctx, queueKey, rdt, batch[i]); err != nil {
+				log.Printf("[WORKER ERROR] failed to add queue to redis: %v", err)
+			}
+			if err := cache.PublishMessage(ctx, rdt, queueKey, "UserJoinedQueue"); err != nil {
+				log.Printf("[WORKER ERROR] failed to publish queue event: %v", err)
+			}
+		}
+
+		if lastBatchID != "" {
+			lastSeenID = lastBatchID
+		}
+	}
 }

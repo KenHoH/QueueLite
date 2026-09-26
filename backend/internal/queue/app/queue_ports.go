@@ -10,6 +10,7 @@ import (
 
 type QueueRepo interface {
 	CreateQueue(ctx context.Context, queue *domain.Queue) (*domain.Queue, error)
+	CreateQueues(ctx context.Context, queues []domain.Queue) error
 	UpdateQueue(ctx context.Context, queue *domain.Queue) error
 	GetQueue(ctx context.Context, id uuid.UUID) (*domain.Queue, error)
 	GetAllQueueByBusiness(ctx context.Context, businessID uuid.UUID) ([]domain.Queue, error)

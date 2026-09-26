@@ -19,7 +19,7 @@ type CounterService struct {
 	repo                CounterRepo
 	queueRepo           CounterQueueRepo
 	subscriptionService *subscriptionapp.SubscriptionService
-	redis               *redis.Client
+	rdt                 *redis.Client
 }
 
 func NewCounterService(repo CounterRepo, queueRepo CounterQueueRepo, subscriptionService *subscriptionapp.SubscriptionService, redis *redis.Client) *CounterService {
@@ -27,7 +27,7 @@ func NewCounterService(repo CounterRepo, queueRepo CounterQueueRepo, subscriptio
 		repo:                repo,
 		queueRepo:           queueRepo,
 		subscriptionService: subscriptionService,
-		redis:               redis,
+		rdt:                 redis,
 	}
 	return service
 }

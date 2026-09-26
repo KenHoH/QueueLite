@@ -30,6 +30,22 @@ func (r *QueueRepoImpl) CreateQueue(ctx context.Context, queue *domain.Queue) (*
 	return toDomainQueue(&record), nil
 }
 
+func (r *QueueRepoImpl) CreateQueues(ctx context.Context, queues []domain.Queue) error {
+	if len(queues) == 0 {
+		return nil
+	}
+
+	records := make([]model.Queue, 0, len(queues))
+	for i := range queues {
+		records = append(records, toQueueRecord(&queues[i]))
+	}
+
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&records).Error; err != nil {
+		return fmt.Errorf("create queues: %w", err)
+	}
+	return nil
+}
+
 func (r *QueueRepoImpl) UpdateQueue(ctx context.Context, queue *domain.Queue) error {
 	result := r.db.WithContext(ctx).Model(&model.Queue{}).Where("id = ?", queue.ID).Updates(map[string]any{
 		"business_id":          queue.BusinessID,

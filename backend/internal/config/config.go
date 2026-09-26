@@ -14,6 +14,8 @@ type Config struct {
 	RedisAddr   string
 }
 
+const StreamName string = "queue_stream"
+
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 
