@@ -23,22 +23,6 @@ func NewUserHandler(s *app.UserService) *UserHandlerImpl {
 	return &UserHandlerImpl{s: s}
 }
 
-func (u *UserHandlerImpl) PublicRoutes() http.Handler {
-	router := chi.NewRouter()
-	router.Post("/", u.RegisterUser)
-	router.Post("/login", u.LoginUser)
-
-	return router
-}
-
-func (u *UserHandlerImpl) PrivateRoutes() http.Handler {
-	router := chi.NewRouter()
-	router.Get("/{userID}", u.GetUser)
-	router.Put("/{userID}", u.UpdateUser)
-
-	return router
-}
-
 func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	var request UserRegisterRequest
 	if err := decodeJSON(r, &request); err != nil {
