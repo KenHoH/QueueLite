@@ -12,18 +12,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type CounterService struct {
 	repo                CounterRepo
 	queueRepo           CounterQueueRepo
 	subscriptionService *subscriptionapp.SubscriptionService
+	redis               *redis.Client
 }
 
-func NewCounterService(repo CounterRepo, queueRepo CounterQueueRepo, subscriptionService ...*subscriptionapp.SubscriptionService) *CounterService {
-	service := &CounterService{repo: repo, queueRepo: queueRepo}
-	if len(subscriptionService) > 0 {
-		service.subscriptionService = subscriptionService[0]
+func NewCounterService(repo CounterRepo, queueRepo CounterQueueRepo, subscriptionService *subscriptionapp.SubscriptionService, redis *redis.Client) *CounterService {
+	service := &CounterService{
+		repo:                repo,
+		queueRepo:           queueRepo,
+		subscriptionService: subscriptionService,
+		redis:               redis,
 	}
 	return service
 }

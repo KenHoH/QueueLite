@@ -11,6 +11,7 @@ type Config struct {
 	DatabaseURL string
 	HTTPAddr    string
 	SecretKey   string
+	RedisAddr   string
 }
 
 func Load() (*Config, error) {
@@ -31,9 +32,15 @@ func Load() (*Config, error) {
 		return nil, errors.New("Secret key is required")
 	}
 
+	redisAddr := os.Getenv("REDIS_HOST")
+	if redisAddr == "" {
+		return nil, errors.New("Redis is required")
+	}
+
 	return &Config{
 		DatabaseURL: databaseURL,
 		HTTPAddr:    httpAddr,
 		SecretKey:   secretKey,
+		RedisAddr:   redisAddr,
 	}, nil
 }

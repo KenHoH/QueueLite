@@ -19,10 +19,11 @@ import (
 	useroutbound "QueueLite/internal/user/outbound"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB) *chi.Mux {
+func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	router := chi.NewRouter()
 
 	subscriptionRepo := subscriptionoutbound.NewSubscriptionRepo(db)
@@ -34,40 +35,62 @@ func NewRouter(db *gorm.DB) *chi.Mux {
 	userHandler := userhttp.NewUserHandler(userService)
 
 	queueRepo := queueoutbound.NewQueueRepo(db)
-	queueService := queueapp.NewQueueService(queueRepo, subscriptionService)
+	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb)
 	queueHandler := queuehttp.NewQueueHandler(queueService)
 
 	counterRepo := counteroutbound.NewCounterRepo(db)
-	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService)
+	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService, rdb)
 	counterHandler := counterhttp.NewCounterHandler(counterService)
 
 	businessRepo := businessoutbound.NewBusinessRepo(db)
 	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
 
-	// private group: requires a real registered user token.
-	router.Group(func(private chi.Router) {
-		private.Use(middleware.AuthMiddleware(userRepo))
-		private.Mount("/users", userHandler.PrivateRoutes())
-		private.Mount("/businesses", businessHandler.PublicRoutes())
-		private.Mount("/queues", queueHandler.PublicRoutes())
-		private.Mount("/counters", counterHandler.PrivateRoutes())
-		private.Mount("/subscriptions", subscriptionHandler.Routes())
+	router.Route("/users", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Mount("/", userHandler.PublicRoutes())
+		})
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Mount("/", userHandler.PrivateRoutes())
+		})
 	})
 
-	// public group: no authentication required.
-	router.Group(func(public chi.Router) {
-		public.Use(middleware.PublicMiddleware(userRepo))
-		public.Mount("/users", userHandler.PublicRoutes())
-		public.Mount("/businesses", businessHandler.PublicRoutes())
-		public.Mount("/queues", queueHandler.PublicRoutes())
-		public.Mount("/counters", counterHandler.PublicRoutes())
+	router.Route("/businesses", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Mount("/", businessHandler.PublicRoutes())
+		})
 	})
 
-	// protected group: requires a valid queue token.
-	router.Group(func(protected chi.Router) {
-		protected.Use(middleware.ProtectedMiddleware(*queueService))
-		protected.Mount("/queues", queueHandler.ProtectedRoutes())
+	router.Route("/queues", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Mount("/", queueHandler.PublicRoutes())
+		})
+		r.Group(func(protected chi.Router) {
+			protected.Use(middleware.ProtectedMiddleware(*queueService))
+			protected.Mount("/", queueHandler.ProtectedRoutes())
+		})
+	})
+
+	router.Route("/counters", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Mount("/", counterHandler.PublicRoutes())
+		})
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Mount("/", counterHandler.PrivateRoutes())
+		})
+	})
+
+	router.Route("/subscriptions", func(r chi.Router) {
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Mount("/", subscriptionHandler.Routes())
+		})
 	})
 
 	return router

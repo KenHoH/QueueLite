@@ -10,17 +10,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type QueueService struct {
 	repo                QueueRepo
 	subscriptionService *subscriptionapp.SubscriptionService
+	redis               *redis.Client
 }
 
-func NewQueueService(repo QueueRepo, subscriptionService ...*subscriptionapp.SubscriptionService) *QueueService {
-	service := &QueueService{repo: repo}
-	if len(subscriptionService) > 0 {
-		service.subscriptionService = subscriptionService[0]
+func NewQueueService(repo QueueRepo, subscriptionService *subscriptionapp.SubscriptionService, redis *redis.Client) *QueueService {
+	service := &QueueService{
+		repo:                repo,
+		subscriptionService: subscriptionService,
+		redis:               redis,
 	}
 	return service
 }
@@ -56,6 +59,11 @@ func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "REGISTER_QUEUE_ERROR", "failed to register queue", err)
 	}
+	// END of create queue
+
+	// channels
+	// cache
+	// stream
 	return record, nil
 }
 
