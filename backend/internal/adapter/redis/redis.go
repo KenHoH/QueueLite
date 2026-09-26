@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"log"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -15,8 +15,7 @@ func NewConnectionRedis(redisURL string, ctx context.Context) (*redis.Client, er
 	})
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("Failed to connect to Redis: %v", err)
 	}
 	return rdb, nil
 }
