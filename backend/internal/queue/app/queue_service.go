@@ -193,7 +193,7 @@ func RunDatabaseWorkerStream(ctx context.Context, rdt *redis.Client, repo QueueR
 
 		for _, stream := range streams {
 			for _, message := range stream.Messages {
-				record, err := queueFromStreamValues(message.Values)
+				record, err := QueueFromStreamValues(message.Values)
 				if err != nil {
 					log.Printf("[WORKER ERROR] invalid queue stream message %s: %v", message.ID, err)
 					lastSeenID = message.ID
