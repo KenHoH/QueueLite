@@ -1,6 +1,7 @@
 package app
 
 import (
+	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/counter/domain"
 	queueapp "QueueLite/internal/queue/app"
@@ -30,6 +31,27 @@ func NewCounterService(repo CounterRepo, queueRepo CounterQueueRepo, subscriptio
 		rdt:                 redis,
 	}
 	return service
+}
+
+func (s *CounterService) publishQueueUpdate(ctx context.Context, businessID uuid.UUID) {
+	if s.rdt == nil {
+		return
+	}
+	_ = cache.PublishMessage(ctx, s.rdt, cache.QueueEventChannel(businessID.String()), "queue.update")
+}
+
+func (s *CounterService) removeWaitingQueue(ctx context.Context, businessID uuid.UUID, queueID uuid.UUID) {
+	if s.rdt == nil {
+		return
+	}
+	_ = cache.RemoveWaitingQueue(ctx, s.rdt, businessID.String(), queueID.String())
+}
+
+func (s *CounterService) addWaitingQueue(ctx context.Context, queue queuedomain.Queue) {
+	if s.rdt == nil {
+		return
+	}
+	_ = cache.AddWaitingQueue(ctx, s.rdt, queue)
 }
 
 func (s *CounterService) CreateCounter(ctx context.Context, counter domain.Counter) (*domain.Counter, error) {
@@ -105,7 +127,8 @@ func (s *CounterService) UpdateCounterCustomer(ctx context.Context, counterID uu
 		return apperror.New(apperror.KindInvalid, "COUNTER_QUEUE_BUSINESS_MISMATCH", "counter and queue belong to different businesses")
 	}
 
-	if queue.State == "" || queue.State == queuedomain.QueueStateWaiting {
+	wasWaiting := queue.State == "" || queue.State == queuedomain.QueueStateWaiting
+	if wasWaiting {
 		queue.State = queuedomain.QueueStateCalled
 		queue.CalledByCounterID = &counterID
 	}
@@ -119,6 +142,10 @@ func (s *CounterService) UpdateCounterCustomer(ctx context.Context, counterID uu
 			return apperror.Wrap(apperror.KindNotFound, "COUNTER_NOT_FOUND", "counter not found", err)
 		}
 		return apperror.Wrap(apperror.KindInternal, "UPDATE_COUNTER_CUSTOMER_ERROR", "failed to update counter customer", err)
+	}
+	if wasWaiting {
+		s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
+		s.publishQueueUpdate(ctx, queue.BusinessID)
 	}
 	return nil
 }
@@ -156,13 +183,19 @@ func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID u
 	}
 
 	queue.CalledByCounterID = nil
+	returnedToWaiting := false
 	if queue.State == queuedomain.QueueStateCalled {
 		queue.State = queuedomain.QueueStateWaiting
+		returnedToWaiting = true
 	}
 	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return apperror.Wrap(apperror.KindInternal, "REMOVE_QUEUE_COUNTER_ERROR", "failed to remove queue from counter", err)
 	}
 
+	if returnedToWaiting {
+		s.addWaitingQueue(ctx, *queue)
+		s.publishQueueUpdate(ctx, queue.BusinessID)
+	}
 	if counter.CurrentQueueID != nil && *counter.CurrentQueueID == queueID {
 		return s.ClearCounterCustomer(ctx, counterID)
 	}
@@ -202,6 +235,8 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 	if err := s.queueRepo.UpdateQueue(ctx, next); err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "CALL_NEXT_QUEUE_ERROR", "failed to call next queue", err)
 	}
+	s.removeWaitingQueue(ctx, next.BusinessID, next.ID)
+	s.publishQueueUpdate(ctx, next.BusinessID)
 	_ = PublishQueueEvent(ctx, "queue.called", next)
 	return next, nil
 }
@@ -238,6 +273,8 @@ func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.
 	if err := s.repo.UpdateCounterCustomer(ctx, counterID, &queueID); err != nil {
 		return nil, err
 	}
+	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
+	s.publishQueueUpdate(ctx, queue.BusinessID)
 	_ = PublishQueueEvent(ctx, "queue.processing", queue)
 	return queue, nil
 }
@@ -261,6 +298,8 @@ func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, que
 	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return nil, err
 	}
+	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
+	s.publishQueueUpdate(ctx, queue.BusinessID)
 	counter, err := s.GetCounter(ctx, counterID)
 	if err == nil && counter.CurrentQueueID != nil && *counter.CurrentQueueID == queueID {
 		_ = s.repo.UpdateCounterCustomer(ctx, counterID, nil)

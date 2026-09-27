@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -26,6 +25,11 @@ func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 }
 
 func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
+	businessId, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+
 	// sse header
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -39,33 +43,52 @@ func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ticker := time.NewTicker(2 * time.Second) // create a new ticker that triggers every 2 seconds
-	defer ticker.Stop()                       // to stop the ticker if the sse handler finished
+	pubsub := h.s.SubscribeQueueChannel(r.Context(), businessId.String())
+	// Always close the PubSub client to prevent connection leaks
+	defer pubsub.Close()
+	ch := pubsub.Channel()
 
-	// select if like switch to check whos channel is faster that receives data
-	select {
-	case <-r.Context().Done():
-		// Client disconnected
-		return
+	sendSnapshot := func() bool {
+		response, err := h.s.GetWaitingQueueSnapshot(r.Context(), businessId)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
+			flusher.Flush()
+			return false
+		}
 
-	// every ticks -> triggers.
-	case <-ticker.C:
-		pubsub := h.s.SubscribeQueueChannel()
-		// Always close the PubSub client to prevent connection leaks
-		defer pubsub.Close()
+		payload, err := json.Marshal(response)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
+			flusher.Flush()
+			return false
+		}
 
-		// 2. Start a background goroutine to consume messages
-		go func() {
-			// pubsub.Channel() returns a Go channel (*redis.Message)
-			ch := pubsub.Channel()
-
-			fmt.Println("Waiting for messages...")
-			for msg := range ch {
-				fmt.Printf("Received message from channel '%s': %s\n", msg.Channel, msg.Payload)
-			}
-		}()
-		// immediately sends buffer data
+		if _, err := fmt.Fprintf(w, "event: queue.update\ndata: %s\n\n", payload); err != nil {
+			return false
+		}
 		flusher.Flush()
+		return true
+	}
+
+	if !sendSnapshot() {
+		return
+	}
+
+	for {
+		select {
+		case <-r.Context().Done():
+			// Client disconnected
+			return
+
+		// every msg from sub channel
+		case _, ok := <-ch:
+			if !ok {
+				return
+			}
+			if !sendSnapshot() {
+				return
+			}
+		}
 	}
 }
 
