@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Subscription struct {
@@ -29,4 +30,9 @@ type Subscription struct {
 	User         *User         `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	BusinessPlan *BusinessPlan `gorm:"foreignKey:BusinessPlanID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"businessPlan,omitempty"`
 	UserPlan     *UserPlan     `gorm:"foreignKey:UserPlanID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"userPlan,omitempty"`
+}
+
+func (u *Subscription) BeforeCreate(tx *gorm.DB) (err error) {
+	u.ID = uuid.New()
+	return nil
 }
