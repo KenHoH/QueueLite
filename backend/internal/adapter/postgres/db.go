@@ -9,7 +9,11 @@ import (
 )
 
 func NewConnection(databaseURL string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
+		// Queue and Counter reference each other, so inline FK creation can fail
+		// during AutoMigrate when one table does not exist yet.
+		DisableForeignKeyConstraintWhenMigrating: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
@@ -19,13 +23,16 @@ func NewConnection(databaseURL string) (*gorm.DB, error) {
 
 func MigrateDatabase(db *gorm.DB) error {
 	if err := db.AutoMigrate(
-		&model.Business{},
-		&model.Counter{},
-		&model.Queue{},
+		// Base tables first.
 		&model.User{},
+		&model.Business{},
 		&model.BusinessPlan{},
 		&model.UserPlan{},
+
+		// Dependent tables after their main parent tables exist.
 		&model.Subscription{},
+		&model.Counter{},
+		&model.Queue{},
 		&model.UserBusinessRelation{},
 	); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
