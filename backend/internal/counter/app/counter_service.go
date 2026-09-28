@@ -183,19 +183,14 @@ func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID u
 	}
 
 	queue.CalledByCounterID = nil
-	returnedToWaiting := false
-	if queue.State == queuedomain.QueueStateCalled {
-		queue.State = queuedomain.QueueStateWaiting
-		returnedToWaiting = true
-	}
+	queue.State = queuedomain.QueueStateCompleted
+	queue.DoneAt = nowPtr()
 	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return apperror.Wrap(apperror.KindInternal, "REMOVE_QUEUE_COUNTER_ERROR", "failed to remove queue from counter", err)
 	}
 
-	if returnedToWaiting {
-		s.addWaitingQueue(ctx, *queue)
-		s.publishQueueUpdate(ctx, queue.BusinessID)
-	}
+	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
+	s.publishQueueUpdate(ctx, queue.BusinessID)
 	if counter.CurrentQueueID != nil && *counter.CurrentQueueID == queueID {
 		return s.ClearCounterCustomer(ctx, counterID)
 	}
@@ -217,17 +212,36 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 		current, err := s.queueRepo.GetQueue(ctx, *counter.CurrentQueueID)
 		if err == nil {
 			current.State = queuedomain.QueueStateCompleted
-			now := nowPtr()
-			current.DoneAt = now
+			current.DoneAt = nowPtr()
 			_ = s.queueRepo.UpdateQueue(ctx, current)
 		}
 		if err := s.repo.UpdateCounterCustomer(ctx, counterID, nil); err != nil {
 			return nil, err
 		}
 	}
-	next, err := s.queueRepo.GetTopQueueByBusinessPrivateForUpdate(ctx, businessID)
-	if err != nil || next == nil {
-		return next, err
+
+	queueItem, err := cache.PopTopWaitingQueueWithScore(ctx, s.rdt, businessID.String())
+	if err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "POP_TOP_QUEUE_ERROR", "failed to pop top waiting queue", err)
+	}
+	if queueItem == nil {
+		return nil, nil
+	}
+	queueIDString, ok := queueItem.Member.(string)
+	if !ok {
+		_ = cache.RestoreWaitingQueue(ctx, s.rdt, businessID.String(), *queueItem)
+		return nil, apperror.New(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache")
+	}
+	queueID, err := uuid.Parse(queueIDString)
+	if err != nil {
+		_ = cache.RestoreWaitingQueue(ctx, s.rdt, businessID.String(), *queueItem)
+		return nil, apperror.Wrap(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache", err)
+	}
+
+	next, err := s.getQueueWithRetry(ctx, queueID)
+	if err != nil {
+		_ = cache.RestoreWaitingQueue(ctx, s.rdt, businessID.String(), *queueItem)
+		return nil, err
 	}
 	next.State = queuedomain.QueueStateCalled
 	next.CalledByCounterID = &counterID
@@ -235,9 +249,11 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 	if err := s.queueRepo.UpdateQueue(ctx, next); err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "CALL_NEXT_QUEUE_ERROR", "failed to call next queue", err)
 	}
-	s.removeWaitingQueue(ctx, next.BusinessID, next.ID)
+	if err := s.repo.UpdateCounterCustomer(ctx, counterID, &next.ID); err != nil {
+		return nil, err
+	}
 	s.publishQueueUpdate(ctx, next.BusinessID)
-	_ = PublishQueueEvent(ctx, "queue.called", next)
+	s.scheduleCalledQueueTimeout(next.ID, counterID)
 	return next, nil
 }
 
@@ -260,22 +276,15 @@ func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.
 	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return nil, err
 	}
-	if s.subscriptionService != nil {
-		if err := s.subscriptionService.DecreaseBusinessCapacity(ctx, queue.BusinessID); err != nil {
+	if s.subscriptionService != nil && queue.Priority && queue.UserID != nil {
+		if err := s.subscriptionService.DecreaseUserSlot(ctx, *queue.UserID); err != nil {
 			return nil, err
-		}
-		if queue.Priority && queue.UserID != nil {
-			if err := s.subscriptionService.DecreaseUserSlot(ctx, *queue.UserID); err != nil {
-				return nil, err
-			}
 		}
 	}
 	if err := s.repo.UpdateCounterCustomer(ctx, counterID, &queueID); err != nil {
 		return nil, err
 	}
 	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
-	s.publishQueueUpdate(ctx, queue.BusinessID)
-	_ = PublishQueueEvent(ctx, "queue.processing", queue)
 	return queue, nil
 }
 
@@ -299,18 +308,54 @@ func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, que
 		return nil, err
 	}
 	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
-	s.publishQueueUpdate(ctx, queue.BusinessID)
 	counter, err := s.GetCounter(ctx, counterID)
 	if err == nil && counter.CurrentQueueID != nil && *counter.CurrentQueueID == queueID {
 		_ = s.repo.UpdateCounterCustomer(ctx, counterID, nil)
 	}
-	_ = PublishQueueEvent(ctx, "queue.skipped", queue)
-	return s.CallNextQueue(ctx, counterID, queue.BusinessID)
+	next, err := s.CallNextQueue(ctx, counterID, queue.BusinessID)
+	if err != nil {
+		return nil, err
+	}
+	if next == nil {
+		s.publishQueueUpdate(ctx, queue.BusinessID)
+	}
+	return next, nil
 }
 
-// TODO:implement
-func PublishQueueEvent(ctx context.Context, eventName string, payload any) error {
-	return nil
+func (s *CounterService) getQueueWithRetry(ctx context.Context, queueID uuid.UUID) (*queuedomain.Queue, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		queue, err := s.queueRepo.GetQueue(ctx, queueID)
+		if err == nil {
+			return queue, nil
+		}
+		if !errors.Is(err, queueapp.ErrQueueNotFound) {
+			return nil, err
+		}
+		lastErr = err
+		if attempt < 2 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(3 * time.Second):
+			}
+		}
+	}
+	return nil, apperror.Wrap(apperror.KindNotFound, "QUEUE_NOT_READY", "queue is not ready in database yet", lastErr)
+}
+
+func (s *CounterService) scheduleCalledQueueTimeout(queueID uuid.UUID, counterID uuid.UUID) {
+	time.AfterFunc(5*time.Minute, func() {
+		ctx := context.Background()
+		if s.queueRepo == nil {
+			return
+		}
+		queue, err := s.queueRepo.GetQueue(ctx, queueID)
+		if err != nil || queue.State != queuedomain.QueueStateCalled {
+			return
+		}
+		_, _ = s.SkipQueue(ctx, counterID, queueID)
+	})
 }
 
 func nowPtr() *time.Time {

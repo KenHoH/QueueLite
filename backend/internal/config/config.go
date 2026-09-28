@@ -16,6 +16,7 @@ type Config struct {
 }
 
 const QueueExpirationTime = 12 * time.Hour
+const GuestExpirationTime = 24 * time.Hour
 const StreamName string = "queue_stream"
 const QueueConsumerGroup string = "queue_stream_workers"
 const QueueConsumerName string = "queue-worker-1"

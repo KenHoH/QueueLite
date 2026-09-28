@@ -7,6 +7,11 @@ type CreateQueueRequest struct {
 	Priority   bool   `json:"priority"`
 }
 
+type RegisterQueueByQRRequest struct {
+	Username    string `json:"username"`
+	PhoneNumber string `json:"phoneNumber"`
+}
+
 type UpdateQueueRequest struct {
 	Name     *string `json:"name"`
 	State    *string `json:"state"`

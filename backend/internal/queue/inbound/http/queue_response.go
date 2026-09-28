@@ -2,10 +2,6 @@ package inbound
 
 import "QueueLite/internal/queue/domain"
 
-type QueueSnapshotItem struct {
-	QueueID   string `json:"queueId"`
-	QueueName string `json:"queueName"`
-}
 type QueueResponse struct {
 	ID                string  `json:"id"`
 	BusinessID        string  `json:"businessId"`
@@ -18,6 +14,13 @@ type QueueResponse struct {
 
 type QueueStateResponse struct {
 	State string `json:"state"`
+}
+
+type QueueQRResolveResponse struct {
+	BusinessID        string   `json:"businessId"`
+	Authenticated     bool     `json:"authenticated"`
+	RequiresGuestForm bool     `json:"requiresGuestForm"`
+	RequiredFields    []string `json:"requiredFields,omitempty"`
 }
 
 type PublicQueueSummaryResponse struct {

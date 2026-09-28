@@ -294,3 +294,19 @@ func (s *SubscriptionService) CheckBusinessQueueQuota(ctx context.Context, busin
 	}
 	return nil
 }
+
+func (s *SubscriptionService) IncreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error {
+	if businessID == uuid.Nil {
+		return apperror.New(apperror.KindInvalid, "BUSINESS_ID_REQUIRED", "business id is required")
+	}
+	if err := s.repo.IncreaseBusinessCapacity(ctx, businessID); err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "SUBSCRIPTION_NOT_FOUND", "business subscription not found", err)
+		}
+		if errors.Is(err, ErrBusinessPlanNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "BUSINESS_PLAN_NOT_FOUND", "business plan not found", err)
+		}
+		return apperror.Wrap(apperror.KindInternal, "INCREASE_BUSINESS_CAPACITY_ERROR", "failed to increase business capacity", err)
+	}
+	return nil
+}

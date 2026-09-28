@@ -3,6 +3,8 @@ package inbound
 import (
 	httpadapter "QueueLite/internal/adapter/http"
 	"QueueLite/internal/apperror"
+	"QueueLite/internal/config"
+	"QueueLite/internal/middleware"
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
 	"encoding/json"
@@ -92,11 +94,80 @@ func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TODO: implement
+func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request) {
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+
+	if err := h.s.ResolveQueueQR(r.Context(), businessID); err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	_, authenticated := middleware.OptionalUserIdFromContext(r.Context())
+	response := QueueQRResolveResponse{
+		BusinessID:        businessID.String(),
+		Authenticated:     authenticated,
+		RequiresGuestForm: !authenticated,
+	}
+	if !authenticated {
+		response.RequiredFields = []string{"username", "phoneNumber"}
+	}
+
+	httpadapter.WriteJSON(w, http.StatusOK, response)
+}
+
 func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Request) {
-	// check from context if the userId exist
-	// if exist then pass it to normal RegisterQueue function
-	// else create a temp user with redis
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+
+	var userID *uuid.UUID
+	var request RegisterQueueByQRRequest
+	if userIDString, authenticated := middleware.OptionalUserIdFromContext(r.Context()); authenticated {
+		parsed, ok := parseUUIDValue(w, userIDString, "INVALID_USER_ID", "invalid user id")
+		if !ok {
+			return
+		}
+		userID = &parsed
+	} else {
+		if err := decodeJSON(r, &request); err != nil {
+			writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+			return
+		}
+	}
+
+	result, err := h.s.RegisterQueueByQR(r.Context(), app.RegisterQueueByQRInput{
+		BusinessID:  businessID,
+		UserID:      userID,
+		Username:    request.Username,
+		PhoneNumber: request.PhoneNumber,
+	})
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	maxAge := int(config.GuestExpirationTime.Seconds())
+	queueToken, err := middleware.CreateQueueToken(result.Username, result.Queue.ID.String())
+	if err != nil {
+		httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "CREATE_QUEUE_TOKEN_ERROR", "failed to create queue token", err))
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "queueToken", Value: queueToken, Path: "/", HttpOnly: true, MaxAge: maxAge})
+
+	if result.GuestID != nil {
+		guestToken, err := middleware.CreateGuestToken(result.GuestID.String(), businessID.String(), result.PhoneNumber)
+		if err != nil {
+			httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "CREATE_GUEST_TOKEN_ERROR", "failed to create guest token", err))
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: "guestToken", Value: guestToken, Path: "/", HttpOnly: true, MaxAge: maxAge})
+	}
+
+	httpadapter.WriteJSON(w, http.StatusCreated, NewQueueResponse(result.Queue))
 }
 
 func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +208,9 @@ func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request)
 	httpadapter.WriteJSON(w, http.StatusCreated, NewQueueResponse(queue))
 }
 
+func (h *QueueHandlerImpl) GetQueueNameFromSnapShot(w http.ResponseWriter, r *http.Request) {
+}
+
 func (h *QueueHandlerImpl) GetQueue(w http.ResponseWriter, r *http.Request) {
 	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
 	if !ok {
@@ -174,40 +248,6 @@ func (h *QueueHandlerImpl) GetAllQueueByBusiness(w http.ResponseWriter, r *http.
 	}
 
 	queues, err := h.s.GetAllQueueByBusiness(r.Context(), businessID)
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-
-	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
-}
-
-func (h *QueueHandlerImpl) GetBusinessPublicQueueSummary(w http.ResponseWriter, r *http.Request) {
-	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-	if !ok {
-		return
-	}
-
-	summary, err := h.s.GetBusinessPublicQueueSummary(r.Context(), businessID)
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-
-	httpadapter.WriteJSON(w, http.StatusOK, NewPublicQueueSummaryResponse(summary))
-}
-
-func (h *QueueHandlerImpl) GetAllQueueByBusinessFilterState(w http.ResponseWriter, r *http.Request) {
-	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-	if !ok {
-		return
-	}
-	state, ok := parseQueueState(w, chi.URLParam(r, "state"))
-	if !ok {
-		return
-	}
-
-	queues, err := h.s.GetAllQueueByBusinessFilterState(r.Context(), businessID, state)
 	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
@@ -354,3 +394,37 @@ func decodeJSON(r *http.Request, dst any) error {
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(dst)
 }
+
+// func (h *QueueHandlerImpl) GetBusinessPublicQueueSummary(w http.ResponseWriter, r *http.Request) {
+// 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+// 	if !ok {
+// 		return
+// 	}
+
+// 	summary, err := h.s.GetBusinessPublicQueueSummary(r.Context(), businessID)
+// 	if err != nil {
+// 		httpadapter.WriteError(w, err)
+// 		return
+// 	}
+
+// 	httpadapter.WriteJSON(w, http.StatusOK, NewPublicQueueSummaryResponse(summary))
+// }
+
+// func (h *QueueHandlerImpl) GetAllQueueByBusinessFilterState(w http.ResponseWriter, r *http.Request) {
+// 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+// 	if !ok {
+// 		return
+// 	}
+// 	state, ok := parseQueueState(w, chi.URLParam(r, "state"))
+// 	if !ok {
+// 		return
+// 	}
+
+// 	queues, err := h.s.GetAllQueueByBusinessFilterState(r.Context(), businessID, state)
+// 	if err != nil {
+// 		httpadapter.WriteError(w, err)
+// 		return
+// 	}
+
+// 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
+// }

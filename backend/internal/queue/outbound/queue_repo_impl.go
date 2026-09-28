@@ -88,14 +88,6 @@ func (r *QueueRepoImpl) GetAllQueueByBusiness(ctx context.Context, businessID uu
 	return toDomainQueues(records), nil
 }
 
-func (r *QueueRepoImpl) GetAllQueueByBusinessFilterState(ctx context.Context, businessID uuid.UUID, state domain.QueueState) ([]domain.Queue, error) {
-	var records []model.Queue
-	if err := r.db.WithContext(ctx).Where("business_id = ? AND state = ?", businessID, model.QueueState(state)).Order("priority DESC, created_at ASC").Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("get business queues by state: %w", err)
-	}
-	return toDomainQueues(records), nil
-}
-
 func (r *QueueRepoImpl) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Queue{})
 	if result.Error != nil {
@@ -135,10 +127,6 @@ func (r *QueueRepoImpl) GenerateDailyQueueName(ctx context.Context, businessID u
 	return fmt.Sprintf("A%03d", count+1), nil
 }
 
-func (r *QueueRepoImpl) GetQueueByBusinessPrivate(ctx context.Context, businessID uuid.UUID) ([]domain.Queue, error) {
-	return r.GetAllQueueByBusinessFilterState(ctx, businessID, domain.QueueStateWaiting)
-}
-
 func (r *QueueRepoImpl) GetTopQueueByBusinessPrivateForUpdate(ctx context.Context, businessID uuid.UUID) (*domain.Queue, error) {
 	var record model.Queue
 	err := r.db.WithContext(ctx).
@@ -155,34 +143,46 @@ func (r *QueueRepoImpl) GetTopQueueByBusinessPrivateForUpdate(ctx context.Contex
 	return toDomainQueue(&record), nil
 }
 
-func (r *QueueRepoImpl) GetBusinessPublicQueueSummary(ctx context.Context, businessID uuid.UUID) (*domain.PublicQueueSummary, error) {
-	var current model.Queue
-	var currentName *string
-	err := r.db.WithContext(ctx).
-		Where("business_id = ? AND state IN ?", businessID, []model.QueueState{model.QueueStateCalled, model.QueueStateProcessing}).
-		Order("called_at ASC NULLS LAST, created_at ASC").
-		Take(&current).Error
-	if err == nil {
-		currentName = &current.Name
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("get current public queue: %w", err)
-	}
+// func (r *QueueRepoImpl) GetBusinessPublicQueueSummary(ctx context.Context, businessID uuid.UUID) (*domain.PublicQueueSummary, error) {
+// 	var current model.Queue
+// 	var currentName *string
+// 	err := r.db.WithContext(ctx).
+// 		Where("business_id = ? AND state IN ?", businessID, []model.QueueState{model.QueueStateCalled, model.QueueStateProcessing}).
+// 		Order("called_at ASC NULLS LAST, created_at ASC").
+// 		Take(&current).Error
+// 	if err == nil {
+// 		currentName = &current.Name
+// 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+// 		return nil, fmt.Errorf("get current public queue: %w", err)
+// 	}
 
-	var totalWaiting int64
-	if err := r.db.WithContext(ctx).Model(&model.Queue{}).Where("business_id = ? AND state = ?", businessID, model.QueueStateWaiting).Count(&totalWaiting).Error; err != nil {
-		return nil, fmt.Errorf("count waiting queues: %w", err)
-	}
+// 	var totalWaiting int64
+// 	if err := r.db.WithContext(ctx).Model(&model.Queue{}).Where("business_id = ? AND state = ?", businessID, model.QueueStateWaiting).Count(&totalWaiting).Error; err != nil {
+// 		return nil, fmt.Errorf("count waiting queues: %w", err)
+// 	}
 
-	next, err := r.GetTopQueueByBusinessPrivateForUpdate(ctx, businessID)
-	if err != nil {
-		return nil, err
-	}
-	var nextName *string
-	if next != nil {
-		nextName = &next.Name
-	}
-	return &domain.PublicQueueSummary{CurrentQueueName: currentName, TotalWaiting: totalWaiting, NextQueueName: nextName}, nil
-}
+// 	next, err := r.GetTopQueueByBusinessPrivateForUpdate(ctx, businessID)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var nextName *string
+// 	if next != nil {
+// 		nextName = &next.Name
+// 	}
+// 	return &domain.PublicQueueSummary{CurrentQueueName: currentName, TotalWaiting: totalWaiting, NextQueueName: nextName}, nil
+// }
+
+//	func (r *QueueRepoImpl) GetAllQueueByBusinessFilterState(ctx context.Context, businessID uuid.UUID, state domain.QueueState) ([]domain.Queue, error) {
+//		var records []model.Queue
+//		if err := r.db.WithContext(ctx).Where("business_id = ? AND state = ?", businessID, model.QueueState(state)).Order("priority DESC, created_at ASC").Find(&records).Error; err != nil {
+//			return nil, fmt.Errorf("get business queues by state: %w", err)
+//		}
+//		return toDomainQueues(records), nil
+//	}
+
+// func (r *QueueRepoImpl) GetQueueByBusinessPrivate(ctx context.Context, businessID uuid.UUID) ([]domain.Queue, error) {
+// 	return r.GetAllQueueByBusinessFilterState(ctx, businessID, domain.QueueStateWaiting)
+// }
 
 func activeQueueStates() []model.QueueState {
 	return []model.QueueState{model.QueueStateWaiting, model.QueueStateCalled, model.QueueStateProcessing}

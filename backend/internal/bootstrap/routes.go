@@ -35,15 +35,15 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	userHandler := userhttp.NewUserHandler(userService)
 
 	queueRepo := queueoutbound.NewQueueRepo(db)
+	businessRepo := businessoutbound.NewBusinessRepo(db)
 	go queueapp.RunDatabaseWorkerStream(ctx, rdb, queueRepo)
-	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb)
+	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb, businessRepo, userRepo)
 	queueHandler := queuehttp.NewQueueHandler(queueService)
 
 	counterRepo := counteroutbound.NewCounterRepo(db)
 	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService, rdb)
 	counterHandler := counterhttp.NewCounterHandler(counterService)
 
-	businessRepo := businessoutbound.NewBusinessRepo(db)
 	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
 
@@ -79,6 +79,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 		r.Group(func(public chi.Router) {
 			public.Use(middleware.PublicMiddleware(userRepo))
 			public.Put("/{queueID}", queueHandler.UpdateQueue)
+			public.Get("/qr/{businessID}/resolve", queueHandler.ResolveQueueQR)
 			public.Post("/qr/{businessID}", queueHandler.RegisterQueueByQr)
 			public.Patch("/{queueID}/state", queueHandler.UpdateState)
 			public.Patch("/{queueID}/done", queueHandler.MarkAsDone)
