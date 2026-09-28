@@ -27,9 +27,9 @@ func Run() error {
 		return err
 	}
 
-	if err := postgres.MigrateDatabase(db); err != nil {
-		return err
-	}
+	// if err := postgres.MigrateDatabase(db); err != nil {
+	// 	return err
+	// }
 
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
