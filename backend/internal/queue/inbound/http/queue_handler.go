@@ -100,7 +100,8 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.s.ResolveQueueQR(r.Context(), businessID); err != nil {
+	// check if the business exist or not
+	if err := h.s.ValidateBusinessExists(r.Context(), businessID); err != nil {
 		httpadapter.WriteError(w, err)
 		return
 	}
@@ -126,6 +127,8 @@ func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Requ
 
 	var userID *uuid.UUID
 	var request RegisterQueueByQRRequest
+
+	// check if the user have logged in before or not
 	if userIDString, authenticated := middleware.OptionalUserIdFromContext(r.Context()); authenticated {
 		parsed, ok := parseUUIDValue(w, userIDString, "INVALID_USER_ID", "invalid user id")
 		if !ok {
@@ -150,6 +153,7 @@ func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// create and set the queue token
 	maxAge := int(config.GuestExpirationTime.Seconds())
 	queueToken, err := middleware.CreateQueueToken(result.Username, result.Queue.ID.String())
 	if err != nil {
@@ -158,6 +162,7 @@ func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Requ
 	}
 	http.SetCookie(w, &http.Cookie{Name: "queueToken", Value: queueToken, Path: "/", HttpOnly: true, MaxAge: maxAge})
 
+	// create and set the guest token
 	if result.GuestID != nil {
 		guestToken, err := middleware.CreateGuestToken(result.GuestID.String(), businessID.String(), result.PhoneNumber)
 		if err != nil {

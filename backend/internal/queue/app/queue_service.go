@@ -3,13 +3,10 @@ package app
 import (
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
-	"QueueLite/internal/config"
 	"QueueLite/internal/queue/domain"
 	subscriptionapp "QueueLite/internal/subscription/app"
 	"context"
 	"errors"
-	"log"
-	"regexp"
 	"strings"
 	"time"
 
@@ -46,8 +43,6 @@ func NewQueueService(repo QueueRepo, subscriptionService *subscriptionapp.Subscr
 	}
 	return service
 }
-
-var indonesiaPhonePattern = regexp.MustCompile(`^628[0-9]{8,11}$`)
 
 type RegisterQueueByQRInput struct {
 	BusinessID  uuid.UUID
@@ -128,24 +123,7 @@ func (s *QueueService) syncQueueCache(ctx context.Context, queue domain.Queue) e
 	return cache.RemoveWaitingQueue(ctx, s.rdt, queue.BusinessID.String(), queue.ID.String())
 } // end of helper function
 
-func NormalizeIndonesiaPhone(phone string) (string, error) {
-	normalized := strings.TrimSpace(phone)
-	normalized = strings.ReplaceAll(normalized, " ", "")
-	normalized = strings.ReplaceAll(normalized, "-", "")
-
-	if strings.HasPrefix(normalized, "+62") {
-		normalized = "62" + strings.TrimPrefix(normalized, "+62")
-	} else if strings.HasPrefix(normalized, "08") {
-		normalized = "62" + strings.TrimPrefix(normalized, "0")
-	}
-
-	if !indonesiaPhonePattern.MatchString(normalized) {
-		return "", apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "phone number must be a valid Indonesian mobile number")
-	}
-	return normalized, nil
-}
-
-func (s *QueueService) validateBusinessExists(ctx context.Context, businessID uuid.UUID) error {
+func (s *QueueService) ValidateBusinessExists(ctx context.Context, businessID uuid.UUID) error {
 	if businessID == uuid.Nil {
 		return apperror.New(apperror.KindInvalid, "BUSINESS_ID_REQUIRED", "business id is required")
 	}
@@ -158,12 +136,8 @@ func (s *QueueService) validateBusinessExists(ctx context.Context, businessID uu
 	return nil
 }
 
-func (s *QueueService) ResolveQueueQR(ctx context.Context, businessID uuid.UUID) error {
-	return s.validateBusinessExists(ctx, businessID)
-}
-
 func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueueByQRInput) (*RegisterQueueByQRResult, error) {
-	if err := s.validateBusinessExists(ctx, input.BusinessID); err != nil {
+	if err := s.ValidateBusinessExists(ctx, input.BusinessID); err != nil {
 		return nil, err
 	}
 
@@ -173,9 +147,7 @@ func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueu
 	phoneNumber := input.PhoneNumber
 
 	if input.UserID != nil {
-		if s.userLookup == nil {
-			return nil, apperror.New(apperror.KindNotImplemented, "USER_LOOKUP_NOT_CONFIGURED", "user lookup is not configured")
-		}
+		// invalid userID that doesn't exist on database
 		user, err := s.userLookup.GetUser(ctx, *input.UserID)
 		if err != nil {
 			return nil, apperror.Wrap(apperror.KindUnauthorized, "USER_NOT_FOUND", "user not found", err)
@@ -183,7 +155,7 @@ func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueu
 		ownerID = user.ID
 		username = user.Username
 		phoneNumber = user.PhoneNumber
-	} else {
+	} else { // create a new temp user
 		if username == "" {
 			return nil, apperror.New(apperror.KindInvalid, "USERNAME_REQUIRED", "username is required")
 		}
@@ -215,6 +187,7 @@ func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueu
 		return nil, err
 	}
 
+	// if user is a guest set to cache
 	if guestID != nil {
 		if err := cache.SetGuestQueueUser(ctx, s.rdt, cache.GuestQueueUser{
 			GuestID:     guestID.String(),
@@ -423,69 +396,6 @@ func (s *QueueService) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	_ = cache.RemoveWaitingQueue(ctx, s.rdt, queue.BusinessID.String(), queue.ID.String())
 	_ = s.publishQueueUpdate(ctx, queue.BusinessID)
 	return nil
-}
-
-func RunDatabaseWorkerStream(ctx context.Context, rdt *redis.Client, repo QueueRepo) {
-	if err := cache.EnsureQueueConsumerGroup(ctx, rdt); err != nil {
-		log.Printf("[WORKER ERROR] failed to ensure queue consumer group: %v", err)
-	}
-
-	for {
-		streams, err := rdt.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    config.QueueConsumerGroup,
-			Consumer: config.QueueConsumerName,
-			Streams:  []string{config.StreamName, ">"},
-			Count:    10,
-			Block:    2 * time.Second,
-		}).Result()
-
-		// if the timer hits 2 second
-		if errors.Is(err, redis.Nil) {
-			continue
-		} else if err != nil {
-			log.Printf("[WORKER ERROR] Error reading stream: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		var batch []domain.Queue
-		var messageIDs []string
-
-		for _, stream := range streams {
-			for _, message := range stream.Messages {
-				record, err := QueueFromStreamValues(message.Values)
-				if err != nil {
-					log.Printf("[WORKER ERROR] invalid queue stream message %s: %v", message.ID, err)
-					if deadLetterErr := cache.AddQueueDeadLetter(ctx, rdt, message.ID, err.Error(), message.Values); deadLetterErr != nil {
-						log.Printf("[WORKER ERROR] failed to add queue dead letter %s: %v", message.ID, deadLetterErr)
-					}
-					if ackErr := rdt.XAck(ctx, config.StreamName, config.QueueConsumerGroup, message.ID).Err(); ackErr != nil {
-						log.Printf("[WORKER ERROR] failed to ack invalid queue stream message %s: %v", message.ID, ackErr)
-					}
-					continue
-				}
-
-				batch = append(batch, *record)
-				messageIDs = append(messageIDs, message.ID)
-			}
-		}
-
-		if len(batch) == 0 {
-			continue
-		}
-
-		if err := repo.CreateQueues(ctx, batch); err != nil {
-			log.Printf("[WORKER ERROR] failed to create queue batch: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		if len(messageIDs) > 0 {
-			if err := rdt.XAck(ctx, config.StreamName, config.QueueConsumerGroup, messageIDs...).Err(); err != nil {
-				log.Printf("[WORKER ERROR] failed to ack queue stream batch: %v", err)
-			}
-		}
-	}
 }
 
 // func (s *QueueService) GetBusinessPublicQueueSummary(ctx context.Context, businessID uuid.UUID) (*domain.PublicQueueSummary, error) {
