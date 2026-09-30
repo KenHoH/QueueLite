@@ -101,7 +101,7 @@ func (s *QueueService) GetWaitingQueueSnapshot(ctx context.Context, businessID u
 	return response, nil
 }
 func (s *QueueService) GetQueueCache(ctx context.Context, businessID string) ([]redis.Z, error) {
-	return cache.GetQueue(ctx, cache.WaitingQueueKey(businessID), s.rdt)
+	return cache.GetWaitingQueues(ctx, businessID, s.rdt)
 }
 
 func (s *QueueService) GetQueueNameCache(ctx context.Context, queueID string) (string, error) {

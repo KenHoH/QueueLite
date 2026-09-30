@@ -106,10 +106,6 @@ func (s *CounterService) UpdateCounterEmployee(ctx context.Context, counterID uu
 }
 
 func (s *CounterService) UpdateCounterCustomer(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) error {
-	if s.queueRepo == nil {
-		return apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
-	}
-
 	counter, err := s.GetCounter(ctx, counterID)
 	if err != nil {
 		return err
@@ -220,7 +216,7 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 		}
 	}
 
-	queueItem, err := cache.PopTopWaitingQueueWithScore(ctx, s.rdt, businessID.String())
+	queueItem, err := cache.PopNextFairWaitingQueueWithScore(ctx, s.rdt, businessID.String())
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "POP_TOP_QUEUE_ERROR", "failed to pop top waiting queue", err)
 	}
@@ -229,18 +225,18 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 	}
 	queueIDString, ok := queueItem.Member.(string)
 	if !ok {
-		_ = cache.RestoreWaitingQueue(ctx, s.rdt, businessID.String(), *queueItem)
+		_ = cache.RestoreWaitingQueueItem(ctx, s.rdt, *queueItem)
 		return nil, apperror.New(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache")
 	}
 	queueID, err := uuid.Parse(queueIDString)
 	if err != nil {
-		_ = cache.RestoreWaitingQueue(ctx, s.rdt, businessID.String(), *queueItem)
+		_ = cache.RestoreWaitingQueueItem(ctx, s.rdt, *queueItem)
 		return nil, apperror.Wrap(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache", err)
 	}
 
 	next, err := s.getQueueWithRetry(ctx, queueID)
 	if err != nil {
-		_ = cache.RestoreWaitingQueue(ctx, s.rdt, businessID.String(), *queueItem)
+		_ = cache.RestoreWaitingQueueItem(ctx, s.rdt, *queueItem)
 		return nil, err
 	}
 	next.State = queuedomain.QueueStateCalled
