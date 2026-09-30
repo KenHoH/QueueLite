@@ -1,3 +1,4 @@
+/** LEGACY PROTOTYPE ONLY. Real HTTP contracts live in ../api/types.ts. */
 export type Service = "General" | "Haircut" | "Consultation";
 export type QueueStatus =
   "Waiting" | "Serving" | "Completed" | "Skipped" | "Cancelled";

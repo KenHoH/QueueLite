@@ -105,6 +105,30 @@ func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "login successful"})
 }
 
+func (u *UserHandlerImpl) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIdFromContext(r.Context())
+	id, err := uuid.Parse(userID)
+	if !ok || err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	user, err := u.s.GetUser(r.Context(), id)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewUserResponse(user))
+}
+
+func (u *UserHandlerImpl) LogoutUser(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name: "token", Value: "", Path: "/", HttpOnly: true,
+		Secure: false, SameSite: http.SameSiteLaxMode,
+		MaxAge: -1, Expires: time.Unix(1, 0),
+	})
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "logout successful"})
+}
+
 func (u *UserHandlerImpl) GetUser(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseUUIDParam(w, r, "userID", "INVALID_USER_ID", "invalid user id")
 	if !ok {

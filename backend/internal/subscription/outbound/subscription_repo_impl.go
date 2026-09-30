@@ -291,7 +291,7 @@ func (r *SubscriptionRepoImpl) DecreaseBusinessCapacity(ctx context.Context, bus
 			}
 		}
 		if record.BusinessPlan.Capacity <= 0 {
-			return nil
+			return app.ErrBusinessQueueFull
 		}
 		record.BusinessPlan.Capacity--
 		if err := tx.Save(record.BusinessPlan).Error; err != nil {

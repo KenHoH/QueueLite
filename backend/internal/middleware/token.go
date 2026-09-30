@@ -11,11 +11,10 @@ import (
 
 func loadSecret() (string, error) {
 	cfg, err := config.Load()
-	secret := cfg.SecretKey
-	if err != nil || secret == "" {
+	if err != nil || cfg == nil || cfg.SecretKey == "" {
 		return "", errors.New("invalid secret something went wrong")
 	}
-	return secret, nil
+	return cfg.SecretKey, nil
 }
 
 func CreateToken(username string, userid string) (string, error) {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -101,6 +102,18 @@ func SetGuestQueueUser(ctx context.Context, rdt *redis.Client, guest GuestQueueU
 	return rdt.Set(ctx, GuestKey(guest.GuestID), payload, config.GuestExpirationTime).Err()
 }
 
+func GetGuestQueueUser(ctx context.Context, rdt *redis.Client, guestID string) (*GuestQueueUser, error) {
+	payload, err := rdt.Get(ctx, GuestKey(guestID)).Bytes()
+	if err != nil {
+		return nil, err
+	}
+	var guest GuestQueueUser
+	if err := json.Unmarshal(payload, &guest); err != nil {
+		return nil, err
+	}
+	return &guest, nil
+}
+
 func AddQueue(ctx context.Context, rdt *redis.Client, queueKey string, record domain.Queue) error {
 	score := QueueScore(record)
 
@@ -154,61 +167,71 @@ func PopTopWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, busines
 	return item, nil
 }
 
+// Selection, pop and the business-wide streak must be one Redis operation:
+// counters can call next concurrently. Validate before popping because Lua
+// runtime errors do not roll back earlier writes.
+var popNextFairWaitingQueue = redis.NewScript(`
+local expected = {'string', 'zset', 'zset', 'zset'}
+for i,key in ipairs(KEYS) do
+  local kind = redis.call('TYPE', key).ok
+  if kind ~= 'none' and kind ~= expected[i] then
+    return redis.error_reply('invalid waiting queue key type')
+  end
+end
+local streak = tonumber(redis.call('GET', KEYS[1]) or '0')
+if not streak or streak < 0 or streak ~= math.floor(streak) then
+  return redis.error_reply('invalid priority streak')
+end
+local limit = tonumber(ARGV[1])
+local function pop(key, priority)
+  local item = redis.call('ZPOPMIN', key, 1)
+  if #item == 0 then return nil end
+  if priority then
+    redis.call('SET', KEYS[1], math.min(streak + 1, limit))
+  else
+    redis.call('SET', KEYS[1], 0)
+  end
+  return {key, item[1], item[2]}
+end
+if streak < limit then
+  local item = pop(KEYS[2], true)
+  if item then return item end
+end
+-- Legacy waiting entries retain the upstream normal-queue fallback behavior.
+local item = pop(KEYS[3], false) or pop(KEYS[4], false)
+if item then return item end
+if streak >= limit then
+  item = pop(KEYS[2], true)
+  if item then return item end
+end
+return {}
+`)
+
 func PopNextFairWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, businessID string) (*WaitingQueueItem, error) {
-	streak, err := rdt.Get(ctx, PriorityStreakKey(businessID)).Int()
-	if err != nil && err != redis.Nil {
-		return nil, fmt.Errorf("get priority streak: %w", err)
+	result, err := popNextFairWaitingQueue.Run(ctx, rdt, []string{
+		PriorityStreakKey(businessID), PriorityWaitingQueueKey(businessID),
+		NormalWaitingQueueKey(businessID), LegacyWaitingQueueKey(businessID),
+	}, maxPriorityStreak).Slice()
+	if err != nil {
+		return nil, fmt.Errorf("pop next fair waiting queue: %w", err)
 	}
-
-	priorityKey := PriorityWaitingQueueKey(businessID)
-
-	if streak < maxPriorityStreak {
-		item, err := popTopWaitingQueueFromKey(ctx, rdt, priorityKey)
-		if err != nil {
-			return nil, err
-		}
-		if item != nil {
-			if err := rdt.Set(ctx, PriorityStreakKey(businessID), streak+1, 0).Err(); err != nil {
-				return nil, fmt.Errorf("set priority streak: %w", err)
-			}
-			return &WaitingQueueItem{Z: *item, QueueKey: priorityKey}, nil
-		}
-
-		normalItem, err := popNormalWaitingQueue(ctx, rdt, businessID)
-		if err != nil {
-			return nil, err
-		}
-		if normalItem != nil {
-			if err := rdt.Set(ctx, PriorityStreakKey(businessID), 0, 0).Err(); err != nil {
-				return nil, fmt.Errorf("reset priority streak: %w", err)
-			}
-			return normalItem, nil
-		}
+	if len(result) == 0 {
 		return nil, nil
 	}
-
-	normalItem, err := popNormalWaitingQueue(ctx, rdt, businessID)
+	if len(result) != 3 {
+		return nil, fmt.Errorf("invalid fair waiting queue result")
+	}
+	key, keyOK := result[0].(string)
+	member, memberOK := result[1].(string)
+	scoreString, scoreOK := result[2].(string)
+	if !keyOK || !memberOK || !scoreOK {
+		return nil, fmt.Errorf("invalid fair waiting queue result types")
+	}
+	score, err := strconv.ParseFloat(scoreString, 64)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse waiting queue score: %w", err)
 	}
-	if normalItem != nil {
-		if err := rdt.Set(ctx, PriorityStreakKey(businessID), 0, 0).Err(); err != nil {
-			return nil, fmt.Errorf("reset priority streak: %w", err)
-		}
-		return normalItem, nil
-	}
-
-	item, err := popTopWaitingQueueFromKey(ctx, rdt, priorityKey)
-	if err != nil {
-		return nil, err
-	}
-	if item != nil {
-		if err := rdt.Set(ctx, PriorityStreakKey(businessID), maxPriorityStreak, 0).Err(); err != nil {
-			return nil, fmt.Errorf("keep priority streak capped: %w", err)
-		}
-		return &WaitingQueueItem{Z: *item, QueueKey: priorityKey}, nil
-	}
-	return nil, nil
+	return &WaitingQueueItem{Z: redis.Z{Member: member, Score: score}, QueueKey: key}, nil
 }
 
 func popTopWaitingQueueFromKey(ctx context.Context, rdt *redis.Client, queueKey string) (*redis.Z, error) {
@@ -220,27 +243,6 @@ func popTopWaitingQueueFromKey(ctx context.Context, rdt *redis.Client, queueKey 
 		return nil, nil
 	}
 	return &results[0], nil
-}
-
-func popNormalWaitingQueue(ctx context.Context, rdt *redis.Client, businessID string) (*WaitingQueueItem, error) {
-	normalKey := NormalWaitingQueueKey(businessID)
-	item, err := popTopWaitingQueueFromKey(ctx, rdt, normalKey)
-	if err != nil {
-		return nil, err
-	}
-	if item != nil {
-		return &WaitingQueueItem{Z: *item, QueueKey: normalKey}, nil
-	}
-
-	legacyKey := LegacyWaitingQueueKey(businessID)
-	item, err = popTopWaitingQueueFromKey(ctx, rdt, legacyKey)
-	if err != nil {
-		return nil, err
-	}
-	if item != nil {
-		return &WaitingQueueItem{Z: *item, QueueKey: legacyKey}, nil
-	}
-	return nil, nil
 }
 
 func RestoreWaitingQueue(ctx context.Context, rdt *redis.Client, businessID string, item redis.Z) error {

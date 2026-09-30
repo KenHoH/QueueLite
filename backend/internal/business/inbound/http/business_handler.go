@@ -5,7 +5,6 @@ import (
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/business/app"
 	"QueueLite/internal/business/domain"
-	"QueueLite/internal/middleware"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -25,6 +24,10 @@ func NewBusinessHandler(s *app.BusinessService) *BusinessHandlerImpl {
 }
 
 func (h *BusinessHandlerImpl) CreateBusiness(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := currentUserID(w, r)
+	if !ok {
+		return
+	}
 	var request CreateBusinessRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
@@ -38,16 +41,6 @@ func (h *BusinessHandlerImpl) CreateBusiness(w http.ResponseWriter, r *http.Requ
 	closeTime, ok := parseBusinessTime(w, request.CloseTime, "INVALID_CLOSE_TIME", "invalid close time")
 	if !ok {
 		return
-	}
-
-	ownerID := uuid.Nil
-	if ownerIDString, ok := middleware.UserIdFromContext(r.Context()); ok {
-		parsed, err := uuid.Parse(ownerIDString)
-		if err != nil {
-			writeInvalid(w, "INVALID_OWNER_ID", "invalid owner id")
-			return
-		}
-		ownerID = parsed
 	}
 
 	business, err := h.s.RegisterBusiness(r.Context(), ownerID, domain.Business{
@@ -118,6 +111,7 @@ func (h *BusinessHandlerImpl) UpdateBusiness(w http.ResponseWriter, r *http.Requ
 	}
 
 	input := domain.UpdateBusiness{
+		Operational: request.Operational,
 		Name:        request.Name,
 		Location:    request.Location,
 		Description: request.Description,
@@ -138,7 +132,7 @@ func (h *BusinessHandlerImpl) UpdateBusiness(w http.ResponseWriter, r *http.Requ
 		}
 		input.CloseTime = &closeTime
 	}
-	if input.Name == nil && input.Location == nil && input.Description == nil && input.OpenTime == nil && input.CloseTime == nil && input.Email == nil && input.PhoneNumber == nil {
+	if input.Operational == nil && input.Name == nil && input.Location == nil && input.Description == nil && input.OpenTime == nil && input.CloseTime == nil && input.Email == nil && input.PhoneNumber == nil {
 		writeInvalid(w, "NO_BUSINESS_FIELDS", "no business fields provided")
 		return
 	}

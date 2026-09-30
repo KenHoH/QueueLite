@@ -11,6 +11,7 @@ type CreateBusinessRequest struct {
 }
 
 type UpdateBusinessRequest struct {
+	Operational *bool   `json:"operational"`
 	Name        *string `json:"name"`
 	Location    *string `json:"location"`
 	Description *string `json:"description"`

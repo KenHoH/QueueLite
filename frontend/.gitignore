@@ -4,3 +4,6 @@ dist/
 output/
 .playwright-cli/
 .npm-cache/
+.env
+.env.local
+.env.*.local

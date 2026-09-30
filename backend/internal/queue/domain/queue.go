@@ -38,6 +38,10 @@ type Queue struct {
 	UpdatedAt time.Time
 }
 
+func (q Queue) IsTerminal() bool {
+	return q.State == QueueStateCompleted || q.State == QueueStateCancelled || q.State == QueueStateSkipped
+}
+
 type PublicQueueSummary struct {
 	CurrentQueueName *string
 	TotalWaiting     int64

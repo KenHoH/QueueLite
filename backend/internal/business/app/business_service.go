@@ -72,7 +72,9 @@ func (s *BusinessService) RegisterBusiness(ctx context.Context, ownerUserID uuid
 		}
 	}
 	if s.counterService != nil {
-		_, _ = s.counterService.CreateCounter(ctx, counterdomain.Counter{BusinessID: record.ID, Name: "Default Counter"})
+		if _, err := s.counterService.CreateCounter(ctx, counterdomain.Counter{BusinessID: record.ID, Name: "Default Counter"}); err != nil {
+			return nil, err
+		}
 	}
 	return record, nil
 }

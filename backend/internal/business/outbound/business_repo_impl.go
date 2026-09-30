@@ -167,17 +167,7 @@ func (r *BusinessRepoImpl) GetAllBusiness(
 		}
 	}
 
-	result := make([]domain.Business, 0, len(businesses))
-
-	for _, b := range businesses {
-		result = append(result, domain.Business{
-			ID:        b.ID,
-			Name:      b.Name,
-			CreatedAt: b.CreatedAt,
-		})
-	}
-
-	return result, nextCursor, nil
+	return toDomainBusinesses(businesses), nextCursor, nil
 }
 func (r *BusinessRepoImpl) SearchBusiness(
 	ctx context.Context,

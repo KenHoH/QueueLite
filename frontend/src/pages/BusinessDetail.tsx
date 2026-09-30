@@ -1,124 +1,46 @@
-import { Link, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Clock3,
-  MapPin,
-  Mail,
-  Phone,
-  Users,
-  Monitor,
-  Check,
-} from "lucide-react";
-import { businesses } from "../data/mock";
-import { BusinessIcon, EmptyState, StatusBadge } from "../components/ui";
-import { useQueue } from "../state/QueueContext";
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Clock3, Mail, MapPin, Phone } from 'lucide-react';
+import { getBusiness } from '../api/businesses';
+import { APIError } from '../api/errors';
+import type { Business } from '../api/types';
+import { BusinessAvailability } from '../components/BusinessCard';
+import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer } from '../components/foundation';
+import { businessHours, isBusinessId } from './businessDisplay';
+
+type DetailState = { [Status in 'loading' | 'not-found' | 'error']: { id: string | undefined; status: Status } }['loading' | 'not-found' | 'error'] | { id: string; status: 'ready'; business: Business };
 export default function BusinessDetail() {
-  const { id } = useParams();
-  const business = businesses.find((b) => b.id === id);
-  const { entries } = useQueue();
-  if (!business)
-    return (
-      <EmptyState
-        title="Business not found"
-        description="Choose one of the businesses in our neighborhood."
-      />
-    );
-  const waiting = entries.filter(
-    (e) => e.businessId === id && e.status === "Waiting",
-  ).length;
-  return (
-    <>
-      <Link to="/#businesses" className="back-link">
-        <ArrowLeft size={16} /> Back to businesses
-      </Link>
-      <div className="detail-banner">
-        <span className="eyebrow">YOUR NEIGHBORHOOD, AT YOUR PACE</span>
-        <span className="banner-mark">N° {business.initials}</span>
-        <span>More than a service. A little time for you.</span>
-      </div>
-      <div className="detail-layout">
-        <section>
-          <div className="detail-identity">
-            <BusinessIcon business={business} />
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="eyebrow">{business.category}</span>
-                <StatusBadge open={business.open} />
-              </div>
-              <h1>{business.name}</h1>
-              <p className="muted location">
-                <MapPin size={16} />
-                {business.location}
-              </p>
-            </div>
-          </div>
-          <div className="detail-about">
-            <h2>A good visit starts here.</h2>
-            <p className="lead">{business.description}</p>
-            <div className="contact-list">
-              <span>
-                <MapPin size={18} />
-                {business.address}
-              </span>
-              <a href={`mailto:${business.email}`}>
-                <Mail size={18} />
-                {business.email}
-              </a>
-              <a href={`tel:${business.phone.replace(/\s/g, "")}`}>
-                <Phone size={18} />
-                {business.phone}
-              </a>
-            </div>
-          </div>
-          <div className="info-note">
-            <Check size={19} />
-            <p>
-              Join from wherever you are. Keep an eye on your queue and head
-              over when your turn is close.
-            </p>
-          </div>
-        </section>
-        <aside className="card queue-summary">
-          <div className="section-heading">
-            <h2>The queue right now</h2>
-            <span className="status-dot" />
-          </div>
-          <div className="summary-wait">
-            <Clock3 size={21} />
-            <strong>{business.open ? business.wait : "—"}</strong>
-            <span>minutes estimated wait</span>
-          </div>
-          <div className="summary-line">
-            <span>
-              <Users size={17} />
-              Customers waiting
-            </span>
-            <strong>{waiting}</strong>
-          </div>
-          <div className="summary-line">
-            <span>
-              <Monitor size={17} />
-              Active counters
-            </span>
-            <strong>{business.counters}</strong>
-          </div>
-          {business.open ? (
-            <Link to={`/business/${id}/join`} className="button primary full">
-              Join queue <ArrowRight size={17} />
-            </Link>
-          ) : (
-            <button className="button primary full" disabled>
-              Currently closed
-            </button>
-          )}
-          <p className="caption text-center mt-4">
-            {business.open
-              ? "No standing around. No account needed."
-              : "Please check back during opening hours."}
-          </p>
-        </aside>
-      </div>
-    </>
-  );
+  const { businessId } = useParams();
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<DetailState>({ id: businessId, status: 'loading' });
+  useEffect(() => {
+    if (!isBusinessId(businessId)) { setState({ id: businessId, status: 'not-found' }); return; }
+    const controller = new AbortController();
+    setState({ id: businessId, status: 'loading' });
+    void getBusiness(businessId, { signal: controller.signal }).then(business => {
+      if (!controller.signal.aborted) setState({ id: businessId, status: 'ready', business });
+    }).catch(error => {
+      if (!controller.signal.aborted) setState({ id: businessId, status: error instanceof APIError && (error.status === 404 || error.code === 'BUSINESS_NOT_FOUND' || error.code === 'INVALID_BUSINESS_ID') ? 'not-found' : 'error' });
+    });
+    return () => controller.abort();
+  }, [businessId, attempt]);
+  const current = state.id === businessId ? state : { status: 'loading' as const };
+  const back = <Link className="ql-back-link" to="/#businesses"><ArrowLeft size={16} aria-hidden="true" />Back to businesses</Link>;
+  return <PageContainer className="ql-business-detail">{back}
+    {current.status === 'loading' ? <Card><LoadingSkeleton label="Loading business details" lines={7} /></Card>
+      : current.status === 'not-found' ? <EmptyState title="Business not found." description="This business may no longer be available." action={<Link to="/#businesses">Back to businesses</Link>} />
+      : current.status === 'error' ? <Card><InlineError>We couldn’t load this business.</InlineError><Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>
+      : <div className="ql-detail-layout"><section className="ql-detail-content">
+        <BusinessAvailability business={current.business} />
+        <h1>{current.business.name}</h1>
+        <p className="ql-business-location"><MapPin size={18} aria-hidden="true" />{current.business.location || 'Location not provided'}</p>
+        <Card className="ql-detail-description"><h2>About this business</h2><p className="ql-muted">{current.business.description || 'No description provided.'}</p></Card>
+      </section><aside className="ql-card ql-business-information"><h2>Business information</h2>
+        <dl><div><dt><Clock3 size={18} aria-hidden="true" />Hours</dt><dd>{businessHours(current.business)}</dd></div>
+          <div><dt><Phone size={18} aria-hidden="true" />Phone</dt><dd>{current.business.phoneNumber ? <a href={`tel:${current.business.phoneNumber.replace(/[^+\d]/g, '')}`}>{current.business.phoneNumber}</a> : 'Not provided'}</dd></div>
+          <div><dt><Mail size={18} aria-hidden="true" />Email</dt><dd>{current.business.email ? <a href={`mailto:${current.business.email}`}>{current.business.email}</a> : 'Not provided'}</dd></div></dl>
+        {current.business.operational ? <Link className="ql-button ql-button-primary ql-join-link" to={`/business/${encodeURIComponent(current.business.id)}/join`}>Join queue <ArrowRight size={17} aria-hidden="true" /></Link> : <Button className="ql-join-link" disabled>Join queue</Button>}
+        <p className="ql-meta ql-join-note">{current.business.operational ? 'Save your place and keep your ticket handy.' : 'This business is currently unavailable.'}</p>
+      </aside></div>}
+  </PageContainer>;
 }

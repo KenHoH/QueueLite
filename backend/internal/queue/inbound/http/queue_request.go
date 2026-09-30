@@ -1,16 +1,17 @@
 package inbound
 
 type CreateQueueRequest struct {
-	BusinessID string `json:"businessId"`
-	UserID     string `json:"userId,omitempty"`
-	Name       string `json:"name"`
-	Priority   bool   `json:"priority"`
-}
-
-type RegisterQueueByQRRequest struct {
+	BusinessID  string `json:"businessId"`
 	Username    string `json:"username"`
 	PhoneNumber string `json:"phoneNumber"`
 }
+
+type CustomerJoinRequest struct {
+	Username    string `json:"username"`
+	PhoneNumber string `json:"phoneNumber"`
+}
+
+type RegisterQueueByQRRequest = CustomerJoinRequest
 
 type UpdateQueueRequest struct {
 	Name     *string `json:"name"`

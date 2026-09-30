@@ -1,10 +1,19 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// BusinessMembership keeps account membership separate from public business data.
+type BusinessMembership struct {
+	Business Business
+	Role     string
+}
+
+var ErrBusinessNotFound = errors.New("business not found")
 
 type Business struct {
 	ID          uuid.UUID

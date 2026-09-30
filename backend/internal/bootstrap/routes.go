@@ -48,6 +48,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
 
 	router.Route("/users", func(r chi.Router) {
+		r.Post("/logout", userHandler.LogoutUser)
 		r.Group(func(public chi.Router) {
 			public.Use(middleware.PublicMiddleware(userRepo))
 			public.Post("/", userHandler.RegisterUser)
@@ -55,8 +56,9 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 		})
 		r.Group(func(private chi.Router) {
 			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Get("/me", userHandler.GetCurrentUser)
 			private.Get("/{userID}", userHandler.GetUser)
-			private.Put("/{userID}", userHandler.UpdateUser)
+			private.With(middleware.RequireSelfUser).Put("/{userID}", userHandler.UpdateUser)
 		})
 	})
 
@@ -70,29 +72,33 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 		r.Group(func(private chi.Router) {
 			private.Use(middleware.AuthMiddleware(userRepo))
 			private.Post("/", businessHandler.CreateBusiness)
-			private.Put("/{businessID}", businessHandler.UpdateBusiness)
-			private.Delete("/{businessID}", businessHandler.DeleteBusiness)
+			private.Get("/mine", businessHandler.GetMyBusinesses)
+			private.With(businessHandler.RequireManagement).Put("/{businessID}", businessHandler.UpdateBusiness)
+			private.With(businessHandler.RequireManagement).Delete("/{businessID}", businessHandler.DeleteBusiness)
 		})
 	})
 
 	router.Route("/queues", func(r chi.Router) {
+		r.With(middleware.AuthMiddleware(userRepo)).Get("/me", queueHandler.GetMyQueues)
 		r.Group(func(public chi.Router) {
 			public.Use(middleware.PublicMiddleware(userRepo))
-			public.Put("/{queueID}", queueHandler.UpdateQueue)
 			public.Get("/qr/{businessID}/resolve", queueHandler.ResolveQueueQR)
 			public.Post("/qr/{businessID}", queueHandler.RegisterQueueByQr)
-			public.Patch("/{queueID}/state", queueHandler.UpdateState)
-			public.Patch("/{queueID}/done", queueHandler.MarkAsDone)
+			public.Post("/business/{businessID}/join", queueHandler.JoinBusinessQueue)
 			public.Post("/", queueHandler.RegisterQueue)
 			public.Get("/business/{businessID}", queueHandler.GetAllQueueByBusiness)
 			// public.Get("/business/{businessID}/summary", queueHandler.GetBusinessPublicQueueSummary)
 			// public.Get("/business/{businessID}/state/{state}", queueHandler.GetAllQueueByBusinessFilterState)
 		})
 		r.Group(func(protected chi.Router) {
+			protected.Use(middleware.PublicMiddleware(userRepo))
 			protected.Use(middleware.ProtectedMiddleware(*queueService))
 			protected.Get("/{queueID}", queueHandler.GetQueue)
 			protected.Get("/{queueID}/state", queueHandler.GetQueueState)
 			protected.Delete("/{queueID}", queueHandler.DeleteQueue)
+			protected.Put("/{queueID}", queueHandler.UpdateQueue)
+			protected.Patch("/{queueID}/state", queueHandler.UpdateState)
+			protected.Patch("/{queueID}/done", queueHandler.MarkAsDone)
 		})
 	})
 
@@ -117,8 +123,8 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 		r.Group(func(private chi.Router) {
 			private.Use(middleware.AuthMiddleware(userRepo))
 			private.Get("/", subscriptionHandler.GetAllSubscription)
-			private.Get("/businesses/{businessID}", subscriptionHandler.GetBusinessSubscriptionInfo)
-			private.Get("/users/{userID}", subscriptionHandler.GetUserSubscriptionInfo)
+			private.With(businessHandler.RequireManagement).Get("/businesses/{businessID}", subscriptionHandler.GetBusinessSubscriptionInfo)
+			private.With(middleware.RequireSelfUser).Get("/users/{userID}", subscriptionHandler.GetUserSubscriptionInfo)
 			private.Post("/users/{userID}/use", subscriptionHandler.UseUserSubscription)
 			private.Patch("/users/{userID}/slots", subscriptionHandler.AddUserSlot)
 			private.Patch("/businesses/{businessID}/capacity/decrease", subscriptionHandler.DecreaseBusinessCapacity)

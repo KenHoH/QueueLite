@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { existsSync, realpathSync } from "node:fs";
@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const needsWindowsTildeFix = process.platform === "win32" && root.includes("~");
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, root, '');
+  return {
   plugins: [
     react(),
     tailwindcss(),
@@ -56,6 +58,14 @@ export default defineConfig({
         ]
       : []),
   ],
-  server: { host: "127.0.0.1", fs: { strict: !needsWindowsTildeFix } },
+  server: {
+    host: "127.0.0.1", fs: { strict: !needsWindowsTildeFix },
+    proxy: { '^/api(?:/|$)': {
+      target: env.API_PROXY_TARGET || 'http://127.0.0.1:8080',
+      changeOrigin: true,
+      rewrite: (url) => url.replace(/^\/api(?=\/|$)/, '') || '/',
+    } },
+  },
   preview: { host: "127.0.0.1" },
+  };
 });

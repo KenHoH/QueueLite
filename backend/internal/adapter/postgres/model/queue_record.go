@@ -21,6 +21,11 @@ type Queue struct {
 
 	Priority bool `gorm:"not null;default:false;index" json:"priority"`
 
+	CalledAt     *time.Time `gorm:"type:timestamptz" json:"calledAt,omitempty"`
+	ProcessingAt *time.Time `gorm:"type:timestamptz" json:"processingAt,omitempty"`
+	DoneAt       *time.Time `gorm:"type:timestamptz" json:"doneAt,omitempty"`
+	CancelledAt  *time.Time `gorm:"type:timestamptz" json:"cancelledAt,omitempty"`
+
 	CreatedAt time.Time `gorm:"index:idx_queue_business_state_created,priority:3" json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
@@ -29,6 +34,8 @@ type Queue struct {
 }
 
 func (q *Queue) BeforeCreate(tx *gorm.DB) (err error) {
-	q.ID = uuid.New()
+	if q.ID == uuid.Nil {
+		q.ID = uuid.New()
+	}
 	return nil
 }

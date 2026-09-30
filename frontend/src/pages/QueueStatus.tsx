@@ -1,136 +1,69 @@
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Clock3, Info, MapPin, Ticket } from "lucide-react";
-import { businesses } from "../data/mock";
-import { useQueue } from "../state/QueueContext";
-import { CounterCard, EmptyState, StatusBadge } from "../components/ui";
+import { useEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { getBusiness } from '../api/businesses';
+import { getCounter } from '../api/counters';
+import { updateQueueState } from '../api/queues';
+import { Button, Card, InlineError, LoadingSkeleton, PageContainer, StatusBadge } from '../components/foundation';
+import { useAppState } from '../state/AppState';
+import { cancellationErrorMessage, isActiveQueue, queueHeadings, ticketErrorMessage } from './queueDisplay';
+import { useQueueTicket } from './useQueueTicket';
+
 export default function QueueStatus() {
-  const { id } = useParams();
-  const { entries } = useQueue();
-  const ticket = entries.find((e) => e.id === id && e.mine);
-  if (!ticket)
-    return (
-      <EmptyState
-        title="No saved queue found"
-        description="Demo queues reset on refresh. Join a business to save your place."
-      />
-    );
-  const business = businesses.find((b) => b.id === ticket.businessId)!;
-  const waiting = entries.filter(
-    (e) => e.businessId === business.id && e.status === "Waiting",
-  );
-  const ahead = Math.max(
-    0,
-    waiting.findIndex((e) => e.id === id),
-  );
-  const done = !["Waiting", "Serving"].includes(ticket.status);
-  return (
-    <>
-      <Link to="/#my-queues" className="back-link">
-        <ArrowLeft size={16} /> My queues
-      </Link>
-      <div className="queue-page-heading">
-        <div>
-          <span className="eyebrow">A LITTLE TIME FOR YOURSELF</span>
-          <h1>
-            Your place is saved<span className="mint">.</span>
-          </h1>
-          <p className="muted location">
-            <MapPin size={15} />
-            {business.name} <span>·</span> {business.location}
-          </p>
-        </div>
-        <StatusBadge
-          label={
-            done
-              ? ticket.status
-              : ticket.status === "Serving"
-                ? "It's your turn"
-                : "In the queue"
-          }
-          open={!done}
-        />
-      </div>
-      <div className="queue-status-layout">
-        <section className="card my-ticket">
-          <span className="ticket-icon">
-            <Ticket size={23} />
-          </span>
-          <span className="eyebrow">YOUR QUEUE</span>
-          <strong className="huge-number">{ticket.id}</strong>
-          <span className="service-tag">{ticket.service} service</span>
-          <div className="ticket-dash" />
-          <h3>
-            {done
-              ? `Visit ${ticket.status.toLowerCase()}`
-              : ticket.status === "Serving"
-                ? `Head to Counter ${ticket.counter}`
-                : `Approximately ${ahead} customers ahead`}
-          </h3>
-          <p className="muted">
-            {done
-              ? "Thanks for using QueueLite."
-              : ticket.status === "Serving"
-                ? "The team is ready to welcome you."
-                : "Relax a little. Your place is right here."}
-          </p>
-          <div className="ticket-wait">
-            <Clock3 size={19} />
-            <span>
-              Estimated waiting time
-              <strong>
-                {done || ticket.status === "Serving"
-                  ? "No wait"
-                  : `${Math.max(5, ahead * 3)}–${Math.max(10, ahead * 3 + 10)} minutes`}
-              </strong>
-            </span>
-          </div>
-        </section>
-        <section className="serving-panel">
-          <div className="section-heading">
-            <h2>Now serving</h2>
-            <span className="caption">{business.counters} counters</span>
-          </div>
-          <div className="counter-grid customer-counters">
-            {Array.from({ length: business.counters }, (_, i) => (
-              <CounterCard
-                key={i}
-                id={i + 1}
-                entry={entries.find(
-                  (e) =>
-                    e.businessId === business.id &&
-                    e.status === "Serving" &&
-                    e.counter === i + 1,
-                )}
-                customer
-              />
-            ))}
-          </div>
-          <div className="card up-next-card">
-            <div>
-              <span className="eyebrow">UP NEXT</span>
-              <strong>{waiting[0]?.id || "No one waiting"}</strong>
-            </div>
-            <span className="caption">Next available counter</span>
-          </div>
-          <div className="info-note">
-            <Info size={19} />
-            <p>
-              Queue position and estimated waiting time may change based on
-              service conditions. Priority customers may be called sooner.
-            </p>
-          </div>
-          <div className="while-waiting">
-            <h3>Make the wait your own.</h3>
-            <p className="muted">
-              Grab a coffee, take a short walk, or finish that last email. Head
-              back when your turn is close.
-            </p>
-            <Link to={`/business/${business.id}`} className="text-link">
-              View business details →
-            </Link>
-          </div>
-        </section>
-      </div>
-    </>
-  );
+  const { queueId = '' } = useParams();
+  return <Ticket key={queueId} queueId={queueId} />;
+}
+function Ticket({ queueId }: { queueId: string }) {
+  const { auth } = useAppState();
+  const [busy, setBusy] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+  const { queue, error, refresh } = useQueueTicket(queueId, busy || cancelled);
+  const [business, setBusiness] = useState('');
+  const [counter, setCounter] = useState('');
+  const mutation = useRef<AbortController | null>(null);
+  const submitting = useRef(false);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  useEffect(() => () => mutation.current?.abort(), []);
+  useEffect(() => { if (confirm) confirmRef.current?.focus(); }, [confirm]);
+  useEffect(() => {
+    if (!queue?.businessId) return;
+    const controller = new AbortController();
+    void getBusiness(queue.businessId, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setBusiness(value.name); }).catch(() => {});
+    return () => controller.abort();
+  }, [queue?.businessId]);
+  useEffect(() => {
+    setCounter('');
+    if (!queue?.calledByCounterId) return;
+    const controller = new AbortController();
+    void getCounter(queue.calledByCounterId, { signal: controller.signal }).then(value => { if (!controller.signal.aborted && value.businessId === queue.businessId) setCounter(value.name); }).catch(() => {});
+    return () => controller.abort();
+  }, [queue?.calledByCounterId, queue?.businessId]);
+  async function cancel() {
+    if (submitting.current || !confirm || !queue || !isActiveQueue(queue.state)) return;
+    submitting.current = true; setBusy(true); setCancelError('');
+    const controller = new AbortController(); mutation.current = controller;
+    try {
+      await updateQueueState(queueId, 'cancelled', { signal: controller.signal });
+      if (!controller.signal.aborted) { setCancelled(true); setConfirm(false); }
+    } catch (failure) { if (!controller.signal.aborted) setCancelError(cancellationErrorMessage(failure)); }
+    finally { if (!controller.signal.aborted) { submitting.current = false; setBusy(false); } }
+  }
+  const state = cancelled ? 'cancelled' : queue?.state;
+  return <PageContainer className="ql-ticket-page"><Link className="ql-back-link" to={auth.status === 'authenticated' ? '/my-queues' : '/#businesses'}>{auth.status === 'authenticated' ? 'Back to My Queues' : 'Back to businesses'}</Link>
+    <Card className={`ql-ticket-card ${state === 'called' ? 'ql-ticket-called' : ''}`}>
+      {!queue && !error ? <LoadingSkeleton label="Loading your queue" lines={6} /> : <>
+        {queue && state && <><p className="ql-eyebrow">YOUR QUEUE</p><div role="status" aria-live="polite"><h1>{queueHeadings[state]}</h1><StatusBadge state={state} /></div><p>{business || 'Business details unavailable'}</p><p className="ql-queue-number">{queue.name}</p>
+          {queue.calledByCounterId && isActiveQueue(state) && <p className="ql-counter-name">{counter ? `Counter: ${counter}` : 'A counter has been assigned. Ask the team where to go.'}</p>}
+          {state === 'waiting' && <p className="ql-muted">Keep your ticket handy. This page updates while your queue is active.</p>}
+          {state === 'called' && <p>Head to your assigned counter. The team is ready for you.</p>}
+          {state === 'skipped' && <p className="ql-muted">Please ask the team about the next step.</p>}
+          <Link to={`/business/${queue.businessId}`}>View business details</Link>
+        </>}
+        {error && <><InlineError>{ticketErrorMessage(error)}</InlineError><Button variant="secondary" onClick={refresh}>Refresh ticket</Button></>}
+        {cancelError && <InlineError>{cancelError}</InlineError>}
+        {queue && state && isActiveQueue(state) && !error && <div className="ql-ticket-actions">{confirm ? <div ref={confirmRef} tabIndex={-1} role="group" aria-label="Confirm leaving queue"><h2>Leave this queue?</h2><p>Your place will be released. You can join again later.</p><div className="ql-actions"><Button variant="secondary" disabled={busy} onClick={() => { setConfirm(false); setCancelError(''); }}>Keep my place</Button><Button variant="danger" loading={busy} onClick={() => { void cancel(); }}>Confirm leave</Button></div></div> : <Button variant="secondary" onClick={() => setConfirm(true)}>Leave queue</Button>}</div>}
+      </>}
+    </Card>
+  </PageContainer>;
 }

@@ -8,6 +8,8 @@ import (
 )
 
 type BusinessRepo interface {
+	GetUserBusinesses(ctx context.Context, userID uuid.UUID) ([]domain.BusinessMembership, error)
+	GetUserBusinessRole(ctx context.Context, userID, businessID uuid.UUID) (string, error)
 	CreateBusiness(ctx context.Context, business *domain.Business) (*domain.Business, error)
 	CreateUserBusinessRelation(ctx context.Context, businessID uuid.UUID, userID uuid.UUID, role string) error
 	UpdateBusiness(ctx context.Context, businessID uuid.UUID, input *domain.UpdateBusiness) error
