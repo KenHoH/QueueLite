@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type UserPlan struct {
@@ -20,4 +21,9 @@ type UserPlan struct {
 	LastSlotsResetAt time.Time `json:"lastSlotsResetAt"`
 
 	Subscriptions []Subscription `gorm:"foreignKey:UserPlanID" json:"subscriptions,omitempty"`
+}
+
+func (u *UserPlan) BeforeCreate(tx *gorm.DB) (err error) {
+	u.ID = uuid.New()
+	return nil
 }

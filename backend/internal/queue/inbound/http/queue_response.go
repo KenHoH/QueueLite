@@ -16,6 +16,13 @@ type QueueStateResponse struct {
 	State string `json:"state"`
 }
 
+type QueueQRResolveResponse struct {
+	BusinessID        string   `json:"businessId"`
+	Authenticated     bool     `json:"authenticated"`
+	RequiresGuestForm bool     `json:"requiresGuestForm"`
+	RequiredFields    []string `json:"requiredFields,omitempty"`
+}
+
 type PublicQueueSummaryResponse struct {
 	CurrentQueueName *string `json:"currentQueueName"`
 	TotalWaiting     int64   `json:"totalWaiting"`

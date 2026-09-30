@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Queue struct {
@@ -25,4 +26,9 @@ type Queue struct {
 
 	Business        Business `gorm:"foreignKey:BusinessID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"-"`
 	CalledByCounter *Counter `gorm:"foreignKey:CalledByCounterID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"calledByCounter,omitempty"`
+}
+
+func (q *Queue) BeforeCreate(tx *gorm.DB) (err error) {
+	q.ID = uuid.New()
+	return nil
 }

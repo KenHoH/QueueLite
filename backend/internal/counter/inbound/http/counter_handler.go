@@ -21,26 +21,6 @@ func NewCounterHandler(s *app.CounterService) *CounterHandlerImpl {
 	return &CounterHandlerImpl{s: s}
 }
 
-func (h *CounterHandlerImpl) PublicRoutes() http.Handler {
-	router := chi.NewRouter()
-
-	router.Get("/{counterID}", h.GetCounter)
-	return router
-}
-
-func (h *CounterHandlerImpl) PrivateRoutes() http.Handler {
-	router := chi.NewRouter()
-
-	router.Post("/", h.CreateCounter)
-	router.Post("/{counterID}/business/{businessID}/call-next", h.CallNextQueue)
-	router.Post("/{counterID}/queues/{queueID}/process", h.ProcessCalledQueue)
-	router.Post("/{counterID}/queues/{queueID}/skip", h.SkipQueue)
-	router.Delete("/{counterID}/queues/{queueID}", h.RemoveQueueFromCounter)
-	router.Put("/{counterID}", h.UpdateCounter)
-	router.Delete("/{counterID}", h.DeleteCounter)
-	return router
-}
-
 func (h *CounterHandlerImpl) CreateCounter(w http.ResponseWriter, r *http.Request) {
 	var request CreateCounterRequest
 	if err := decodeJSON(r, &request); err != nil {

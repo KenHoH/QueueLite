@@ -105,3 +105,56 @@ func ValidateQueueToken(tokenString string) (string, error) {
 
 	return queueID, nil
 }
+
+func CreateGuestToken(guestID string, businessID string, phoneNumber string) (string, error) {
+	secret, err := loadSecret()
+	if err != nil {
+		return "", err
+	}
+	var secretKey = []byte(secret)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"guestid":     guestID,
+		"businessid":  businessID,
+		"phonenumber": phoneNumber,
+		"exp":         time.Now().Add(config.GuestExpirationTime).Unix(),
+	})
+
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
+}
+
+func ValidateGuestToken(tokenString string) (string, string, string, error) {
+	secret, err := loadSecret()
+	if err != nil {
+		return "", "", "", err
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		return []byte(secret), nil
+	}, jwt.WithValidMethods([]string{"HS256"}))
+	if err != nil {
+		return "", "", "", err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return "", "", "", fmt.Errorf("invalid token")
+	}
+
+	guestID, ok := claims["guestid"].(string)
+	if !ok {
+		return "", "", "", fmt.Errorf("guestid claim missing or not a string")
+	}
+	businessID, ok := claims["businessid"].(string)
+	if !ok {
+		return "", "", "", fmt.Errorf("businessid claim missing or not a string")
+	}
+	phoneNumber, ok := claims["phonenumber"].(string)
+	if !ok {
+		return "", "", "", fmt.Errorf("phonenumber claim missing or not a string")
+	}
+
+	return guestID, businessID, phoneNumber, nil
+}

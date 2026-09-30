@@ -19,10 +19,11 @@ import (
 	useroutbound "QueueLite/internal/user/outbound"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-func NewRouter(db *gorm.DB) *chi.Mux {
+func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	router := chi.NewRouter()
 
 	subscriptionRepo := subscriptionoutbound.NewSubscriptionRepo(db)
@@ -34,40 +35,100 @@ func NewRouter(db *gorm.DB) *chi.Mux {
 	userHandler := userhttp.NewUserHandler(userService)
 
 	queueRepo := queueoutbound.NewQueueRepo(db)
-	queueService := queueapp.NewQueueService(queueRepo, subscriptionService)
+	businessRepo := businessoutbound.NewBusinessRepo(db)
+	go queueapp.RunDatabaseWorkerStream(ctx, rdb, queueRepo)
+	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb, businessRepo, userRepo)
 	queueHandler := queuehttp.NewQueueHandler(queueService)
 
 	counterRepo := counteroutbound.NewCounterRepo(db)
-	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService)
+	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService, rdb)
 	counterHandler := counterhttp.NewCounterHandler(counterService)
 
-	businessRepo := businessoutbound.NewBusinessRepo(db)
 	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
 
-	// private group: requires a real registered user token.
-	router.Group(func(private chi.Router) {
-		private.Use(middleware.AuthMiddleware(userRepo))
-		private.Mount("/users", userHandler.PrivateRoutes())
-		private.Mount("/businesses", businessHandler.PublicRoutes())
-		private.Mount("/queues", queueHandler.PublicRoutes())
-		private.Mount("/counters", counterHandler.PrivateRoutes())
-		private.Mount("/subscriptions", subscriptionHandler.Routes())
+	router.Route("/users", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Post("/", userHandler.RegisterUser)
+			public.Post("/login", userHandler.LoginUser)
+		})
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Get("/{userID}", userHandler.GetUser)
+			private.Put("/{userID}", userHandler.UpdateUser)
+		})
 	})
 
-	// public group: no authentication required.
-	router.Group(func(public chi.Router) {
-		public.Use(middleware.PublicMiddleware(userRepo))
-		public.Mount("/users", userHandler.PublicRoutes())
-		public.Mount("/businesses", businessHandler.PublicRoutes())
-		public.Mount("/queues", queueHandler.PublicRoutes())
-		public.Mount("/counters", counterHandler.PublicRoutes())
+	router.Route("/businesses", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Get("/", businessHandler.GetBusinessAll)
+			public.Get("/search", businessHandler.SearchBusiness)
+			public.Get("/{businessID}", businessHandler.GetBusiness)
+		})
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Post("/", businessHandler.CreateBusiness)
+			private.Put("/{businessID}", businessHandler.UpdateBusiness)
+			private.Delete("/{businessID}", businessHandler.DeleteBusiness)
+		})
 	})
 
-	// protected group: requires a valid queue token.
-	router.Group(func(protected chi.Router) {
-		protected.Use(middleware.ProtectedMiddleware(*queueService))
-		protected.Mount("/queues", queueHandler.ProtectedRoutes())
+	router.Route("/queues", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Put("/{queueID}", queueHandler.UpdateQueue)
+			public.Get("/qr/{businessID}/resolve", queueHandler.ResolveQueueQR)
+			public.Post("/qr/{businessID}", queueHandler.RegisterQueueByQr)
+			public.Patch("/{queueID}/state", queueHandler.UpdateState)
+			public.Patch("/{queueID}/done", queueHandler.MarkAsDone)
+			public.Post("/", queueHandler.RegisterQueue)
+			public.Get("/business/{businessID}", queueHandler.GetAllQueueByBusiness)
+			// public.Get("/business/{businessID}/summary", queueHandler.GetBusinessPublicQueueSummary)
+			// public.Get("/business/{businessID}/state/{state}", queueHandler.GetAllQueueByBusinessFilterState)
+		})
+		r.Group(func(protected chi.Router) {
+			protected.Use(middleware.ProtectedMiddleware(*queueService))
+			protected.Get("/{queueID}", queueHandler.GetQueue)
+			protected.Get("/{queueID}/state", queueHandler.GetQueueState)
+			protected.Delete("/{queueID}", queueHandler.DeleteQueue)
+		})
+	})
+
+	router.Route("/counters", func(r chi.Router) {
+		r.Group(func(public chi.Router) {
+			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Get("/{counterID}", counterHandler.GetCounter)
+		})
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Post("/", counterHandler.CreateCounter)
+			private.Post("/{counterID}/business/{businessID}/call-next", counterHandler.CallNextQueue)
+			private.Post("/{counterID}/queues/{queueID}/process", counterHandler.ProcessCalledQueue)
+			private.Post("/{counterID}/queues/{queueID}/skip", counterHandler.SkipQueue)
+			private.Delete("/{counterID}/queues/{queueID}", counterHandler.RemoveQueueFromCounter)
+			private.Put("/{counterID}", counterHandler.UpdateCounter)
+			private.Delete("/{counterID}", counterHandler.DeleteCounter)
+		})
+	})
+
+	router.Route("/subscriptions", func(r chi.Router) {
+		r.Group(func(private chi.Router) {
+			private.Use(middleware.AuthMiddleware(userRepo))
+			private.Get("/", subscriptionHandler.GetAllSubscription)
+			private.Get("/businesses/{businessID}", subscriptionHandler.GetBusinessSubscriptionInfo)
+			private.Get("/users/{userID}", subscriptionHandler.GetUserSubscriptionInfo)
+			private.Post("/users/{userID}/use", subscriptionHandler.UseUserSubscription)
+			private.Patch("/users/{userID}/slots", subscriptionHandler.AddUserSlot)
+			private.Patch("/businesses/{businessID}/capacity/decrease", subscriptionHandler.DecreaseBusinessCapacity)
+			private.Get("/{subscriptionID}", subscriptionHandler.GetSubscription)
+			private.Put("/{subscriptionID}", subscriptionHandler.UpdateSubscription)
+			private.Patch("/{subscriptionID}/time", subscriptionHandler.UpdateSubscriptionTime)
+			private.Patch("/{subscriptionID}/activate", subscriptionHandler.ActivateUserSubscription)
+			private.Patch("/{subscriptionID}/deactivate", subscriptionHandler.DeactivateUserSubscription)
+			private.Delete("/{subscriptionID}", subscriptionHandler.DeleteSubscription)
+		})
 	})
 
 	return router

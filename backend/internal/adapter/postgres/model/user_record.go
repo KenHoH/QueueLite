@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type User struct {
@@ -22,4 +23,9 @@ type User struct {
 	Queues           []Queue       `gorm:"foreignKey:UserID" json:"queues,omitempty"`
 	AssignedCounters []Counter     `gorm:"foreignKey:CurrentEmployeeID" json:"assignedCounters,omitempty"`
 	Subscription     *Subscription `gorm:"foreignKey:UserID" json:"subscription,omitempty"` //optional that's why we use pointer
+}
+
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+	u.ID = uuid.New()
+	return nil
 }

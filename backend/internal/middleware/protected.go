@@ -4,6 +4,7 @@ import (
 	"QueueLite/internal/queue/app"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -34,7 +35,13 @@ func ProtectedMiddleware(queueService app.QueueService) func(http.Handler) http.
 				return
 			}
 
-			if _, err := queueService.GetQueue(r.Context(), queueID); err != nil {
+			if routeQueueID := chi.URLParam(r, "queueID"); routeQueueID != "" && routeQueueID != queueIDString {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			exists, err := queueService.QueueExistsForAccess(r.Context(), queueID)
+			if err != nil || !exists {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}

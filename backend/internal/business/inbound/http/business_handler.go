@@ -24,18 +24,6 @@ func NewBusinessHandler(s *app.BusinessService) *BusinessHandlerImpl {
 	return &BusinessHandlerImpl{s: s}
 }
 
-func (h *BusinessHandlerImpl) PublicRoutes() http.Handler {
-	router := chi.NewRouter()
-
-	router.Post("/", h.CreateBusiness)
-	router.Put("/{businessID}", h.UpdateBusiness)
-	router.Delete("/{businessID}", h.DeleteBusiness)
-	router.Get("/", h.GetBusinessAll)
-	router.Get("/search", h.SearchBusiness)
-	router.Get("/{businessID}", h.GetBusiness)
-	return router
-}
-
 func (h *BusinessHandlerImpl) CreateBusiness(w http.ResponseWriter, r *http.Request) {
 	var request CreateBusinessRequest
 	if err := decodeJSON(r, &request); err != nil {

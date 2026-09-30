@@ -23,26 +23,6 @@ func NewSubscriptionHandler(s *app.SubscriptionService) *SubscriptionHandlerImpl
 	return &SubscriptionHandlerImpl{s: s}
 }
 
-func (h *SubscriptionHandlerImpl) Routes() http.Handler {
-	router := chi.NewRouter()
-
-	router.Get("/", h.GetAllSubscription)
-	router.Get("/businesses/{businessID}", h.GetBusinessSubscriptionInfo)
-	router.Get("/users/{userID}", h.GetUserSubscriptionInfo)
-	router.Post("/users/{userID}/use", h.UseUserSubscription)
-	router.Patch("/users/{userID}/slots", h.AddUserSlot)
-	router.Patch("/businesses/{businessID}/capacity/decrease", h.DecreaseBusinessCapacity)
-	router.Get("/{subscriptionID}", h.GetSubscription)
-	router.Put("/{subscriptionID}", h.UpdateSubscription)
-	router.Patch("/{subscriptionID}/time", h.UpdateSubscriptionTime)
-	// INFO: this should be the system, but for mockup test, the user just click buys and then we activate via api call
-	router.Patch("/{subscriptionID}/activate", h.ActivateUserSubscription)
-	router.Patch("/{subscriptionID}/deactivate", h.DeactivateUserSubscription)
-	router.Delete("/{subscriptionID}", h.DeleteSubscription)
-
-	return router
-}
-
 func (h *SubscriptionHandlerImpl) GetAllSubscription(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	subscriptions, nextCursor, err := h.s.GetAllSubscription(r.Context(), parseSubscriptionCursor(r), limit)

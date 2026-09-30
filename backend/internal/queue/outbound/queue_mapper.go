@@ -14,6 +14,8 @@ func toQueueRecord(queue *domain.Queue) model.Queue {
 		Name:              queue.Name,
 		State:             model.QueueState(queue.State),
 		Priority:          queue.Priority,
+		CreatedAt:         queue.CreatedAt,
+		UpdatedAt:         queue.UpdatedAt,
 	}
 }
 

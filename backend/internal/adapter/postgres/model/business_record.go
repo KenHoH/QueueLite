@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Business struct {
@@ -27,4 +28,9 @@ type Business struct {
 	// BusinessID has a unique index in Subscription,
 	// making this a one-to-one relationship.
 	Subscription *Subscription `gorm:"foreignKey:BusinessID" json:"subscription,omitempty"`
+}
+
+func (u *Business) BeforeCreate(tx *gorm.DB) (err error) {
+	u.ID = uuid.New()
+	return nil
 }
