@@ -16,6 +16,18 @@ test('counter state never treats missing queue details as an available desk', ()
   assert.equal(display.counterStatus({ currentQueueId: 'q' }, [{ id: 'q', state: 'called' }]), 'Called');
   assert.equal(display.counterStatus({ currentQueueId: 'q' }, [{ id: 'q', state: 'processing' }]), 'In service');
 });
+test('service time uses server timestamps and handles invalid or future values safely', () => {
+  const now = Date.parse('2026-10-02T12:01:05Z');
+  assert.equal(display.elapsedServiceTime('2026-10-02T11:00:00Z', now), '01:01:05');
+  assert.equal(display.elapsedServiceTime('invalid', now), '00:00:00');
+  assert.equal(display.elapsedServiceTime('2026-10-02T13:00:00Z', now), '00:00:00');
+  assert.equal(display.averageServiceSeconds([
+    { state: 'done', processingAt: '2026-10-02T11:00:00Z', doneAt: '2026-10-02T11:02:00Z' },
+    { state: 'done', processingAt: '2026-10-02T11:00:00Z', doneAt: '2026-10-02T11:04:00Z' },
+    { state: 'skipped', processingAt: '2026-10-02T11:00:00Z', doneAt: '2026-10-02T11:20:00Z' },
+  ]), 180);
+  assert.equal(display.averageServiceSeconds([{ state: 'done' }]), null);
+});
 test('staff listing APIs encode resource IDs and use credentials without browser identity', async () => {
   const original = globalThis.fetch, requests = [];
   globalThis.fetch = async (url, init) => { requests.push({ url, init }); return Response.json([]); };

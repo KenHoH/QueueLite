@@ -10,6 +10,8 @@
   --ql-border: #E3E7E2;
   --ql-error: #B75D57;
   --ql-priority: #A68542;
+  --ql-priority-surface: #FBE9E7;
+  --ql-priority-border: #E8B4AF;
   /* Stronger foregrounds for small text on light surfaces. */
   --ql-error-text: #93453F;
   --ql-priority-text: #795F2A;

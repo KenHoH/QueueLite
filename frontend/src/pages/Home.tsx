@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { BusinessCard } from '../components/BusinessCard';
+import { JoinedQueuesPreview } from '../components/JoinedQueuesPreview';
 import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer, Spinner } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { greeting } from './businessDisplay';
@@ -25,6 +26,7 @@ export default function Home() {
       <input id="business-search" type="search" placeholder="Search businesses..." value={query} onChange={event => setQuery(event.target.value)} />
       {query && <button type="button" aria-label="Clear search" onClick={() => setQuery('')}><X size={18} aria-hidden="true" /></button>}
     </div>
+    <JoinedQueuesPreview />
     <section id="businesses" className="ql-discovery-section" aria-labelledby="businesses-heading" aria-busy={discovery.loading || discovery.loadingMore}>
       <div className="ql-section-heading"><div><h2 id="businesses-heading">Discover businesses</h2><p className="ql-muted">Choose a business to see its details.</p></div>
         {discovery.loading && discovery.query && <Spinner label="Searching businesses" />}

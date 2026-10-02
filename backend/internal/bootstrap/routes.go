@@ -37,11 +37,11 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	queueRepo := queueoutbound.NewQueueRepo(db)
 	businessRepo := businessoutbound.NewBusinessRepo(db)
+	counterRepo := counteroutbound.NewCounterRepo(db)
 	go queueapp.RunDatabaseWorkerStream(ctx, rdb, queueRepo)
-	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb, businessRepo, userRepo)
+	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb, businessRepo, userRepo, counterRepo)
 	queueHandler := queuehttp.NewQueueHandler(queueService)
 
-	counterRepo := counteroutbound.NewCounterRepo(db)
 	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService, rdb)
 	counterHandler := counterhttp.NewCounterHandler(counterService)
 	operationsHandler := operations.New(businessRepo, counterRepo, queueRepo, rdb)
@@ -100,6 +100,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 			protected.Use(middleware.ProtectedMiddleware(*queueService))
 			protected.Get("/{queueID}", queueHandler.GetQueue)
 			protected.Get("/{queueID}/state", queueHandler.GetQueueState)
+			protected.Get("/{queueID}/customer-status", queueHandler.GetCustomerQueueStatus)
 			protected.Delete("/{queueID}", queueHandler.DeleteQueue)
 			protected.Put("/{queueID}", queueHandler.UpdateQueue)
 			protected.Patch("/{queueID}/state", queueHandler.UpdateState)

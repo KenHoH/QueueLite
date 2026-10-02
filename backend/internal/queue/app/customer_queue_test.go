@@ -4,6 +4,7 @@ import (
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/config"
+	counterdomain "QueueLite/internal/counter/domain"
 	queueapp "QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
 	"QueueLite/internal/testutil"
@@ -193,6 +194,43 @@ func TestWaitingSnapshotIncludesSplitAndLegacyQueues(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("missing waiting customers: %#v", want)
+	}
+}
+
+func TestCustomerQueueStatusAggregatesPositionAndCounters(t *testing.T) {
+	f := testutil.NewQueueFixture(t)
+	ctx := context.Background()
+	called := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A001", State: domain.QueueStateCalled}
+	first := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A002", State: domain.QueueStateWaiting}
+	customer := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A003", State: domain.QueueStateWaiting}
+	f.Persist(called)
+	f.Persist(first)
+	f.Persist(customer)
+	f.Counters = []counterdomain.Counter{
+		{ID: uuid.New(), BusinessID: f.Business.ID, Name: "Counter 1", CurrentQueueID: &called.ID},
+		{ID: uuid.New(), BusinessID: f.Business.ID, Name: "Counter 2"},
+	}
+	if err := cache.AddWaitingQueue(ctx, f.Redis, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.AddWaitingQueue(ctx, f.Redis, customer); err != nil {
+		t.Fatal(err)
+	}
+	status, err := f.Service.GetCustomerQueueStatus(ctx, customer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.TotalCounters != 2 || status.ActiveCounters != 1 || len(status.CurrentlyServing) != 1 {
+		t.Fatalf("counter aggregate: %#v", status)
+	}
+	if status.NextQueue == nil || status.NextQueue.QueueName != first.Name {
+		t.Fatalf("next queue: %#v", status.NextQueue)
+	}
+	if status.CustomerPosition == nil || status.CustomerPosition.Position != 2 || status.CustomerPosition.Ahead != 1 {
+		t.Fatalf("position: %#v", status.CustomerPosition)
+	}
+	if status.EstimatedWaitMinutes == nil || *status.EstimatedWaitMinutes != 5 || status.TotalWaiting != 2 || status.TotalActiveQueues != 3 {
+		t.Fatalf("totals/estimate: %#v", status)
 	}
 }
 

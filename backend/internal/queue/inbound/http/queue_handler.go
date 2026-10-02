@@ -227,6 +227,19 @@ func (h *QueueHandlerImpl) GetQueue(w http.ResponseWriter, r *http.Request) {
 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponse(queue))
 }
 
+func (h *QueueHandlerImpl) GetCustomerQueueStatus(w http.ResponseWriter, r *http.Request) {
+	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
+	if !ok {
+		return
+	}
+	status, err := h.s.GetCustomerQueueStatus(r.Context(), queueID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewCustomerQueueStatusResponse(status))
+}
+
 func (h *QueueHandlerImpl) GetQueueState(w http.ResponseWriter, r *http.Request) {
 	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
 	if !ok {

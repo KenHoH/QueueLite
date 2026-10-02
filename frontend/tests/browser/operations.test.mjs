@@ -57,7 +57,20 @@ test('dashboard loads real groups, counters, capacity and explicit navigation', 
   assert.equal(await page.getByText('Q004', { exact: true }).count(), 0); await visible(page.getByText('Queue capacity remaining: 43')); await visible(page.getByRole('link', { name: 'Open workspace →' }));
   assert.equal(await page.getByRole('link', { name: 'Counters', exact: true }).getAttribute('href'), `/business/${business.id}/counters`);
   assert.ok(requests.some(r => r.path === `/api/businesses/${business.id}/queues`));
+  assert.match(await page.locator('tr').filter({ hasText: 'Q001' }).getAttribute('class'), /ql-priority-row/);
   await page.screenshot({ path: 'output/playwright/operations-dashboard-desktop.png', fullPage: true });
+});
+test('dashboard filters and pages queues without losing the selected page size', async t => {
+  const queues = Array.from({ length: 12 }, (_, index) => ({ ...queue, id: `queue-${index + 1}`, name: `Q${String(index + 1).padStart(3, '0')}`, priority: index === 0 }));
+  queues.push({ ...queue, id: 'completed', name: 'Q999', state: 'done', priority: false });
+  const { page } = await scenario(t, { queues }); await page.goto(`${origin}/business/${business.id}/dashboard`);
+  await visible(page.getByText('1–10 of 12', { exact: true }));
+  assert.equal(await page.locator('tbody tr').count(), 10);
+  await page.getByRole('button', { name: 'Next', exact: true }).click(); await visible(page.getByText('11–12 of 12', { exact: true }));
+  await page.getByLabel('Rows per page').selectOption('25'); await visible(page.getByText('1–12 of 12', { exact: true }));
+  assert.equal(await page.locator('tbody tr').count(), 12);
+  await page.getByRole('tab', { name: /Completed/ }).click(); await visible(page.getByText('Q999', { exact: true }));
+  assert.equal(await page.locator('tbody tr').count(), 1);
 });
 test('dashboard empty and error/retry states are honest', async t => {
   let fail = true; const { page } = await scenario(t, { counters: [], queues: [], respond: path => path.endsWith('/queues') && fail ? { status: 500, json: {} } : undefined });

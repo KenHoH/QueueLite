@@ -2,6 +2,7 @@ package app
 
 import (
 	businessdomain "QueueLite/internal/business/domain"
+	counterdomain "QueueLite/internal/counter/domain"
 	"QueueLite/internal/queue/domain"
 	userdomain "QueueLite/internal/user/domain"
 	"context"
@@ -16,6 +17,10 @@ type BusinessLookup interface {
 
 type UserLookup interface {
 	GetUser(ctx context.Context, id uuid.UUID) (*userdomain.User, error)
+}
+
+type QueueCounterLookup interface {
+	ListBusinessCounters(ctx context.Context, businessID uuid.UUID) ([]counterdomain.Counter, error)
 }
 
 type QueueQuota interface {

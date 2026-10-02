@@ -13,8 +13,13 @@ const number = (value: unknown) => typeof value === 'number' && Number.isFinite(
 const user: Schema = value => record(value) && nonempty(value.id) && nonempty(value.username) && nonempty(value.phonenumber) && optional(value, ['email']);
 const business: Schema = value => record(value) && nonempty(value.id) && strings(value, ['name', 'location']) && typeof value.operational === 'boolean' && optional(value, ['description', 'email', 'phoneNumber', 'openTime', 'closeTime']);
 const membership: Schema = value => business(value) && role((value as RecordValue).role);
-const queue: Schema = value => record(value) && nonempty(value.id) && nonempty(value.businessId) && nonempty(value.name) && state(value.state) && typeof value.priority === 'boolean' && optional(value, ['userId', 'calledByCounterId']);
+const queue: Schema = value => record(value) && nonempty(value.id) && nonempty(value.businessId) && nonempty(value.name) && state(value.state) && typeof value.priority === 'boolean' && optional(value, ['userId', 'calledByCounterId', 'calledAt', 'processingAt', 'doneAt', 'cancelledAt', 'createdAt', 'updatedAt']);
 const counter: Schema = value => record(value) && nonempty(value.id) && nonempty(value.businessId) && nonempty(value.name) && optional(value, ['currentQueueId', 'currentEmployeeId']);
+const customerCounter: Schema = value => record(value) && nonempty(value.id) && text(value.name) && ['idle', 'called', 'processing'].includes(value.state as string) && optional(value, ['currentQueueId', 'currentQueueName']);
+const customerStatus: Schema = value => record(value) && queue(value.queue) && record(value.business) && nonempty(value.business.id) && text(value.business.name) && typeof value.business.operational === 'boolean'
+  && array(customerCounter)(value.counters) && number(value.totalCounters) && number(value.activeCounters) && Array.isArray(value.currentlyServing)
+  && number(value.totalWaiting) && number(value.totalActiveQueues) && text(value.updatedAt)
+  && optional(value, ['estimatedWaitMinutes'], number);
 const member: Schema = value => record(value) && nonempty(value.userId) && text(value.username) && role(value.role);
 const subscription: Schema = value => record(value) && ['user', 'business'].includes(value.type as string) && ['active', 'inactive'].includes(value.status as string) && text(value.startDate) && optional(value, ['id', 'endDate', 'userId', 'businessId']);
 const planInfo = (kind: 'user' | 'business'): Schema => value => {
@@ -43,6 +48,7 @@ export function validateAPIResponse(path: string, method: string, value: unknown
   else if (/^\/businesses\/[^/]+$/.test(path) && method === 'GET' || path === '/businesses/' && method === 'POST') schema = business;
   else if (path === '/queues/me' || /^\/queues\/business\/[^/]+$/.test(path)) schema = array(queue);
   else if (/^\/queues\/[^/]+\/state$/.test(path) && method === 'GET') schema = v => record(v) && state(v.state);
+  else if (/^\/queues\/[^/]+\/customer-status$/.test(path) && method === 'GET') schema = customerStatus;
   else if (/^\/queues\/qr\/[^/]+\/resolve$/.test(path)) schema = v => record(v) && nonempty(v.businessId) && typeof v.authenticated === 'boolean' && typeof v.requiresGuestForm === 'boolean';
   else if (/^\/queues\/[^/]+$/.test(path) && method === 'GET' || method === 'POST' && (path === '/queues/' || /^\/queues\/(qr\/[^/]+|business\/[^/]+\/join)$/.test(path))) schema = queue;
   else if (/^\/counters\/[^/]+$/.test(path) && method === 'GET' || path === '/counters/' && method === 'POST') schema = counter;

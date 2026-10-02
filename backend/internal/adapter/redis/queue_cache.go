@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 
+	_ "embed"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -167,45 +168,9 @@ func PopTopWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, busines
 	return item, nil
 }
 
-// Selection, pop and the business-wide streak must be one Redis operation:
-// counters can call next concurrently. Validate before popping because Lua
-// runtime errors do not roll back earlier writes.
-var popNextFairWaitingQueue = redis.NewScript(`
-local expected = {'string', 'zset', 'zset', 'zset'}
-for i,key in ipairs(KEYS) do
-  local kind = redis.call('TYPE', key).ok
-  if kind ~= 'none' and kind ~= expected[i] then
-    return redis.error_reply('invalid waiting queue key type')
-  end
-end
-local streak = tonumber(redis.call('GET', KEYS[1]) or '0')
-if not streak or streak < 0 or streak ~= math.floor(streak) then
-  return redis.error_reply('invalid priority streak')
-end
-local limit = tonumber(ARGV[1])
-local function pop(key, priority)
-  local item = redis.call('ZPOPMIN', key, 1)
-  if #item == 0 then return nil end
-  if priority then
-    redis.call('SET', KEYS[1], math.min(streak + 1, limit))
-  else
-    redis.call('SET', KEYS[1], 0)
-  end
-  return {key, item[1], item[2]}
-end
-if streak < limit then
-  local item = pop(KEYS[2], true)
-  if item then return item end
-end
--- Legacy waiting entries retain the upstream normal-queue fallback behavior.
-local item = pop(KEYS[3], false) or pop(KEYS[4], false)
-if item then return item end
-if streak >= limit then
-  item = pop(KEYS[2], true)
-  if item then return item end
-end
-return {}
-`)
+//go:embed script/pop_next_fair_waiting_queue.lua
+var popNextFairWaitingQueueLua string
+var popNextFairWaitingQueue = redis.NewScript(popNextFairWaitingQueueLua)
 
 func PopNextFairWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, businessID string) (*WaitingQueueItem, error) {
 	result, err := popNextFairWaitingQueue.Run(ctx, rdt, []string{
@@ -299,10 +264,46 @@ func GetWaitingQueues(ctx context.Context, businessID string, rdt *redis.Client)
 	if err != nil {
 		return nil, err
 	}
+	streakRaw, err := rdt.Get(ctx, PriorityStreakKey(businessID)).Result()
+	if err != nil && err != redis.Nil {
+		return nil, fmt.Errorf("read priority streak: %w", err)
+	}
+	streak := 0
+	if err == nil {
+		streak, err = strconv.Atoi(streakRaw)
+		if err != nil || streak < 0 {
+			return nil, fmt.Errorf("invalid priority streak")
+		}
+	}
 
+	// Simulate the same fair selection policy as the atomic pop script without
+	// mutating Redis. This makes customer positions match subsequent call-nexts.
 	tasks := make([]redis.Z, 0, len(priorityTasks)+len(normalTasks)+len(legacyTasks))
-	tasks = append(tasks, priorityTasks...)
-	tasks = append(tasks, normalTasks...)
-	tasks = append(tasks, legacyTasks...)
+	priorityIndex, normalIndex, legacyIndex := 0, 0, 0
+	for priorityIndex < len(priorityTasks) || normalIndex < len(normalTasks) || legacyIndex < len(legacyTasks) {
+		if streak < maxPriorityStreak && priorityIndex < len(priorityTasks) {
+			tasks = append(tasks, priorityTasks[priorityIndex])
+			priorityIndex++
+			streak = min(streak+1, maxPriorityStreak)
+			continue
+		}
+		if normalIndex < len(normalTasks) {
+			tasks = append(tasks, normalTasks[normalIndex])
+			normalIndex++
+			streak = 0
+			continue
+		}
+		if legacyIndex < len(legacyTasks) {
+			tasks = append(tasks, legacyTasks[legacyIndex])
+			legacyIndex++
+			streak = 0
+			continue
+		}
+		if priorityIndex < len(priorityTasks) {
+			tasks = append(tasks, priorityTasks[priorityIndex])
+			priorityIndex++
+			streak = min(streak+1, maxPriorityStreak)
+		}
+	}
 	return tasks, nil
 }

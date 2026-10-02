@@ -5,6 +5,26 @@ export function groupQueues(queues: Queue[]) {
   return { waiting: queues.filter(q => q.state === 'waiting'), called: queues.filter(q => q.state === 'called'), processing: queues.filter(q => q.state === 'processing') };
 }
 export function currentQueue(counter: Counter, queues: Queue[]) { return queues.find(q => q.id === counter.currentQueueId); }
+export function formatDuration(totalSeconds: number) {
+  const total = Math.max(0, Math.floor(Number.isFinite(totalSeconds) ? totalSeconds : 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total % 3600 / 60);
+  const seconds = total % 60;
+  return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+}
+export function elapsedServiceTime(startedAt: string | undefined, now = Date.now()) {
+  if (!startedAt) return formatDuration(0);
+  const started = Date.parse(startedAt);
+  return formatDuration(Number.isFinite(started) ? (now - started) / 1000 : 0);
+}
+export function averageServiceSeconds(queues: Queue[]) {
+  const durations = queues.flatMap(queue => {
+    if (queue.state !== 'done' || !queue.processingAt || !queue.doneAt) return [];
+    const start = Date.parse(queue.processingAt), end = Date.parse(queue.doneAt);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? [(end - start) / 1000] : [];
+  });
+  return durations.length ? durations.reduce((sum, duration) => sum + duration, 0) / durations.length : null;
+}
 export function counterStatus(counter: Counter, queues: Queue[]) {
   if (!counter.currentQueueId) return 'Available';
   const queue = currentQueue(counter, queues);

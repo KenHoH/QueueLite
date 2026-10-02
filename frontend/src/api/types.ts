@@ -18,9 +18,33 @@ export interface BusinessMember { userId: UUID; username: string; role: Business
 export interface Queue {
   id: UUID; businessId: UUID; userId?: UUID; calledByCounterId?: UUID;
   name: string; state: QueueState; priority: boolean;
+  calledAt?: DateTime; processingAt?: DateTime; doneAt?: DateTime; cancelledAt?: DateTime;
+  createdAt?: DateTime; updatedAt?: DateTime;
 }
 export interface Counter {
   id: UUID; businessId: UUID; name: string; currentEmployeeId?: UUID; currentQueueId?: UUID;
+}
+export interface CustomerCounterStatus {
+  id: UUID; name: string; currentQueueId?: UUID; currentQueueName?: string;
+  state: 'idle' | 'called' | 'processing';
+}
+export interface CurrentlyServingQueue {
+  counterId: UUID; counterName: string; queueId: UUID; queueName: string;
+  state: 'called' | 'processing';
+}
+export interface CustomerQueueStatus {
+  queue: Queue;
+  business: { id: UUID; name: string; operational: boolean };
+  counters: CustomerCounterStatus[];
+  totalCounters: number;
+  activeCounters: number;
+  currentlyServing: CurrentlyServingQueue[];
+  nextQueue?: { queueId: UUID; queueName: string };
+  customerPosition?: { position: number; ahead: number; queueName: string };
+  totalWaiting: number;
+  totalActiveQueues: number;
+  estimatedWaitMinutes?: number;
+  updatedAt: DateTime;
 }
 export interface Subscription {
   id: UUID; businessId?: UUID; userId?: UUID; businessPlanId?: UUID; userPlanId?: UUID;

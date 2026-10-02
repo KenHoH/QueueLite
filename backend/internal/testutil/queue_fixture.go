@@ -9,6 +9,7 @@ import (
 
 	"QueueLite/internal/apperror"
 	businessdomain "QueueLite/internal/business/domain"
+	counterdomain "QueueLite/internal/counter/domain"
 	queueapp "QueueLite/internal/queue/app"
 	queuedomain "QueueLite/internal/queue/domain"
 	userapp "QueueLite/internal/user/app"
@@ -26,6 +27,7 @@ type QueueFixture struct {
 	BusinessError error
 	mu            sync.Mutex
 	Queues        map[uuid.UUID]queuedomain.Queue
+	Counters      []counterdomain.Counter
 	Capacity      int
 	Redis         *redis.Client
 	Server        *miniredis.Miniredis
@@ -80,6 +82,26 @@ func (f *QueueFixture) GetQueue(_ context.Context, id uuid.UUID) (*queuedomain.Q
 	return &q, nil
 }
 
+func (f *QueueFixture) GetAllQueueByBusiness(_ context.Context, businessID uuid.UUID) ([]queuedomain.Queue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	queues := make([]queuedomain.Queue, 0)
+	for _, q := range f.Queues {
+		if q.BusinessID == businessID {
+			queues = append(queues, q)
+		}
+	}
+	return queues, nil
+}
+func (f *QueueFixture) ListBusinessCounters(_ context.Context, businessID uuid.UUID) ([]counterdomain.Counter, error) {
+	items := make([]counterdomain.Counter, 0, len(f.Counters))
+	for _, counter := range f.Counters {
+		if counter.BusinessID == businessID {
+			items = append(items, counter)
+		}
+	}
+	return items, nil
+}
 func (f *QueueFixture) GetActiveQueuesByUser(_ context.Context, userID uuid.UUID) ([]queuedomain.Queue, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
