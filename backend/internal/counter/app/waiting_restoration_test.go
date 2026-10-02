@@ -41,6 +41,13 @@ func (r *failingCallQueueRepo) UpdateQueue(ctx context.Context, q *queuedomain.Q
 	return r.CounterQueueRepo.UpdateQueue(ctx, q)
 }
 
+func (r *failingCallQueueRepo) UpdateQueueIfState(ctx context.Context, q *queuedomain.Queue, expected queuedomain.QueueState) error {
+	if r.updateError != nil {
+		return r.updateError
+	}
+	return r.CounterQueueRepo.UpdateQueueIfState(ctx, q, expected)
+}
+
 type failingAssignmentRepo struct {
 	*counterRepo
 	assignmentError error

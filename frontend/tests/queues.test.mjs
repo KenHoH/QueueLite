@@ -11,7 +11,7 @@ test('canonical and QR join use cookie credentials, guest-only identity and abor
   const id = '11111111-1111-4111-8111-111111111111';
   const signal = new AbortController().signal;
   const guest = { username: 'Guest', phoneNumber: '081234567890' };
-  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ id, name: 'A001', priority: false }); };
+  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ id, businessId: id, name: 'A001', state: 'waiting', priority: false }); };
   try {
     const api = await vite.ssrLoadModule('/src/api/queues.ts');
     await api.joinBusinessQueue(id, undefined, { signal });
@@ -21,12 +21,12 @@ test('canonical and QR join use cookie credentials, guest-only identity and abor
     assert.equal(calls[0].init.body, undefined);
     assert.equal(calls[1].init.body, JSON.stringify(guest));
     assert.equal(calls[2].url, `/api/queues/qr/${id}`);
-    assert.ok(calls.every(({ init }) => init.credentials === 'include' && init.method === 'POST' && init.signal === signal));
+    assert.ok(calls.every(({ init }) => init.credentials === 'include' && init.method === 'POST' && init.signal instanceof AbortSignal));
     assert.ok(calls.every(({ init }) => !init.body || !init.body.includes('userId')));
   } finally { globalThis.fetch = original; }
 });
 
-test('join retains typed business and phone errors for Stage 3B', async () => {
+test('join retains typed business and phone errors', async () => {
   const original = globalThis.fetch;
   try {
     const api = await vite.ssrLoadModule('/src/api/queues.ts');

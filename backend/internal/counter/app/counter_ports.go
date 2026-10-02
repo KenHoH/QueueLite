@@ -20,5 +20,6 @@ type CounterRepo interface {
 type CounterQueueRepo interface {
 	GetQueue(ctx context.Context, id uuid.UUID) (*queuedomain.Queue, error)
 	UpdateQueue(ctx context.Context, queue *queuedomain.Queue) error
+	UpdateQueueIfState(ctx context.Context, queue *queuedomain.Queue, expected queuedomain.QueueState) error
 	GetTopQueueByBusinessPrivateForUpdate(ctx context.Context, businessID uuid.UUID) (*queuedomain.Queue, error)
 }

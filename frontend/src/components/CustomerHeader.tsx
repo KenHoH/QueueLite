@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAppState } from '../state/AppState';
 import { Button, InlineError, Spinner } from './foundation';
-import { canManage } from '../pages/accountForms';
 export function CustomerHeader() {
   const { auth, logout, refreshUser, businesses } = useAppState();
   const [busy, setBusy] = useState(false);
@@ -20,7 +19,7 @@ export function CustomerHeader() {
     <nav className="ql-account" aria-label="Account">
       {auth.status === 'loading' && <Spinner label="Checking your session" />}
       {auth.status === 'guest' && <><Link to="/login">Sign in</Link><Link className="ql-button ql-button-primary" to="/register">Create account</Link></>}
-      {auth.status === 'authenticated' && <><span className="ql-avatar" aria-hidden="true">{auth.user.username.slice(0, 1).toUpperCase()}</span><span className="ql-username">{auth.user.username}</span><Link to="/profile">Profile</Link>{businesses.some(canManage) && <Link to="/business/manage">Manage Business</Link>}<Button variant="secondary" loading={busy} onClick={signOut}>Logout</Button></>}
+      {auth.status === 'authenticated' && <><span className="ql-avatar" aria-hidden="true">{auth.user.username.slice(0, 1).toUpperCase()}</span><span className="ql-username">{auth.user.username}</span><Link to="/profile">Profile</Link>{businesses.length > 0 && <Link to="/business/manage">Manage Business</Link>}<Button variant="secondary" loading={busy} onClick={signOut}>Logout</Button></>}
       {auth.status === 'error' && <Button variant="secondary" onClick={() => { void refreshUser().catch(() => {}); }}>Retry session check</Button>}
     </nav>
   </div>{auth.status === 'error' && <InlineError>We could not check your session. You can still browse QueueLite. Please retry.</InlineError>}{error && <InlineError>{error}</InlineError>}</header>;

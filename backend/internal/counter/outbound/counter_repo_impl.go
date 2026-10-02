@@ -31,6 +31,18 @@ func (r *CounterRepoImpl) CreateCounter(ctx context.Context, counter *domain.Cou
 	return toDomainCounter(&record), nil
 }
 
+func (r *CounterRepoImpl) ListBusinessCounters(ctx context.Context, businessID uuid.UUID) ([]domain.Counter, error) {
+	var records []model.Counter
+	if err := r.db.WithContext(ctx).Where("business_id = ?", businessID).Order("name ASC, id ASC").Find(&records).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.Counter, 0, len(records))
+	for i := range records {
+		result = append(result, *toDomainCounter(&records[i]))
+	}
+	return result, nil
+}
+
 func (r *CounterRepoImpl) UpdateCounter(ctx context.Context, counter *domain.Counter) error {
 	result := r.db.
 		WithContext(ctx).

@@ -162,9 +162,17 @@ func (u *UserHandlerImpl) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	input := domain.User{}
 	if request.PhoneNumber != nil {
+		if strings.TrimSpace(*request.PhoneNumber) == "" {
+			writeInvalid(w, "PHONENUMBER_REQUIRED", "phone number required")
+			return
+		}
 		input.PhoneNumber = *request.PhoneNumber
 	}
 	if request.Password != nil {
+		if strings.TrimSpace(*request.Password) == "" {
+			writeInvalid(w, "PASSWORD_REQUIRED", "password required")
+			return
+		}
 		input.Password = *request.Password
 	}
 	if request.Email != nil {

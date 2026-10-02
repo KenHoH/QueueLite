@@ -418,6 +418,33 @@ func (s *QueueService) MarkAsCancelled(ctx context.Context, queueID uuid.UUID) e
 	return nil
 }
 
+// Customer cancellation and Call Next compare the persisted waiting state in
+// the same database update. Only one transition can win that race.
+func (s *QueueService) CancelWaitingQueue(ctx context.Context, queueID uuid.UUID) error {
+	if err := s.requirePersistedQueue(ctx, queueID); err != nil {
+		return err
+	}
+	queue, err := s.GetQueue(ctx, queueID)
+	if err != nil {
+		return err
+	}
+	if queue.State != domain.QueueStateCancelled {
+		if queue.State != domain.QueueStateWaiting {
+			return apperror.New(apperror.KindConflict, "QUEUE_NOT_CANCELLABLE", "queue is no longer waiting")
+		}
+		queue.State = domain.QueueStateCancelled
+		queue.StampLifecycle(time.Now())
+		if err := s.repo.UpdateQueueIfState(ctx, queue, domain.QueueStateWaiting); err != nil {
+			return err
+		}
+	}
+	if err := s.syncQueueCache(ctx, *queue); err != nil {
+		return apperror.Wrap(apperror.KindInternal, "CANCEL_QUEUE_CACHE_ERROR", "failed to release queue reservation", err)
+	}
+	_ = s.publishQueueUpdate(ctx, queue.BusinessID)
+	return nil
+}
+
 func (s *QueueService) MarkAsSkipped(ctx context.Context, queueID uuid.UUID) error {
 	return s.UpdateState(ctx, queueID, domain.QueueStateSkipped)
 }

@@ -6,6 +6,7 @@ import (
 	counterapp "QueueLite/internal/counter/app"
 	counterdomain "QueueLite/internal/counter/domain"
 	subscriptionapp "QueueLite/internal/subscription/app"
+	"QueueLite/internal/validation"
 	"context"
 	"errors"
 	"strings"
@@ -47,6 +48,12 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, business domain.Bu
 	}
 	if business.PhoneNumber == "" {
 		return nil, apperror.New(apperror.KindInvalid, "BUSINESS_PHONE_NUMBER_REQUIRED", "business phone number is required")
+	}
+	if !validation.Email(business.Email) {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
+	}
+	if !validation.Phone(business.PhoneNumber) {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
 	}
 
 	record, err := s.repo.CreateBusiness(ctx, &business)
@@ -115,6 +122,9 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID uuid.UU
 			return apperror.New(apperror.KindInvalid, "BUSINESS_EMAIL_REQUIRED", "business email is required")
 		}
 		business.Email = &email
+		if !validation.Email(email) {
+			return apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
+		}
 	}
 	if business.PhoneNumber != nil {
 		phoneNumber := strings.TrimSpace(*business.PhoneNumber)
@@ -122,6 +132,9 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID uuid.UU
 			return apperror.New(apperror.KindInvalid, "BUSINESS_PHONE_NUMBER_REQUIRED", "business phone number is required")
 		}
 		business.PhoneNumber = &phoneNumber
+		if !validation.Phone(phoneNumber) {
+			return apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+		}
 	}
 	if (business.OpenTime != nil && business.OpenTime.IsZero()) || (business.CloseTime != nil && business.CloseTime.IsZero()) {
 		return apperror.New(apperror.KindInvalid, "BUSINESS_OPERATIONAL_TIME_REQUIRED", "business open and close time are required")

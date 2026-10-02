@@ -36,7 +36,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }).catch(error => {
       if (controller.signal.aborted) return;
       setMembership({ userId, items: [], status: 'error' });
-      if (error instanceof APIError && error.status === 401) void store.refreshUser().catch(() => {});
+      if (error instanceof APIError && error.status === 401) void store.refreshUser(true).catch(() => {});
     });
     return () => controller.abort();
   }, [userId, businessAttempt, store]);

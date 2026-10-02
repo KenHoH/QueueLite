@@ -66,7 +66,7 @@ test('profile loads current user, saves phone/email, clears email, and changes p
   assert.deepEqual(requests.filter(r => r.method === 'PUT').at(-1).body, { password: 'new password' });
   assert.equal(await page.getByLabel('New password', { exact: true }).inputValue(), '');
   assert.equal(await page.getByRole('link', { name: 'Plans & Subscription →' }).getAttribute('href'), '/plans');
-  await page.screenshot({ path: 'output/playwright/stage4-profile-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/account-profile-desktop.png', fullPage: true });
 });
 test('profile validation blocks requests and API errors are safe', async t => {
   const { page, requests } = await scenario(t, { respond: (path, request) => request.method() === 'PUT' ? { status: 500, json: { error: { code: 'UPDATE_ERROR', message: 'private database details' } } } : undefined });
@@ -109,7 +109,7 @@ test('settings load, save all editable fields and false operational state', asyn
   assert.equal(await page.getByLabel('Business name', { exact: true }).inputValue(), business.name); await page.getByLabel('Business name', { exact: true }).fill('Updated business'); await page.getByLabel('Operational', { exact: true }).uncheck();
   await page.getByRole('button', { name: 'Save business settings' }).click(); await visible(page.getByText('Business settings saved.'));
   assert.deepEqual(requests.find(r => r.method === 'PUT').body, { name: 'Updated business', location: business.location, description: business.description, openTime: business.openTime, closeTime: business.closeTime, email: business.email, phoneNumber: business.phoneNumber, operational: false });
-  await page.screenshot({ path: 'output/playwright/stage4-settings-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/account-settings-desktop.png', fullPage: true });
   await page.getByRole('link', { name: 'Manage Business', exact: true }).click();
   await visible(page.getByRole('heading', { name: 'Updated business', exact: true }));
 });
@@ -128,7 +128,7 @@ test('plans show fetched customer/business quotas and selection with honest no-p
   await page.getByLabel('Select business').selectOption(second.id); await visible(page.getByText('Queue capacity remaining: 321')); await visible(page.getByRole('heading', { name: 'Plus', exact: true }));
   assert.equal(await page.getByRole('button', { name: 'Upgrade — coming later' }).isDisabled(), true); assert.equal(await page.getByRole('button', { name: 'Change plan — coming later' }).isDisabled(), true);
   assert.ok(requests.every(r => r.method === 'GET')); const text = await page.locator('main').innerText(); assert.doesNotMatch(text, /499|299|\$|checkout/i);
-  await page.screenshot({ path: 'output/playwright/stage4-plans-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/account-plans-desktop.png', fullPage: true });
   await page.getByRole('link', { name: 'Manage Business', exact: true }).click(); await visible(page.getByRole('heading', { name: second.name }));
   assert.equal(await page.getByRole('link', { name: 'Business settings →' }).getAttribute('href'), `/business/${second.id}/settings`);
 });
@@ -144,5 +144,5 @@ test('mobile forms and account navigation fit without horizontal overflow', asyn
     await page.goto(origin + path); await visible(page.getByRole('heading', { level: 1 })); await visible(page.locator('main .ql-card').first());
     await pause(100); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, path);
   }
-  await visible(page.getByLabel('Operational', { exact: true })); await page.screenshot({ path: 'output/playwright/stage4-settings-mobile.png', fullPage: true });
+  await visible(page.getByLabel('Operational', { exact: true })); await page.screenshot({ path: 'output/playwright/account-settings-mobile.png', fullPage: true });
 });

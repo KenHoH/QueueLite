@@ -62,7 +62,7 @@ test('account join confirms identity, sends no body, prevents duplicate submits 
   const joins = requests.filter(r => r.path.endsWith('/join'));
   assert.equal(joins.length, 1); assert.equal(joins[0].body, null);
   assert.equal(await page.getByRole('link', { name: 'View my queue' }).getAttribute('href'), `/queue/${ticket.id}`);
-  await page.screenshot({ path: 'output/playwright/stage3b-success-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/customer-success-desktop.png', fullPage: true });
 });
 test('guest validation, trimmed identity-only body, success and immediate cookie-owned ticket read', async t => {
   const { page, requests } = await scenario(t);
@@ -74,7 +74,7 @@ test('guest validation, trimmed identity-only body, success and immediate cookie
   await page.getByRole('textbox', { name: 'Phone number', exact: true }).fill('123');
   await submit.click(); await visible(page.getByText(/Enter an Indonesian mobile number/));
   await page.getByRole('textbox', { name: 'Phone number', exact: true }).fill('0812 3456 7890');
-  await page.screenshot({ path: 'output/playwright/stage3b-join-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/customer-join-desktop.png', fullPage: true });
   await submit.click(); await visible(page.getByRole('heading', { name: 'Your place is saved.' }));
   assert.deepEqual(JSON.parse(requests.find(r => r.method === 'POST').body), { username: 'Guest', phoneNumber: '0812 3456 7890' });
   await page.getByRole('link', { name: 'View my queue' }).click();
@@ -124,7 +124,7 @@ for (const [state, heading] of Object.entries(states)) {
       assert.equal(requests.filter(r => r.path.endsWith('/state')).length, before);
       await absent(page.getByRole('button', { name: 'Leave queue' }));
     } else { await nextPoll; assert.ok(requests.filter(r => r.path.endsWith('/state')).length > before); }
-    if (state === 'called') await page.screenshot({ path: 'output/playwright/stage3b-called-desktop.png', fullPage: true });
+    if (state === 'called') await page.screenshot({ path: 'output/playwright/customer-called-desktop.png', fullPage: true });
   });
 }
 test('poll discovers terminal transition and unmount cancels future requests', async t => {
@@ -168,7 +168,7 @@ test('My Queues lists account tickets, deduplicates business reads and navigates
   await page.goto(`${origin}/my-queues`); await visible(page.getByText('A025', { exact: true }));
   assert.equal(requests.filter(r => r.path === `/api/businesses/${business.id}`).length, 1);
   assert.equal(await page.getByRole('link', { name: 'My Queues', exact: true }).getAttribute('aria-current'), 'page');
-  await page.screenshot({ path: 'output/playwright/stage3b-my-queues-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/customer-my-queues-desktop.png', fullPage: true });
   await page.locator('.ql-queue-card').first().click(); await visible(page.getByRole('heading', { name: states.waiting }));
   assert.equal(new URL(page.url()).pathname, `/queue/${ticket.id}`);
 });
@@ -191,10 +191,10 @@ test('customer pages stay within mobile viewport and use the existing design sys
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/business/${business.id}/join`); await visible(page.getByRole('textbox', { name: 'Name', exact: true }));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'output/playwright/stage3b-join-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/customer-join-mobile.png', fullPage: true });
   await page.goto(`${origin}/queue/${ticket.id}`); await visible(page.getByRole('heading', { name: states.waiting }));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: 'output/playwright/stage3b-ticket-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/customer-ticket-mobile.png', fullPage: true });
 });
 test('join waits for the real session and business before exposing a form', async t => {
   const { page, requests } = await scenario(t, { respond: async path => {

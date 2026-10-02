@@ -58,7 +58,7 @@ test('Home initial loading, real fields, guest header, card keyboard navigation 
   assert.equal(await page.getByRole('link', { name: 'Home', exact: true }).getAttribute('aria-current'), 'page');
   await visible(page.getByText('09:00 – 21:00'));
   await absent(page.getByText('Your active queues'));
-  await page.screenshot({ path: 'output/playwright/stage2-home-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/discovery-home-desktop.png', fullPage: true });
   const card = page.locator('.ql-business-card');
   await card.focus(); await page.keyboard.press('Enter');
   await visible(page.getByRole('heading', { name: 'Business information' }));
@@ -156,7 +156,7 @@ test('detail loads all business fields and CTA reaches the real join form', asyn
   await visible(page.getByRole('heading', { name: first.name }));
   for (const value of [first.location, first.description, first.email, first.phoneNumber, 'Operational', '09:00 – 21:00']) await visible(page.getByText(value, { exact: true }));
   assert.equal(await page.getByRole('link', { name: 'Join queue' }).getAttribute('href'), `/business/${first.id}/join`);
-  await page.screenshot({ path: 'output/playwright/stage2-detail-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/discovery-detail-desktop.png', fullPage: true });
   await page.getByRole('link', { name: 'Join queue' }).click();
   await visible(page.getByRole('textbox', { name: 'Name', exact: true }));
 });
@@ -187,8 +187,8 @@ test('mobile discovery and detail stack without horizontal overflow', async t =>
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(origin); await visible(page.getByRole('heading', { name: first.name }));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-  await page.screenshot({ path: 'output/playwright/stage2-home-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/discovery-home-mobile.png', fullPage: true });
   await page.goto(`${origin}/business/${first.id}`); await visible(page.getByRole('link', { name: 'Join queue' }));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-  await page.screenshot({ path: 'output/playwright/stage2-detail-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/discovery-detail-mobile.png', fullPage: true });
 });

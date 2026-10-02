@@ -14,6 +14,7 @@ export interface Business {
   operational: boolean; openTime: string; closeTime: string; email: string; phoneNumber: string;
 }
 export interface BusinessMembership extends Business { role: BusinessRole }
+export interface BusinessMember { userId: UUID; username: string; role: BusinessRole }
 export interface Queue {
   id: UUID; businessId: UUID; userId?: UUID; calledByCounterId?: UUID;
   name: string; state: QueueState; priority: boolean;
@@ -64,9 +65,9 @@ export interface GuestQueueRequest { username: string; phoneNumber: string }
 export type CustomerQueueJoinRequest = GuestQueueRequest;
 export interface UpdateQueueRequest { name?: string; state?: QueueState; priority?: boolean }
 export interface CreateCounterRequest {
-  businessId: UUID; name: string; currentEmployeeId?: UUID; currentQueueId?: UUID;
+  businessId: UUID; name: string; currentEmployeeId?: UUID;
 }
 /** Empty string clears assignments; null is ignored by the handler. */
-export interface UpdateCounterRequest { name?: string; currentEmployeeId?: UUID | ''; currentQueueId?: UUID | '' }
+export interface UpdateCounterRequest { name?: string; currentEmployeeId?: UUID | '' }
 export interface UpdateSubscriptionRequest { businessPlanId?: UUID; userPlanId?: UUID }
 export interface UpdateSubscriptionTimeRequest { startDate: string; endDate?: string | null }

@@ -17,7 +17,7 @@ export function useAccountResource<T>(load: (signal: AbortSignal) => Promise<T>)
     }).catch(error => {
       if (controller.signal.aborted) return;
       setState({ data: null, loading: false, error });
-      if (error instanceof APIError && error.status === 401) void refreshUser().catch(() => {});
+      if (error instanceof APIError && error.status === 401) void refreshUser(true).catch(() => {});
     });
     return () => controller.abort();
   }, [load, attempt, refreshUser]);

@@ -35,6 +35,7 @@ export function ticketErrorMessage(error: unknown) {
   return 'We couldn’t refresh your queue. Please try again.';
 }
 export function cancellationErrorMessage(error: unknown) {
+  if (error instanceof APIError && error.code === 'QUEUE_NOT_CANCELLABLE') return 'This queue is no longer waiting. Refresh your ticket and ask the team for help.';
   if (error instanceof APIError && error.code === 'QUEUE_PERSISTENCE_PENDING') return 'Your ticket is still being saved. Please wait a moment, then try leaving again.';
   if (error instanceof APIError && [401, 403, 404].includes(error.status)) return ticketErrorMessage(error);
   return 'We couldn’t confirm that your queue was cancelled. Refresh your ticket before trying again.';

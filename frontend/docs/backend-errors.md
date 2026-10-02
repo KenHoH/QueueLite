@@ -1,242 +1,49 @@
-# Backend error-code source index
+# API error handling
 
-Generated from current non-comment source literals during Stage 0. This includes codes in internal-only functions; it does not assert every code is reachable from every route. See backend-contract.md for status mappings, route-specific errors, and wrapped/masked codes. Middleware plain-text errors have no backend code.
+Application errors use a JSON envelope:
 
-| Code | Source |
+```json
+{"error":{"code":"ACTIVE_QUEUE_EXISTS","message":"user already has active queue in this business"}}
+```
+
+Some authentication middleware returns plain text. The frontend normalizes JSON and plain-text failures into `APIError`, which carries the HTTP status, code, message and failure kind. Do not depend on message text for control flow or display raw internal failures to users.
+
+## Status mapping
+
+The shared backend error writer maps application error kinds as follows:
+
+| Kind | HTTP status |
 | --- | --- |
-| `ACTIVATE_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:155` |
-| `ACTIVE_QUEUE_EXISTS` | `backend/internal/queue/app/queue_service.go:247` |
-| `ADD_USER_SLOT_ERROR` | `backend/internal/subscription/app/subscription_service.go:236` |
-| `BUSINESS_EMAIL_REQUIRED` | `backend/internal/business/app/business_service.go:113` |
-| `BUSINESS_EMAIL_REQUIRED` | `backend/internal/business/app/business_service.go:46` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/counter/app/counter_service.go:60` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/queue/app/queue_service.go:150` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/queue/app/queue_service.go:235` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:182` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:213` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:270` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:300` |
-| `BUSINESS_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:59` |
-| `BUSINESS_LOCATION_REQUIRED` | `backend/internal/business/app/business_service.go:102` |
-| `BUSINESS_LOCATION_REQUIRED` | `backend/internal/business/app/business_service.go:40` |
-| `BUSINESS_NAME_REQUIRED` | `backend/internal/business/app/business_service.go:37` |
-| `BUSINESS_NAME_REQUIRED` | `backend/internal/business/app/business_service.go:95` |
-| `BUSINESS_NOT_FOUND` | `backend/internal/business/app/business_service.go:130` |
-| `BUSINESS_NOT_FOUND` | `backend/internal/business/app/business_service.go:140` |
-| `BUSINESS_NOT_FOUND` | `backend/internal/business/app/business_service.go:84` |
-| `BUSINESS_NOT_FOUND` | `backend/internal/queue/app/queue_service.go:156` |
-| `BUSINESS_OPERATIONAL_TIME_REQUIRED` | `backend/internal/business/app/business_service.go:125` |
-| `BUSINESS_OPERATIONAL_TIME_REQUIRED` | `backend/internal/business/app/business_service.go:43` |
-| `BUSINESS_PHONE_NUMBER_REQUIRED` | `backend/internal/business/app/business_service.go:120` |
-| `BUSINESS_PHONE_NUMBER_REQUIRED` | `backend/internal/business/app/business_service.go:49` |
-| `BUSINESS_PLAN_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:280` |
-| `BUSINESS_PLAN_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:307` |
-| `BUSINESS_QUEUE_FULL` | `backend/internal/queue/app/queue_service.go:253` |
-| `CACHE_GUEST_QUEUE_USER_ERROR` | `backend/internal/queue/app/queue_service.go:226` |
-| `CACHE_QUEUE_ERROR` | `backend/internal/queue/app/queue_service.go:306` |
-| `CALL_NEXT_QUEUE_ERROR` | `backend/internal/counter/app/counter_service.go:250` |
-| `CANCEL_QUEUE_CACHE_ERROR` | `backend/internal/queue/app/queue_service.go:382` |
-| `CANCEL_QUEUE_ERROR` | `backend/internal/queue/app/queue_service.go:379` |
-| `COUNTER_BUSINESS_MISMATCH` | `backend/internal/counter/app/counter_service.go:209` |
-| `COUNTER_NAME_REQUIRED` | `backend/internal/counter/app/counter_service.go:63` |
-| `COUNTER_NAME_REQUIRED` | `backend/internal/counter/app/counter_service.go:87` |
-| `COUNTER_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:101` |
-| `COUNTER_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:142` |
-| `COUNTER_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:156` |
-| `COUNTER_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:369` |
-| `COUNTER_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:77` |
-| `COUNTER_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:91` |
-| `COUNTER_QUEUE_BUSINESS_MISMATCH` | `backend/internal/counter/app/counter_service.go:127` |
-| `CREATE_BUSINESS_ERROR` | `backend/internal/business/app/business_service.go:54` |
-| `CREATE_BUSINESS_OWNER_ERROR` | `backend/internal/business/app/business_service.go:71` |
-| `CREATE_COUNTER_ERROR` | `backend/internal/counter/app/counter_service.go:68` |
-| `CREATE_GUEST_TOKEN_ERROR` | `backend/internal/queue/inbound/http/queue_handler.go:164` |
-| `CREATE_QUEUE_TOKEN_ERROR` | `backend/internal/queue/inbound/http/queue_handler.go:156` |
-| `CREATE_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:85` |
-| `DEACTIVATE_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:165` |
-| `DECREASE_BUSINESS_CAPACITY_ERROR` | `backend/internal/subscription/app/subscription_service.go:282` |
-| `DECREASE_USER_SLOT_ERROR` | `backend/internal/subscription/app/subscription_service.go:252` |
-| `DELETE_BUSINESS_ERROR` | `backend/internal/business/app/business_service.go:142` |
-| `DELETE_COUNTER_ERROR` | `backend/internal/counter/app/counter_service.go:371` |
-| `DELETE_QUEUE_ERROR` | `backend/internal/queue/app/queue_service.go:421` |
-| `DELETE_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:175` |
-| `GENERATE_QUEUE_NAME_ERROR` | `backend/internal/queue/app/queue_service.go:279` |
-| `GET_ACTIVE_QUEUE_ERROR` | `backend/internal/queue/app/queue_service.go:244` |
-| `GET_ALL_BUSINESS` | `backend/internal/business/app/business_service.go:165` |
-| `GET_ALL_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:30` |
-| `GET_BUSINESS_ERROR` | `backend/internal/business/app/business_service.go:86` |
-| `GET_BUSINESS_QUEUES_ERROR` | `backend/internal/queue/app/queue_service.go:341` |
-| `GET_BUSINESS_SUBSCRIPTION_INFO_ERROR` | `backend/internal/subscription/app/subscription_service.go:189` |
-| `GET_COUNTER_ERROR` | `backend/internal/counter/app/counter_service.go:79` |
-| `GET_QUEUE_ERROR` | `backend/internal/counter/app/counter_service.go:123` |
-| `GET_QUEUE_ERROR` | `backend/internal/counter/app/counter_service.go:178` |
-| `GET_QUEUE_ERROR` | `backend/internal/queue/app/queue_service.go:325` |
-| `GET_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:116` |
-| `GET_USER_SUBSCRIPTION_INFO_ERROR` | `backend/internal/subscription/app/subscription_service.go:203` |
-| `INCREASE_BUSINESS_CAPACITY_ERROR` | `backend/internal/subscription/app/subscription_service.go:309` |
-| `INTERNAL_ERROR` | `backend/internal/adapter/http/error_writer.go:18` |
-| `INTERNAL_SERVER_ERROR` | `backend/internal/user/app/user_service.go:100` |
-| `INTERNAL_SERVER_ERROR` | `backend/internal/user/app/user_service.go:111` |
-| `INTERNAL_SERVER_ERROR` | `backend/internal/user/app/user_service.go:67` |
-| `INTERNAL_SERVER_ERROR` | `backend/internal/user/app/user_service.go:84` |
-| `INTERNAL_SERVER` | `backend/internal/user/app/user_service.go:128` |
-| `INTERNAL_SERVER` | `backend/internal/user/app/user_service.go:61` |
-| `INVALID_BUSINESS_ID` | `backend/internal/business/inbound/http/business_handler.go:109` |
-| `INVALID_BUSINESS_ID` | `backend/internal/business/inbound/http/business_handler.go:155` |
-| `INVALID_BUSINESS_ID` | `backend/internal/business/inbound/http/business_handler.go:72` |
-| `INVALID_BUSINESS_ID` | `backend/internal/counter/inbound/http/counter_handler.go:137` |
-| `INVALID_BUSINESS_ID` | `backend/internal/counter/inbound/http/counter_handler.go:31` |
-| `INVALID_BUSINESS_ID` | `backend/internal/queue/inbound/http/queue_handler.go:122` |
-| `INVALID_BUSINESS_ID` | `backend/internal/queue/inbound/http/queue_handler.go:181` |
-| `INVALID_BUSINESS_ID` | `backend/internal/queue/inbound/http/queue_handler.go:245` |
-| `INVALID_BUSINESS_ID` | `backend/internal/queue/inbound/http/queue_handler.go:30` |
-| `INVALID_BUSINESS_ID` | `backend/internal/queue/inbound/http/queue_handler.go:98` |
-| `INVALID_BUSINESS_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:131` |
-| `INVALID_BUSINESS_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:166` |
-| `INVALID_BUSINESS_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:196` |
-| `INVALID_BUSINESS_PLAN_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:64` |
-| `INVALID_BUSINESS_PLAN_TYPE` | `backend/internal/subscription/app/subscription_service.go:65` |
-| `INVALID_CLOSE_TIME` | `backend/internal/business/inbound/http/business_handler.go:135` |
-| `INVALID_CLOSE_TIME` | `backend/internal/business/inbound/http/business_handler.go:38` |
-| `INVALID_COUNTER_ID` | `backend/internal/counter/inbound/http/counter_handler.go:133` |
-| `INVALID_COUNTER_ID` | `backend/internal/counter/inbound/http/counter_handler.go:198` |
-| `INVALID_COUNTER_ID` | `backend/internal/counter/inbound/http/counter_handler.go:210` |
-| `INVALID_COUNTER_ID` | `backend/internal/counter/inbound/http/counter_handler.go:59` |
-| `INVALID_COUNTER_ID` | `backend/internal/counter/inbound/http/counter_handler.go:74` |
-| `INVALID_CREDENTIALS` | `backend/internal/user/app/user_service.go:82` |
-| `INVALID_CREDENTIALS` | `backend/internal/user/app/user_service.go:88` |
-| `INVALID_EMPLOYEE_ID` | `backend/internal/counter/inbound/http/counter_handler.go:102` |
-| `INVALID_EMPLOYEE_ID` | `backend/internal/counter/inbound/http/counter_handler.go:35` |
-| `INVALID_END_DATE` | `backend/internal/subscription/inbound/http/subscription_handler.go:99` |
-| `INVALID_FORMAT` | `backend/internal/business/inbound/http/business_handler.go:116` |
-| `INVALID_FORMAT` | `backend/internal/business/inbound/http/business_handler.go:30` |
-| `INVALID_FORMAT` | `backend/internal/counter/inbound/http/counter_handler.go:27` |
-| `INVALID_FORMAT` | `backend/internal/counter/inbound/http/counter_handler.go:81` |
-| `INVALID_FORMAT` | `backend/internal/queue/inbound/http/queue_handler.go:137` |
-| `INVALID_FORMAT` | `backend/internal/queue/inbound/http/queue_handler.go:176` |
-| `INVALID_FORMAT` | `backend/internal/queue/inbound/http/queue_handler.go:267` |
-| `INVALID_FORMAT` | `backend/internal/queue/inbound/http/queue_handler.go:310` |
-| `INVALID_FORMAT` | `backend/internal/subscription/inbound/http/subscription_handler.go:163` |
-| `INVALID_FORMAT` | `backend/internal/subscription/inbound/http/subscription_handler.go:185` |
-| `INVALID_FORMAT` | `backend/internal/subscription/inbound/http/subscription_handler.go:59` |
-| `INVALID_FORMAT` | `backend/internal/subscription/inbound/http/subscription_handler.go:92` |
-| `INVALID_FORMAT` | `backend/internal/user/inbound/http/user_handler.go:131` |
-| `INVALID_FORMAT` | `backend/internal/user/inbound/http/user_handler.go:29` |
-| `INVALID_FORMAT` | `backend/internal/user/inbound/http/user_handler.go:72` |
-| `INVALID_OPEN_TIME` | `backend/internal/business/inbound/http/business_handler.go:128` |
-| `INVALID_OPEN_TIME` | `backend/internal/business/inbound/http/business_handler.go:34` |
-| `INVALID_OWNER_ID` | `backend/internal/business/inbound/http/business_handler.go:47` |
-| `INVALID_PHONE_NUMBER` | `backend/internal/queue/app/queue_service.go:143` |
-| `INVALID_PRIORITY_QUOTA` | `backend/internal/queue/app/queue_service.go:259` |
-| `INVALID_QUEUE_CACHE_ID` | `backend/internal/counter/app/counter_service.go:233` |
-| `INVALID_QUEUE_CACHE_ID` | `backend/internal/counter/app/counter_service.go:238` |
-| `INVALID_QUEUE_ID` | `backend/internal/counter/inbound/http/counter_handler.go:118` |
-| `INVALID_QUEUE_ID` | `backend/internal/counter/inbound/http/counter_handler.go:202` |
-| `INVALID_QUEUE_ID` | `backend/internal/counter/inbound/http/counter_handler.go:39` |
-| `INVALID_QUEUE_ID` | `backend/internal/queue/inbound/http/queue_handler.go:215` |
-| `INVALID_QUEUE_ID` | `backend/internal/queue/inbound/http/queue_handler.go:230` |
-| `INVALID_QUEUE_ID` | `backend/internal/queue/inbound/http/queue_handler.go:260` |
-| `INVALID_QUEUE_ID` | `backend/internal/queue/inbound/http/queue_handler.go:303` |
-| `INVALID_QUEUE_ID` | `backend/internal/queue/inbound/http/queue_handler.go:328` |
-| `INVALID_QUEUE_ID` | `backend/internal/queue/inbound/http/queue_handler.go:342` |
-| `INVALID_QUEUE_STATE` | `backend/internal/queue/inbound/http/queue_handler.go:379` |
-| `INVALID_SLOT_AMOUNT` | `backend/internal/subscription/app/subscription_service.go:227` |
-| `INVALID_START_DATE` | `backend/internal/subscription/inbound/http/subscription_handler.go:95` |
-| `INVALID_SUBSCRIPTION_END_TIME` | `backend/internal/subscription/app/subscription_service.go:139` |
-| `INVALID_SUBSCRIPTION_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:119` |
-| `INVALID_SUBSCRIPTION_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:208` |
-| `INVALID_SUBSCRIPTION_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:40` |
-| `INVALID_SUBSCRIPTION_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:53` |
-| `INVALID_SUBSCRIPTION_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:86` |
-| `INVALID_SUBSCRIPTION_STATUS` | `backend/internal/subscription/app/subscription_service.go:49` |
-| `INVALID_SUBSCRIPTION_TYPE` | `backend/internal/subscription/app/subscription_service.go:41` |
-| `INVALID_USER_ID` | `backend/internal/queue/inbound/http/queue_handler.go:130` |
-| `INVALID_USER_ID` | `backend/internal/queue/inbound/http/queue_handler.go:187` |
-| `INVALID_USER_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:144` |
-| `INVALID_USER_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:157` |
-| `INVALID_USER_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:179` |
-| `INVALID_USER_ID` | `backend/internal/user/inbound/http/user_handler.go:109` |
-| `INVALID_USER_ID` | `backend/internal/user/inbound/http/user_handler.go:124` |
-| `INVALID_USER_PLAN_ID` | `backend/internal/subscription/inbound/http/subscription_handler.go:72` |
-| `INVALID_USER_PLAN_TYPE` | `backend/internal/subscription/app/subscription_service.go:77` |
-| `NO_BUSINESS_FIELDS` | `backend/internal/business/inbound/http/business_handler.go:142` |
-| `NO_COUNTER_FIELDS` | `backend/internal/counter/inbound/http/counter_handler.go:85` |
-| `NO_PRIORITY_SLOT` | `backend/internal/subscription/app/subscription_service.go:263` |
-| `NO_QUEUE_FIELDS` | `backend/internal/queue/inbound/http/queue_handler.go:271` |
-| `NO_USER_FIELDS` | `backend/internal/user/inbound/http/user_handler.go:135` |
-| `PASSWORD_REQUIRED` | `backend/internal/user/app/user_service.go:53` |
-| `PASSWORD_REQUIRED` | `backend/internal/user/inbound/http/user_handler.go:42` |
-| `PASSWORD_REQUIRED` | `backend/internal/user/inbound/http/user_handler.go:82` |
-| `PHONE_ALREADY_REGISTERED` | `backend/internal/queue/app/queue_service.go:205` |
-| `PHONENUMBER_REQUIRED` | `backend/internal/user/app/user_service.go:56` |
-| `PHONENUMBER_REQUIRED` | `backend/internal/user/inbound/http/user_handler.go:46` |
-| `POP_TOP_QUEUE_ERROR` | `backend/internal/counter/app/counter_service.go:225` |
-| `PUBLISH_MESSAGE_ERROR` | `backend/internal/queue/app/queue_service.go:312` |
-| `QUEUE_COUNTER_MISMATCH` | `backend/internal/counter/app/counter_service.go:182` |
-| `QUEUE_COUNTER_MISMATCH` | `backend/internal/counter/app/counter_service.go:272` |
-| `QUEUE_COUNTER_MISMATCH` | `backend/internal/counter/app/counter_service.go:300` |
-| `QUEUE_FULL` | `backend/internal/subscription/app/subscription_service.go:293` |
-| `QUEUE_INVALID_STATE` | `backend/internal/counter/app/counter_service.go:303` |
-| `QUEUE_NAME_REQUIRED` | `backend/internal/queue/app/queue_service.go:394` |
-| `QUEUE_NOT_CALLED` | `backend/internal/counter/app/counter_service.go:269` |
-| `QUEUE_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:121` |
-| `QUEUE_NOT_FOUND` | `backend/internal/counter/app/counter_service.go:176` |
-| `QUEUE_NOT_FOUND` | `backend/internal/queue/app/queue_service.go:323` |
-| `QUEUE_NOT_FOUND` | `backend/internal/queue/app/queue_service.go:401` |
-| `QUEUE_NOT_FOUND` | `backend/internal/queue/app/queue_service.go:419` |
-| `QUEUE_NOT_READY` | `backend/internal/counter/app/counter_service.go:344` |
-| `QUEUE_OWNER_REQUIRED` | `backend/internal/queue/app/queue_service.go:238` |
-| `QUEUE_REPO_NOT_CONFIGURED` | `backend/internal/counter/app/counter_service.go:110` |
-| `QUEUE_REPO_NOT_CONFIGURED` | `backend/internal/counter/app/counter_service.go:165` |
-| `QUEUE_REPO_NOT_CONFIGURED` | `backend/internal/counter/app/counter_service.go:202` |
-| `QUEUE_REPO_NOT_CONFIGURED` | `backend/internal/counter/app/counter_service.go:262` |
-| `QUEUE_REPO_NOT_CONFIGURED` | `backend/internal/counter/app/counter_service.go:293` |
-| `REGISTER_QUEUE_STREAM_ERROR` | `backend/internal/queue/app/queue_service.go:300` |
-| `REMOVE_QUEUE_COUNTER_ERROR` | `backend/internal/counter/app/counter_service.go:189` |
-| `RESERVE_QUEUE_PHONE_ERROR` | `backend/internal/queue/app/queue_service.go:202` |
-| `SEARCH_FAILURE` | `backend/internal/business/app/business_service.go:150` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:114` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:127` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:143` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:153` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:163` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:173` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:187` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:201` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:231` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:247` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:277` |
-| `SUBSCRIPTION_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:304` |
-| `SUBSCRIPTION_PLAN_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:123` |
-| `SUBSCRIPTION_START_TIME_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:136` |
-| `SUBSCRIPTION_TYPE_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:38` |
-| `UPDATE_BUSINESS_ERROR` | `backend/internal/business/app/business_service.go:132` |
-| `UPDATE_COUNTER_CUSTOMER_ERROR` | `backend/internal/counter/app/counter_service.go:144` |
-| `UPDATE_COUNTER_CUSTOMER_ERROR` | `backend/internal/counter/app/counter_service.go:158` |
-| `UPDATE_COUNTER_CUSTOMER_QUEUE_ERROR` | `backend/internal/counter/app/counter_service.go:137` |
-| `UPDATE_COUNTER_EMPLOYEE_ERROR` | `backend/internal/counter/app/counter_service.go:103` |
-| `UPDATE_COUNTER_ERROR` | `backend/internal/counter/app/counter_service.go:93` |
-| `UPDATE_ERROR` | `backend/internal/user/app/user_service.go:137` |
-| `UPDATE_QUEUE_CACHE_ERROR` | `backend/internal/queue/app/queue_service.go:406` |
-| `UPDATE_QUEUE_ERROR` | `backend/internal/queue/app/queue_service.go:403` |
-| `UPDATE_QUEUE_STATE_CACHE_ERROR` | `backend/internal/queue/app/queue_service.go:356` |
-| `UPDATE_QUEUE_STATE_ERROR` | `backend/internal/queue/app/queue_service.go:353` |
-| `UPDATE_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:129` |
-| `UPDATE_SUBSCRIPTION_TIME_ERROR` | `backend/internal/subscription/app/subscription_service.go:145` |
-| `USE_USER_SUBSCRIPTION_ERROR` | `backend/internal/subscription/app/subscription_service.go:217` |
-| `USER_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:196` |
-| `USER_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:210` |
-| `USER_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:224` |
-| `USER_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:243` |
-| `USER_ID_REQUIRED` | `backend/internal/subscription/app/subscription_service.go:71` |
-| `USER_LOOKUP_NOT_CONFIGURED` | `backend/internal/queue/app/queue_service.go:177` |
-| `USER_NOT_FOUND` | `backend/internal/queue/app/queue_service.go:181` |
-| `USER_NOT_FOUND` | `backend/internal/user/app/user_service.go:109` |
-| `USER_NOT_FOUND` | `backend/internal/user/app/user_service.go:135` |
-| `USER_NOT_FOUND` | `backend/internal/user/app/user_service.go:98` |
-| `USER_PLAN_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:234` |
-| `USER_PLAN_NOT_FOUND` | `backend/internal/subscription/app/subscription_service.go:250` |
-| `USERNAME_REQUIRED` | `backend/internal/queue/app/queue_service.go:188` |
-| `USERNAME_REQUIRED` | `backend/internal/user/app/user_service.go:50` |
-| `USERNAME_REQUIRED` | `backend/internal/user/inbound/http/user_handler.go:38` |
-| `USERNAME_REQUIRED` | `backend/internal/user/inbound/http/user_handler.go:78` |
+| Invalid input | 400 |
+| Unauthorized | 401 |
+| Forbidden | 403 |
+| Not found | 404 |
+| Conflict | 409 |
+| Not implemented | 501 |
+| Internal or unclassified | 500 |
+
+Internal errors use the public message `internal server error`. Error codes alone do not determine the status: handlers and services select the error kind for each operation.
+
+## Common failures
+
+| Codes | Meaning and handling |
+| --- | --- |
+| `INVALID_FORMAT`, `INVALID_PHONE_NUMBER`, `INVALID_EMAIL`, `INVALID_PASSWORD` | Correct the submitted fields. Phone validation accepts Indonesian mobile numbers. |
+| `INVALID_CREDENTIALS` | Ask the user to check their login details. |
+| `UNAUTHORIZED` | Authentication is required. Distinguish account access from guest or queue-cookie access. |
+| `BUSINESS_ACCESS_DENIED` | The account lacks the required business permission. |
+| `BUSINESS_NOT_FOUND`, `QUEUE_NOT_FOUND`, `COUNTER_NOT_FOUND` | The requested resource is unavailable. |
+| `ACTIVE_QUEUE_EXISTS`, `PHONE_ALREADY_REGISTERED` | An active ticket already exists for the account or phone number. |
+| `BUSINESS_UNAVAILABLE`, `BUSINESS_QUEUE_FULL` | Queue admission is currently unavailable. |
+| `COUNTER_STATE_CHANGED` | Refresh counter state before another action. |
+| `SUBSCRIPTION_ADMIN_REQUIRED` | Account sessions cannot administer subscriptions or quotas. |
+
+Frontend-only failures include `CLIENT_NETWORK_ERROR`, `CLIENT_TIMEOUT` and `CLIENT_INVALID_RESPONSE`. A failed or malformed mutation response can be ambiguous; check the current state before submitting again. Requests are not retried automatically.
+
+## Source references
+
+The current implementation is authoritative for operation-specific codes and permissions:
+
+- [Error kinds](../../backend/internal/apperror/error.go), [status mapping](../../backend/internal/adapter/http/error_mapper.go) and [response writer](../../backend/internal/adapter/http/error_writer.go).
+- [Route registration](../../backend/internal/bootstrap/routes.go), [business and counter permissions](../../backend/internal/operations/http.go) and [subscription account routes](../../backend/internal/subscription/inbound/http/account_routes.go).
+- [Frontend error normalization](../src/api/errors.ts) and [response validation](../src/api/responseSchema.ts).

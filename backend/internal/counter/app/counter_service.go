@@ -247,18 +247,26 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 	if err != nil {
 		return nil, s.restoreWaitingQueueAfterFailure(ctx, *queueItem, err)
 	}
+	if next.BusinessID != businessID || next.State != queuedomain.QueueStateWaiting {
+		// A stale/mis-scoped entry must never resurrect or disclose this queue.
+		return nil, apperror.New(apperror.KindConflict, "QUEUE_STATE_CHANGED", "waiting queue state changed; refresh before calling again")
+	}
 	previous := *next
 	next.State = queuedomain.QueueStateCalled
 	next.CalledByCounterID = &counterID
 	next.CalledAt = nowPtr()
-	if err := s.queueRepo.UpdateQueue(ctx, next); err != nil {
+	if err := s.queueRepo.UpdateQueueIfState(ctx, next, queuedomain.QueueStateWaiting); err != nil {
+		var appErr *apperror.Error
+		if errors.As(err, &appErr) && appErr.Code == "QUEUE_STATE_CHANGED" {
+			return nil, err
+		}
 		return nil, s.restoreWaitingQueueAfterFailure(ctx, *queueItem, apperror.Wrap(apperror.KindInternal, "CALL_NEXT_QUEUE_ERROR", "failed to call next queue", err))
 	}
 	if err := s.repo.UpdateCounterCustomer(ctx, counterID, &next.ID); err != nil {
 		// Restore the waiting state before making this item selectable again.
 		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if rollbackErr := s.queueRepo.UpdateQueue(recoveryCtx, &previous); rollbackErr != nil {
+		if rollbackErr := s.queueRepo.UpdateQueueIfState(recoveryCtx, &previous, queuedomain.QueueStateCalled); rollbackErr != nil {
 			return nil, errors.Join(err, rollbackErr)
 		}
 		return nil, s.restoreWaitingQueueAfterFailure(recoveryCtx, *queueItem, err)

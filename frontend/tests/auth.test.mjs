@@ -18,7 +18,7 @@ test('login required validation and safe invalid-credential messages', () => {
   assert.doesNotMatch(authErrorMessage(new Error('secret')), /secret/);
 });
 test('registration checks matching passwords, phone and optional email without a minimum length', () => {
-  const fields = { ...empty, ...credentials, phonenumber: '08', confirmPassword: 'different' };
+  const fields = { ...empty, ...credentials, phonenumber: '081234567890', confirmPassword: 'different' };
   assert.equal(validateAuth(fields, true).confirmPassword, 'Passwords must match.');
   assert.deepEqual(validateAuth({ ...fields, password: 'a', confirmPassword: 'a' }, true), {});
   assert.ok(validateAuth({ ...fields, email: 'invalid', phonenumber: '' }, true).email);
@@ -81,7 +81,7 @@ test('stale bootstrap cannot overwrite login and duplicate mutations are blocked
 test('real API services use cookie client, exact paths, and exact request bodies', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async (url, init) => { calls.push({ url, ...init }); return Response.json(url.endsWith('/me') ? user : { message: 'ok' }); };
+  globalThis.fetch = async (url, init) => { calls.push({ url, ...init }); return Response.json(url.endsWith('/me') || url.endsWith('/users/') ? user : { message: 'ok' }); };
   try {
     const api = await vite.ssrLoadModule('/src/api/auth.ts');
     await api.registerUser({ ...credentials, phonenumber: '08' });

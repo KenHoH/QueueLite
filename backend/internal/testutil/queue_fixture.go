@@ -100,6 +100,17 @@ func (f *QueueFixture) UpdateQueue(_ context.Context, q *queuedomain.Queue) erro
 	f.Queues[q.ID] = *q
 	return nil
 }
+
+func (f *QueueFixture) UpdateQueueIfState(_ context.Context, q *queuedomain.Queue, expected queuedomain.QueueState) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	stored, ok := f.Queues[q.ID]
+	if !ok || stored.State != expected {
+		return apperror.New(apperror.KindConflict, "QUEUE_STATE_CHANGED", "queue state changed")
+	}
+	f.Queues[q.ID] = *q
+	return nil
+}
 func (f *QueueFixture) DeleteQueue(_ context.Context, id uuid.UUID) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

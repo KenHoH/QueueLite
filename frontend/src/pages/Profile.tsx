@@ -42,7 +42,7 @@ function ProfileContent({ user }: { user: User }) {
       if (kind === 'contact') await refreshUser(true);
     } catch (failure) {
       setError(accountError(failure));
-      if (failure instanceof APIError && failure.status === 401) void refreshUser().catch(() => {});
+      if (failure instanceof APIError && failure.status === 401) void refreshUser(true).catch(() => {});
     } finally { lock.current = false; setBusy(null); }
   }
   return <div className="ql-stack">
@@ -59,6 +59,6 @@ function ProfileContent({ user }: { user: User }) {
     </form></Card>
     {error && <InlineError>{error}</InlineError>}{message && <p role="status">{message}</p>}
     <UserSubscriptionSummary userId={user.id} /><Link to="/plans">Plans &amp; Subscription →</Link>
-    <Card><h2>Your businesses</h2>{businessesStatus === 'error' ? <><InlineError>We couldn’t load your businesses.</InlineError><Button onClick={() => refreshBusinesses()}>Try again</Button></> : businessesStatus === 'loading' ? <p role="status">Loading your businesses…</p> : businesses.some(canManage) ? <p><Link to="/business/manage">Manage business →</Link></p> : <p className="ql-muted">{businesses.length ? 'Your staff access will be available in a later stage.' : 'You don’t own or manage a business yet.'}</p>}<Link to="/business/create">Create a business</Link></Card>
+    <Card><h2>Your businesses</h2>{businessesStatus === 'error' ? <><InlineError>We couldn’t load your businesses.</InlineError><Button onClick={() => refreshBusinesses()}>Try again</Button></> : businessesStatus === 'loading' ? <p role="status">Loading your businesses…</p> : businesses.length ? <p><Link to="/business/manage">{businesses.some(canManage) ? 'Manage business →' : 'Open your assigned business →'}</Link></p> : <p className="ql-muted">You don’t own or manage a business yet.</p>}<Link to="/business/create">Create a business</Link></Card>
   </div>;
 }

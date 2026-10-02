@@ -1,7 +1,7 @@
 import { APIError } from '../api/errors';
 import type { Business, BusinessMembership } from '../api/types';
 
-export const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+export const validEmail = (value: string) => /^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(value.trim());
 export const validPhone = (value: string) => /^\+?\d{8,15}$/.test(value.replace(/[\s().-]/g, ''));
 export function validateProfile(fields: { phonenumber: string; email: string }) {
   const errors: Partial<Record<'phonenumber' | 'email', string>> = {};

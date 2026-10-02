@@ -40,7 +40,7 @@ function Ticket({ queueId }: { queueId: string }) {
     return () => controller.abort();
   }, [queue?.calledByCounterId, queue?.businessId]);
   async function cancel() {
-    if (submitting.current || !confirm || !queue || !isActiveQueue(queue.state)) return;
+    if (submitting.current || !confirm || !queue || queue.state !== 'waiting') return;
     submitting.current = true; setBusy(true); setCancelError('');
     const controller = new AbortController(); mutation.current = controller;
     try {
@@ -62,7 +62,7 @@ function Ticket({ queueId }: { queueId: string }) {
         </>}
         {error && <><InlineError>{ticketErrorMessage(error)}</InlineError><Button variant="secondary" onClick={refresh}>Refresh ticket</Button></>}
         {cancelError && <InlineError>{cancelError}</InlineError>}
-        {queue && state && isActiveQueue(state) && !error && <div className="ql-ticket-actions">{confirm ? <div ref={confirmRef} tabIndex={-1} role="group" aria-label="Confirm leaving queue"><h2>Leave this queue?</h2><p>Your place will be released. You can join again later.</p><div className="ql-actions"><Button variant="secondary" disabled={busy} onClick={() => { setConfirm(false); setCancelError(''); }}>Keep my place</Button><Button variant="danger" loading={busy} onClick={() => { void cancel(); }}>Confirm leave</Button></div></div> : <Button variant="secondary" onClick={() => setConfirm(true)}>Leave queue</Button>}</div>}
+        {queue && state === 'waiting' && !error && <div className="ql-ticket-actions">{confirm ? <div ref={confirmRef} tabIndex={-1} role="group" aria-label="Confirm leaving queue"><h2>Leave this queue?</h2><p>Your place will be released. You can join again later.</p><div className="ql-actions"><Button variant="secondary" disabled={busy} onClick={() => { setConfirm(false); setCancelError(''); }}>Keep my place</Button><Button variant="danger" loading={busy} onClick={() => { void cancel(); }}>Confirm leave</Button></div></div> : <Button variant="secondary" onClick={() => setConfirm(true)}>Leave queue</Button>}</div>}
       </>}
     </Card>
   </PageContainer>;

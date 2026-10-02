@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"QueueLite/internal/adapter/postgres/model"
+	"QueueLite/internal/apperror"
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
 	"context"
@@ -47,7 +48,19 @@ func (r *QueueRepoImpl) CreateQueues(ctx context.Context, queues []domain.Queue)
 }
 
 func (r *QueueRepoImpl) UpdateQueue(ctx context.Context, queue *domain.Queue) error {
-	result := r.db.WithContext(ctx).Model(&model.Queue{}).Where("id = ?", queue.ID).Updates(map[string]any{
+	return r.updateQueue(ctx, queue, nil)
+}
+
+func (r *QueueRepoImpl) UpdateQueueIfState(ctx context.Context, queue *domain.Queue, expected domain.QueueState) error {
+	return r.updateQueue(ctx, queue, &expected)
+}
+
+func (r *QueueRepoImpl) updateQueue(ctx context.Context, queue *domain.Queue, expected *domain.QueueState) error {
+	query := r.db.WithContext(ctx).Model(&model.Queue{}).Where("id = ?", queue.ID)
+	if expected != nil {
+		query = query.Where("state = ?", model.QueueState(*expected))
+	}
+	result := query.Updates(map[string]any{
 		"business_id":          queue.BusinessID,
 		"user_id":              queue.UserID,
 		"called_by_counter_id": queue.CalledByCounterID,
@@ -63,6 +76,9 @@ func (r *QueueRepoImpl) UpdateQueue(ctx context.Context, queue *domain.Queue) er
 		return fmt.Errorf("update queue: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
+		if expected != nil {
+			return apperror.New(apperror.KindConflict, "QUEUE_STATE_CHANGED", "queue state changed")
+		}
 		return fmt.Errorf("%w: %s", app.ErrQueueNotFound, queue.ID)
 	}
 	return nil

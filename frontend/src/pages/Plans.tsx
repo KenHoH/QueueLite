@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { BusinessNavigation } from '../components/BusinessNavigation';
+import { EmptyState, LoadingSkeleton } from '../components/foundation';
 import { getBusinessSubscription, getUserSubscription } from '../api/subscriptions';
 import type { Subscription } from '../api/types';
 import { AccountAccess } from '../components/AccountAccess';
@@ -30,12 +32,16 @@ export default function Plans() {
   return <PageContainer className="ql-account-page"><h1>Plans &amp; Subscription</h1><AccountAccess>{auth.status === 'authenticated' && <PlansContent key={auth.user.id} userId={auth.user.id} />}</AccountAccess></PageContainer>;
 }
 function PlansContent({ userId }: { userId: string }) {
-  const { businesses, selectedBusinessId } = useAppState();
+  const { businessId } = useParams();
+  const { businesses, businessesStatus, refreshBusinesses, selectedBusinessId } = useAppState();
   const managers = businesses.filter(canManage);
-  const selected = managers.find(item => item.id === selectedBusinessId) ?? managers[0];
+  const selected = businessId ? managers.find(item => item.id === businessId) : managers.find(item => item.id === selectedBusinessId) ?? managers[0];
+  if (businessId && businessesStatus === 'loading') return <LoadingSkeleton label="Checking business access" />;
+  if (businessId && businessesStatus === 'error') return <Card><p>We couldn’t check business access.</p><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>;
+  if (businessId && !selected) return <EmptyState title="Permission required" description="Owner or admin access is required to view business plans." />;
   return <div className="ql-stack"><UserSubscriptionSummary userId={userId} />
     <Card><h2>Customer plans</h2><p>Standard · Premium</p><p className="ql-muted">Plan changes and payments are coming later. Upgrades are currently unavailable.</p><Button disabled>Upgrade — coming later</Button></Card>
-    <BusinessSelector />{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}
+    {businessId ? <BusinessNavigation businessId={businessId} /> : <BusinessSelector />}{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}
     <Card><h2>Business plans</h2><p>Free · Plus · Pro · Max</p><p className="ql-muted">Choose a business above to see its current subscription. Plan changes and payments are coming later.</p><Button disabled>Change plan — coming later</Button></Card><Link to="/profile">Back to profile</Link>
   </div>;
 }

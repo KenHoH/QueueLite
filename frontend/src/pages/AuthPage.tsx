@@ -55,7 +55,7 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
       {error && <div ref={errorRef} tabIndex={-1}><InlineError>{error}</InlineError>{created && <Link to="/login">Continue to sign in</Link>}</div>}
       <Button type="submit" loading={busy} disabled={created}>{busy ? (registering ? 'Creating account…' : 'Signing in…') : (registering ? 'Create account' : 'Sign in')}</Button>
     </form>
-    <p className="ql-auth-switch">{registering ? 'Already have an account? ' : 'Don’t have an account? '}<Link to={registering ? '/login' : '/register'}>{registering ? 'Sign in' : 'Create one'}</Link></p>
+    <p className="ql-auth-switch">{registering ? 'Already have an account? ' : 'Don’t have an account? '}<Link to={`${registering ? '/login' : '/register'}?returnTo=${encodeURIComponent(returnTo)}`}>{registering ? 'Sign in' : 'Create one'}</Link></p>
     <div className="ql-auth-guest"><Link to="/">Continue as guest</Link></div>
   </Card></PageContainer>;
 }

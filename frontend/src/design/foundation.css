@@ -119,6 +119,15 @@ h2 { font-size: var(--ql-section); line-height: 1.4; }
 .ql-queue-card .ql-queue-number { font-size: 2.5rem; }
 .ql-queue-card .ql-meta { margin-top: var(--ql-space-6); color: var(--ql-action); }
 .ql-account-page { max-width: 46rem; }
+.ql-business-nav { display: flex; flex-wrap: wrap; gap: var(--ql-space-6); padding-block: var(--ql-space-3); }
+.ql-business-nav a.active { font-weight: 600; }
+.ql-operation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ql-space-4); }
+.ql-counter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ql-space-4); }
+.ql-operations-page .ql-card { min-width: 0; overflow-wrap: anywhere; }
+.ql-operational-list { list-style: none; margin: 0; padding: 0; }
+.ql-operational-list li { padding-block: var(--ql-space-3); border-top: 1px solid var(--ql-border); }
+.ql-priority { background: var(--ql-background); color: var(--ql-text-secondary); }
+@media (max-width: 640px) { .ql-operation-grid, .ql-counter-grid { grid-template-columns: minmax(0, 1fr); } }
 .ql-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ql-space-4); }
 .ql-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--ql-space-2) var(--ql-space-4); }
 .ql-summary dt { color: var(--ql-text-secondary); }

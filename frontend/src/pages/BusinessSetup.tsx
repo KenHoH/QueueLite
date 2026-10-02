@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createBusiness, getBusiness, updateBusiness } from '../api/businesses';
 import { APIError } from '../api/errors';
 import { AccountAccess } from '../components/AccountAccess';
+import { BusinessNavigation } from '../components/BusinessNavigation';
 import { Button, Card, InlineError, Input, LoadingSkeleton, PageContainer } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { accountError, canManage, emptyBusiness, validateBusiness, type BusinessFields } from './accountForms';
@@ -21,7 +22,7 @@ function SettingsAccess({ businessId }: { businessId: string }) {
   if (businessesStatus === 'loading') return <LoadingSkeleton label="Checking business access" />;
   if (businessesStatus === 'error') return <Card><InlineError>We couldn’t check your business access.</InlineError><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>;
   if (!businesses.some(item => item.id === businessId && canManage(item))) return <Card><h2>Permission required</h2><InlineError>You do not have permission to manage this business. Owner or admin access is required.</InlineError><Link to="/business/manage">Your businesses</Link></Card>;
-  return <SettingsContent businessId={businessId} />;
+  return <div className="ql-stack"><BusinessNavigation businessId={businessId} /><SettingsContent businessId={businessId} /></div>;
 }
 function SettingsContent({ businessId }: { businessId: string }) {
   const load = useCallback((signal: AbortSignal) => getBusiness(businessId, { signal }), [businessId]);
@@ -63,7 +64,7 @@ function BusinessForm({ businessId, initial }: { businessId?: string; initial: B
         setUncertain(true); refreshBusinesses();
         setError('We couldn’t confirm whether setup completed. Check your businesses before creating another business.');
       } else setError(accountError(failure));
-      if (failure instanceof APIError && failure.status === 401) void refreshUser().catch(() => {});
+      if (failure instanceof APIError && failure.status === 401) void refreshUser(true).catch(() => {});
     } finally { lock.current = false; setBusy(false); }
   }
   return <Card><form className="ql-stack" noValidate aria-busy={busy} onSubmit={event => { void submit(event); }}>

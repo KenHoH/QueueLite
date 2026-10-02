@@ -2,8 +2,10 @@ package outbound
 
 import (
 	"QueueLite/internal/adapter/postgres/model"
+	"QueueLite/internal/apperror"
 	"QueueLite/internal/queue/domain"
 	"context"
+	"errors"
 	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -62,5 +64,41 @@ func TestQueueLifecycleMapsAndPersistsNullableColumns(t *testing.T) {
 	})
 	if err := NewQueueRepo(db).UpdateQueue(context.Background(), &q); err != nil || !checked {
 		t.Fatalf("persistence not exercised: %v", err)
+	}
+}
+
+func TestQueueStateUpdateUsesConditionalSQLAndReportsConflict(t *testing.T) {
+	db, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=localhost user=test dbname=test sslmode=disable"}), &gorm.Config{DisableAutomaticPing: true, DryRun: true, SkipDefaultTransaction: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool, _ := db.DB()
+	defer pool.Close()
+	q := domain.Queue{ID: uuid.New(), BusinessID: uuid.New(), Name: "A001", State: domain.QueueStateCalled}
+	affected := int64(1)
+	checked := false
+	db.Callback().Update().Replace("gorm:update", func(tx *gorm.DB) {
+		callbacks.Update(&callbacks.Config{})(tx)
+		sql := tx.Statement.SQL.String()
+		where := sql[strings.Index(sql, " WHERE "):]
+		if !strings.Contains(where, "id = $") || !strings.Contains(where, "state = $") {
+			t.Fatalf("update lacks both ownership and state predicates: %s", sql)
+		}
+		vars := tx.Statement.Vars
+		if !reflect.DeepEqual(vars[len(vars)-2], q.ID) || vars[len(vars)-1] != model.QueueStateWaiting {
+			t.Fatalf("wrong update predicates: %#v", vars)
+		}
+		tx.RowsAffected = affected
+		checked = true
+	})
+	repo := NewQueueRepo(db)
+	if err := repo.UpdateQueueIfState(context.Background(), &q, domain.QueueStateWaiting); err != nil || !checked {
+		t.Fatalf("conditional update not exercised: %v", err)
+	}
+	affected = 0
+	err = repo.UpdateQueueIfState(context.Background(), &q, domain.QueueStateWaiting)
+	var conflict *apperror.Error
+	if !errors.As(err, &conflict) || conflict.Code != "QUEUE_STATE_CHANGED" || conflict.Kind != apperror.KindConflict {
+		t.Fatalf("concurrent state change not reported: %v", err)
 	}
 }

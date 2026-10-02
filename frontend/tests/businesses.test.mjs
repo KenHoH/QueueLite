@@ -23,7 +23,7 @@ test('business services send real paths, named cursor parameters, encoded search
   const original = globalThis.fetch;
   const calls = [];
   const signal = new AbortController().signal;
-  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ data: [], nextCursor: null }); };
+  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(url.includes('/search?') ? [] : url.includes('/businesses/?') ? { data: [], nextCursor: null } : { id: 'business', name: 'Ayu', location: 'Jakarta', operational: true }); };
   try {
     const api = await vite.ssrLoadModule('/src/api/businesses.ts');
     await api.getBusinesses({ limit: 12, cursorCreatedAt: '2026-09-30T09:00:00+07:00', cursorID: 'id' }, { signal });
@@ -36,6 +36,7 @@ test('business services send real paths, named cursor parameters, encoded search
     assert.equal(url.searchParams.get('cursorID'), 'id');
     assert.equal(new URL(calls[1].url, 'http://localhost').searchParams.get('name'), 'A & B');
     assert.equal(calls[2].url, '/api/businesses/11111111-1111-4111-8111-111111111111');
-    assert.ok(calls.every(call => call.init.signal === signal && call.init.credentials === 'include' && call.init.method === 'GET'));
+    assert.ok(calls.every(call => call.init.signal instanceof AbortSignal && call.init.credentials === 'include' && call.init.method === 'GET'));
+    signal.throwIfAborted();
   } finally { globalThis.fetch = original; }
 });

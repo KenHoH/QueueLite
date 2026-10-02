@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { getQueue, getQueueState } from '../api/queues';
 import type { Queue } from '../api/types';
 import { isActiveQueue } from './queueDisplay';
+import { isBusinessId } from './businessDisplay';
+import { APIError } from '../api/errors';
 
 /** Serial reads: no overlapping polls, and all timers/requests belong to this mount. */
 export function useQueueTicket(queueId: string, paused: boolean) {
@@ -10,6 +12,7 @@ export function useQueueTicket(queueId: string, paused: boolean) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (paused) return;
+    if (!isBusinessId(queueId)) { setError(new APIError(400, 'INVALID_QUEUE_ID', 'Invalid ticket link.')); return; }
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let pending = false;

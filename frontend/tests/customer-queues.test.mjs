@@ -31,7 +31,7 @@ test('all wire states have distinct copy and terminal states are inactive', () =
 });
 test('My Queues and cancellation use credentials and the owned state transition', async () => {
   const original = globalThis.fetch, calls = [];
-  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json([]); };
+  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(init.method === 'GET' ? [] : { message: 'updated' }); };
   try {
     const api = await vite.ssrLoadModule('/src/api/queues.ts');
     await api.getMyQueues(); await api.updateQueueState('ticket', 'cancelled');

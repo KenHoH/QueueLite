@@ -43,7 +43,7 @@ test('only owner/admin can manage; errors retain safe account copy', async () =>
 });
 test('account APIs use context-only memberships, exact editable fields and read-only plan endpoints', async () => {
   const original = globalThis.fetch, calls = [];
-  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(url.endsWith('/mine') ? [] : { message: 'ok' }); };
+  globalThis.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(url.endsWith('/mine') ? [] : url.startsWith('/api/subscriptions/') ? { subscription: { type: url.includes('/users/') ? 'user' : 'business', status: 'active', startDate: '2026-10-01T00:00:00Z' }, userPlan: { userPlanType: 'standard', slots: 0 }, businessPlan: { businessPlanType: 'free', capacity: 50 } } : { message: 'ok' }); };
   try {
     const businesses = await vite.ssrLoadModule('/src/api/businesses.ts');
     const users = await vite.ssrLoadModule('/src/api/users.ts');

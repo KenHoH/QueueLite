@@ -5,6 +5,7 @@ import (
 	"QueueLite/internal/apperror"
 	subscriptionapp "QueueLite/internal/subscription/app"
 	"QueueLite/internal/user/domain"
+	"QueueLite/internal/validation"
 	"context"
 	"errors"
 	"strings"
@@ -49,11 +50,20 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	if user.Username == "" {
 		return nil, apperror.New(apperror.KindInvalid, "USERNAME_REQUIRED", "missing username")
 	}
-	if user.Password == "" {
+	if strings.TrimSpace(user.Password) == "" {
 		return nil, apperror.New(apperror.KindInvalid, "PASSWORD_REQUIRED", "missing password")
 	}
 	if user.PhoneNumber == "" {
 		return nil, apperror.New(apperror.KindInvalid, "PHONENUMBER_REQUIRED", "missing phonenumber")
+	}
+	if !validation.Phone(user.PhoneNumber) {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+	}
+	if user.Email != nil && *user.Email != "" && !validation.Email(*user.Email) {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
+	}
+	if len([]byte(user.Password)) > 72 {
+		return nil, apperror.New(apperror.KindInvalid, "PASSWORD_TOO_LONG", "password must be at most 72 bytes")
 	}
 
 	hashedPassword, err := hashPassword(user.Password)
@@ -112,6 +122,9 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain
 	}
 
 	if strings.TrimSpace(input.PhoneNumber) != "" {
+		if !validation.Phone(input.PhoneNumber) {
+			return apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+		}
 		user.PhoneNumber = strings.TrimSpace(input.PhoneNumber)
 	}
 	if input.Email != nil {
@@ -119,10 +132,19 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain
 		if email == "" {
 			user.Email = nil
 		} else {
+			if !validation.Email(email) {
+				return apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
+			}
 			user.Email = &email
 		}
 	}
 	if input.Password != "" {
+		if strings.TrimSpace(input.Password) == "" {
+			return apperror.New(apperror.KindInvalid, "PASSWORD_REQUIRED", "password required")
+		}
+		if len([]byte(input.Password)) > 72 {
+			return apperror.New(apperror.KindInvalid, "PASSWORD_TOO_LONG", "password must be at most 72 bytes")
+		}
 		hashedPassword, err := hashPassword(input.Password)
 		if err != nil {
 			return apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER", "hash password error", err)

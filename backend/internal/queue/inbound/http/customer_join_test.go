@@ -33,8 +33,39 @@ func queueRouter(t *testing.T, f *testutil.QueueFixture) http.Handler {
 		r.Get("/queues/{queueID}", h.GetQueue)
 		r.Get("/queues/{queueID}/state", h.GetQueueState)
 		r.Delete("/queues/{queueID}", h.DeleteQueue)
+		r.Put("/queues/{queueID}", h.UpdateQueue)
+		r.Patch("/queues/{queueID}/state", h.UpdateState)
+		r.Patch("/queues/{queueID}/done", h.MarkAsDone)
 	})
 	return r
+}
+
+func TestOwnedTicketCannotGrantPriorityOrStaffState(t *testing.T) {
+	for _, attack := range []struct{ method, suffix, body string }{
+		{"PUT", "", `{"priority":true}`}, {"PUT", "", `{"name":"VIP001"}`},
+		{"PUT", "", `{"state":"processing"}`}, {"PATCH", "/state", `{"state":"called"}`},
+		{"PATCH", "/state", `{"state":"done"}`}, {"PATCH", "/state", `{"state":"waiting"}`}, {"PATCH", "/done", ``},
+	} {
+		t.Run(attack.method+attack.suffix+attack.body, func(t *testing.T) {
+			f := testutil.NewQueueFixture(t)
+			router := queueRouter(t, f)
+			joined := request(router, "POST", "/queues/business/"+f.Business.ID.String()+"/join", `{"username":"Guest","phoneNumber":"081234567890"}`)
+			id := ticketID(t, joined)
+			q, err := f.Service.GetQueue(context.Background(), uuid.MustParse(id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.Persist(*q)
+			response := request(router, attack.method, "/queues/"+id+attack.suffix, attack.body, joined.Result().Cookies()...)
+			if response.Code != 403 {
+				t.Fatalf("customer escalation accepted: %d %s", response.Code, response.Body)
+			}
+			stored, err := f.Service.GetQueue(context.Background(), q.ID)
+			if err != nil || stored.Priority || stored.State != "waiting" || stored.Name != q.Name {
+				t.Fatal("rejected mutation changed ticket")
+			}
+		})
+	}
 }
 func request(r http.Handler, method, path, body string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
