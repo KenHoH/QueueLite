@@ -6,6 +6,7 @@ import (
 	"time"
 
 	httpadapter "QueueLite/internal/adapter/http"
+	"QueueLite/internal/httputil"
 	"QueueLite/internal/middleware"
 	"QueueLite/internal/user/app"
 	"QueueLite/internal/user/domain"
@@ -24,8 +25,8 @@ func NewUserHandler(s *app.UserService) *UserHandlerImpl {
 
 func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	var request UserRegisterRequest
-	if err := DecodeJSON(r, &request); err != nil {
-		WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
@@ -34,15 +35,15 @@ func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	request.Email = strings.TrimSpace(request.Email)
 
 	if request.Username == "" {
-		WriteInvalid(w, "USERNAME_REQUIRED", "Missing username")
+		httputil.WriteInvalid(w, "USERNAME_REQUIRED", "Missing username")
 		return
 	}
 	if request.Password == "" {
-		WriteInvalid(w, "PASSWORD_REQUIRED", "Missing password")
+		httputil.WriteInvalid(w, "PASSWORD_REQUIRED", "Missing password")
 		return
 	}
 	if request.PhoneNumber == "" {
-		WriteInvalid(w, "PHONENUMBER_REQUIRED", "Missing phonenumber")
+		httputil.WriteInvalid(w, "PHONENUMBER_REQUIRED", "Missing phonenumber")
 		return
 	}
 
@@ -67,18 +68,18 @@ func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var request UserLoginRequest
-	if err := DecodeJSON(r, &request); err != nil {
-		WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
 	request.Username = strings.TrimSpace(request.Username)
 	if request.Username == "" {
-		WriteInvalid(w, "USERNAME_REQUIRED", "Missing username")
+		httputil.WriteInvalid(w, "USERNAME_REQUIRED", "Missing username")
 		return
 	}
 	if request.Password == "" {
-		WriteInvalid(w, "PASSWORD_REQUIRED", "Missing password")
+		httputil.WriteInvalid(w, "PASSWORD_REQUIRED", "Missing password")
 		return
 	}
 
@@ -154,26 +155,26 @@ func (u *UserHandlerImpl) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request UpdateUserInformationRequest
-	if err := DecodeJSON(r, &request); err != nil {
-		WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 	if request.PhoneNumber == nil && request.Password == nil && request.Email == nil {
-		WriteInvalid(w, "NO_USER_FIELDS", "no user fields provided")
+		httputil.WriteInvalid(w, "NO_USER_FIELDS", "no user fields provided")
 		return
 	}
 
 	input := domain.User{}
 	if request.PhoneNumber != nil {
 		if strings.TrimSpace(*request.PhoneNumber) == "" {
-			WriteInvalid(w, "PHONENUMBER_REQUIRED", "phone number required")
+			httputil.WriteInvalid(w, "PHONENUMBER_REQUIRED", "phone number required")
 			return
 		}
 		input.PhoneNumber = *request.PhoneNumber
 	}
 	if request.Password != nil {
 		if strings.TrimSpace(*request.Password) == "" {
-			WriteInvalid(w, "PASSWORD_REQUIRED", "password required")
+			httputil.WriteInvalid(w, "PASSWORD_REQUIRED", "password required")
 			return
 		}
 		input.Password = *request.Password
@@ -193,7 +194,7 @@ func (u *UserHandlerImpl) UpdateUser(w http.ResponseWriter, r *http.Request) {
 func parseUUIDParam(w http.ResponseWriter, r *http.Request, name string, code string, message string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(strings.TrimSpace(chi.URLParam(r, name)))
 	if err != nil {
-		WriteInvalid(w, code, message)
+		httputil.WriteInvalid(w, code, message)
 		return uuid.Nil, false
 	}
 	return id, true
