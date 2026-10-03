@@ -1,17 +1,17 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"strings"
+
 	"QueueLite/internal/adapter/postgres/model"
 	"QueueLite/internal/apperror"
 	subscriptionapp "QueueLite/internal/subscription/app"
 	"QueueLite/internal/user/domain"
 	"QueueLite/internal/validation"
-	"context"
-	"errors"
-	"strings"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService struct {
@@ -25,18 +25,6 @@ func NewUserService(repo UserRepo, subscriptionService *subscriptionapp.Subscrip
 		subscriptionService: subscriptionService,
 	}
 	return service
-}
-
-func checkPassword(hashedPassword string, password string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)) == nil
-}
-
-func hashPassword(password string) (string, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hashedPassword), nil
 }
 
 func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*domain.User, error) {
@@ -66,7 +54,7 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 		return nil, apperror.New(apperror.KindInvalid, "PASSWORD_TOO_LONG", "password must be at most 72 bytes")
 	}
 
-	hashedPassword, err := hashPassword(user.Password)
+	hashedPassword, err := HashPassword(user.Password)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER", "hash password error", err)
 	}
@@ -76,16 +64,17 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to create user", err)
 	}
-	if s.subscriptionService != nil {
-		if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
-			return nil, err
-		}
+
+	// creating the default subscription
+	if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
+		return nil, err
 	}
 	return record, nil
 }
 
 func (s *UserService) LoginUser(ctx context.Context, user domain.User) (*model.User, error) {
 	user.Username = strings.TrimSpace(user.Username)
+
 	userRecord, err := s.repo.GetUserByName(ctx, user.Username)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
@@ -94,7 +83,7 @@ func (s *UserService) LoginUser(ctx context.Context, user domain.User) (*model.U
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
 	}
 
-	if !checkPassword(*userRecord.Password, user.Password) {
+	if !CheckPassword(*userRecord.Password, user.Password) {
 		return nil, apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", ErrInvalidPassword)
 	}
 
@@ -145,7 +134,7 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain
 		if len([]byte(input.Password)) > 72 {
 			return apperror.New(apperror.KindInvalid, "PASSWORD_TOO_LONG", "password must be at most 72 bytes")
 		}
-		hashedPassword, err := hashPassword(input.Password)
+		hashedPassword, err := HashPassword(input.Password)
 		if err != nil {
 			return apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER", "hash password error", err)
 		}
