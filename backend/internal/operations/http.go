@@ -4,6 +4,7 @@ package operations
 import (
 	httpadapter "QueueLite/internal/adapter/http"
 	"QueueLite/internal/apperror"
+	businessdomain "QueueLite/internal/business/domain"
 	counterapp "QueueLite/internal/counter/app"
 	counterdomain "QueueLite/internal/counter/domain"
 	counterhttp "QueueLite/internal/counter/inbound/http"
@@ -23,11 +24,7 @@ import (
 	"time"
 )
 
-type Member struct {
-	UserID   uuid.UUID `json:"userId"`
-	Username string    `json:"username"`
-	Role     string    `json:"role"`
-}
+type Member = businessdomain.BusinessMember
 type Businesses interface {
 	GetUserBusinessRole(context.Context, uuid.UUID, uuid.UUID) (string, error)
 	ListBusinessMembers(context.Context, uuid.UUID) ([]Member, error)

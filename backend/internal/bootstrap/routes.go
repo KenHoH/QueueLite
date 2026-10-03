@@ -77,6 +77,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 			private.Get("/mine", businessHandler.GetMyBusinesses)
 			private.Get("/{businessID}/counters", operationsHandler.ListCounters)
 			private.Get("/{businessID}/members", operationsHandler.ListMembers)
+			private.With(businessHandler.RequireManagement).Put("/{businessID}/members", businessHandler.UpsertBusinessMember)
 			private.With(operationsHandler.RequireBusiness).Get("/{businessID}/queues", queueHandler.GetAllQueueByBusiness)
 			private.With(businessHandler.RequireManagement).Put("/{businessID}", businessHandler.UpdateBusiness)
 			private.With(businessHandler.RequireManagement).Delete("/{businessID}", businessHandler.DeleteBusiness)
