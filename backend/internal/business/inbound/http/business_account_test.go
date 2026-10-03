@@ -20,15 +20,20 @@ import (
 type accountBusinessRepo struct {
 	app.BusinessRepo
 	userapp.UserRepo
-	user    userdomain.User
-	items   []domain.BusinessMembership
-	role    string
-	failure error
-	queried uuid.UUID
-	updates int
-	input   domain.UpdateBusiness
-	owner   uuid.UUID
-	created domain.Business
+	user             userdomain.User
+	items            []domain.BusinessMembership
+	role             string
+	failure          error
+	queried          uuid.UUID
+	updates          int
+	input            domain.UpdateBusiness
+	owner            uuid.UUID
+	created          domain.Business
+	member           domain.MembershipUser
+	memberRole       string
+	memberIdentifier string
+	memberByEmail    bool
+	upsertedRole     string
 }
 
 func (r *accountBusinessRepo) CreateBusiness(_ context.Context, business *domain.Business) (*domain.Business, error) {
@@ -52,10 +57,28 @@ func (r *accountBusinessRepo) GetUserBusinesses(_ context.Context, id uuid.UUID)
 	return r.items, r.failure
 }
 func (r *accountBusinessRepo) GetUserBusinessRole(_ context.Context, user, business uuid.UUID) (string, error) {
-	if user != r.user.ID {
-		return "", nil
+	if user == r.user.ID {
+		return r.role, r.failure
 	}
-	return r.role, r.failure
+	if user == r.member.ID {
+		return r.memberRole, r.failure
+	}
+	return "", nil
+}
+func (r *accountBusinessRepo) FindMembershipUser(_ context.Context, identifier string, byEmail bool) (*domain.MembershipUser, error) {
+	r.memberIdentifier, r.memberByEmail = identifier, byEmail
+	if r.member.ID == uuid.Nil {
+		return nil, domain.ErrMembershipUserNotFound
+	}
+	member := r.member
+	return &member, r.failure
+}
+func (r *accountBusinessRepo) UpsertUserBusinessRelation(_ context.Context, _, user uuid.UUID, role string) error {
+	if user != r.member.ID {
+		return errors.New("wrong member")
+	}
+	r.upsertedRole = role
+	return r.failure
 }
 func (r *accountBusinessRepo) UpdateBusiness(_ context.Context, _ uuid.UUID, input *domain.UpdateBusiness) error {
 	r.updates++
@@ -74,6 +97,7 @@ func accountBusinessRouter(t *testing.T, repo *accountBusinessRepo) (*chi.Mux, s
 	router.Get("/businesses/mine", handler.GetMyBusinesses)
 	router.Post("/businesses/", handler.CreateBusiness)
 	router.With(handler.RequireManagement).Put("/businesses/{businessID}", handler.UpdateBusiness)
+	router.With(handler.RequireManagement).Put("/businesses/{businessID}/members", handler.UpsertBusinessMember)
 	router.With(handler.RequireManagement).Delete("/businesses/{businessID}", handler.DeleteBusiness)
 	router.With(handler.RequireManagement).Get("/subscriptions/businesses/{businessID}", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	token, err := middleware.CreateToken(repo.user.Username, repo.user.ID.String())
@@ -177,6 +201,95 @@ func TestBusinessManagementAuthorizationAndOperationalFalse(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBusinessMemberUpsertUsesManagerIdentityAndMinimalResponse(t *testing.T) {
+	businessID := uuid.New()
+	for _, scenario := range []struct {
+		name, actorRole, requestedRole string
+		status                         int
+	}{
+		{name: "owner-adds-admin", actorRole: "owner", requestedRole: "admin", status: http.StatusOK},
+		{name: "admin-adds-counter", actorRole: "admin", requestedRole: "counter", status: http.StatusOK},
+		{name: "admin-cannot-add-admin", actorRole: "admin", requestedRole: "admin", status: http.StatusForbidden},
+		{name: "counter-denied", actorRole: "counter", requestedRole: "counter", status: http.StatusForbidden},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			repo := &accountBusinessRepo{user: userdomain.User{ID: uuid.New(), Username: "Manager"}, role: scenario.actorRole, member: domain.MembershipUser{ID: uuid.New(), Username: "NewMember"}}
+			router, token := accountBusinessRouter(t, repo)
+			req := httptest.NewRequest(http.MethodPut, "/businesses/"+businessID.String()+"/members", strings.NewReader(`{"identifier":"person@example.test","role":"`+scenario.requestedRole+`"}`))
+			req.AddCookie(&http.Cookie{Name: "token", Value: token})
+			res := httptest.NewRecorder()
+			router.ServeHTTP(res, req)
+			if res.Code != scenario.status {
+				t.Fatalf("status %d want %d: %s", res.Code, scenario.status, res.Body.String())
+			}
+			if scenario.status == http.StatusOK {
+				if repo.memberIdentifier != "person@example.test" || !repo.memberByEmail || repo.upsertedRole != scenario.requestedRole {
+					t.Fatalf("wrong lookup/upsert: %+v", repo)
+				}
+				var member map[string]any
+				if err := json.Unmarshal(res.Body.Bytes(), &member); err != nil {
+					t.Fatal(err)
+				}
+				if member["username"] != "NewMember" || member["role"] != scenario.requestedRole || len(member) != 3 {
+					t.Fatalf("unsafe or incomplete response: %s", res.Body.String())
+				}
+			} else if repo.upsertedRole != "" {
+				t.Fatal("unauthorized member mutation")
+			}
+		})
+	}
+}
+
+func TestBusinessMemberProtectsSelfOwnerAndPeerAdminRoles(t *testing.T) {
+	for _, scenario := range []struct {
+		name, actorRole, memberRole string
+		self                        bool
+	}{
+		{name: "self", actorRole: "owner", self: true},
+		{name: "owner-relation", actorRole: "owner", memberRole: "owner"},
+		{name: "admin-peer", actorRole: "admin", memberRole: "admin"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			actor := userdomain.User{ID: uuid.New(), Username: "Manager"}
+			memberID := uuid.New()
+			if scenario.self {
+				memberID = actor.ID
+			}
+			repo := &accountBusinessRepo{user: actor, role: scenario.actorRole, member: domain.MembershipUser{ID: memberID, Username: "Member"}, memberRole: scenario.memberRole}
+			router, token := accountBusinessRouter(t, repo)
+			req := httptest.NewRequest(http.MethodPut, "/businesses/"+uuid.NewString()+"/members", strings.NewReader(`{"identifier":"Member","role":"counter"}`))
+			req.AddCookie(&http.Cookie{Name: "token", Value: token})
+			res := httptest.NewRecorder()
+			router.ServeHTTP(res, req)
+			if res.Code != http.StatusForbidden || repo.upsertedRole != "" {
+				t.Fatalf("protected role changed: %d %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestBusinessMemberUnknownAccountAndInvalidPayload(t *testing.T) {
+	repo := &accountBusinessRepo{user: userdomain.User{ID: uuid.New(), Username: "Owner"}, role: "owner"}
+	router, token := accountBusinessRouter(t, repo)
+	for _, scenario := range []struct {
+		body string
+		want int
+	}{
+		{body: `{"identifier":"missing","role":"counter"}`, want: http.StatusNotFound},
+		{body: `{"identifier":"","role":"counter"}`, want: http.StatusBadRequest},
+		{body: `{"identifier":"person","role":"owner"}`, want: http.StatusBadRequest},
+		{body: `{"identifier":"person","role":"counter","unexpected":true}`, want: http.StatusBadRequest},
+	} {
+		req := httptest.NewRequest(http.MethodPut, "/businesses/"+uuid.NewString()+"/members", strings.NewReader(scenario.body))
+		req.AddCookie(&http.Cookie{Name: "token", Value: token})
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		if res.Code != scenario.want {
+			t.Fatalf("status %d want %d: %s", res.Code, scenario.want, res.Body.String())
+		}
 	}
 }
 

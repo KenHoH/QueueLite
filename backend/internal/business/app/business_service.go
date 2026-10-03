@@ -1,15 +1,16 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"strings"
+
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/business/domain"
 	counterapp "QueueLite/internal/counter/app"
 	counterdomain "QueueLite/internal/counter/domain"
 	subscriptionapp "QueueLite/internal/subscription/app"
 	"QueueLite/internal/validation"
-	"context"
-	"errors"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -180,4 +181,72 @@ func (s *BusinessService) GetAllBusiness(ctx context.Context, cursor *domain.Bus
 		return nil, nil, apperror.Wrap(apperror.KindInternal, "GET_ALL_BUSINESS", "get all business pagination failed", err)
 	}
 	return businesses, nextCursor, nil
+}
+
+func (s *BusinessService) GetUserBusinesses(ctx context.Context, userID uuid.UUID) ([]domain.BusinessMembership, error) {
+	items, err := s.repo.GetUserBusinesses(ctx, userID)
+	if err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "GET_MY_BUSINESSES_ERROR", "failed to get your businesses", err)
+	}
+	return items, nil
+}
+
+func (s *BusinessService) UpsertBusinessMember(ctx context.Context, actorID, businessID uuid.UUID, identifier, role string) (*domain.BusinessMember, error) {
+	identifier = strings.TrimSpace(identifier)
+	role = strings.ToLower(strings.TrimSpace(role))
+	if identifier == "" {
+		return nil, apperror.New(apperror.KindInvalid, "MEMBER_IDENTIFIER_REQUIRED", "username or email is required")
+	}
+	if role != "admin" && role != "counter" {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_MEMBER_ROLE", "role must be admin or counter")
+	}
+	actorRole, err := s.repo.GetUserBusinessRole(ctx, actorID, businessID)
+	if err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "BUSINESS_ACCESS_ERROR", "failed to check business access", err)
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return nil, apperror.New(apperror.KindForbidden, "BUSINESS_ACCESS_DENIED", "you cannot manage this business")
+	}
+	if actorRole == "admin" && role != "counter" {
+		return nil, apperror.New(apperror.KindForbidden, "MEMBER_ROLE_DENIED", "admins may only assign the counter role")
+	}
+	membershipRepo, ok := s.repo.(MembershipAdminRepo)
+	if !ok {
+		return nil, apperror.New(apperror.KindInternal, "MEMBER_ADMIN_UNAVAILABLE", "business member administration is unavailable")
+	}
+	user, err := membershipRepo.FindMembershipUser(ctx, identifier, strings.Contains(identifier, "@"))
+	if err != nil {
+		if errors.Is(err, domain.ErrMembershipUserNotFound) {
+			return nil, apperror.Wrap(apperror.KindNotFound, "USER_NOT_FOUND", "no account matches that username or email", err)
+		}
+		return nil, apperror.Wrap(apperror.KindInternal, "MEMBER_LOOKUP_ERROR", "failed to find account", err)
+	}
+	if user.ID == actorID {
+		return nil, apperror.New(apperror.KindForbidden, "MEMBER_SELF_CHANGE", "you cannot change your own business role")
+	}
+	existingRole, err := s.repo.GetUserBusinessRole(ctx, user.ID, businessID)
+	if err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "BUSINESS_ACCESS_ERROR", "failed to check member role", err)
+	}
+	if existingRole == "owner" {
+		return nil, apperror.New(apperror.KindForbidden, "BUSINESS_OWNER_PROTECTED", "the owner role cannot be changed")
+	}
+	if actorRole == "admin" && existingRole != "" && existingRole != "counter" {
+		return nil, apperror.New(apperror.KindForbidden, "MEMBER_ROLE_DENIED", "admins cannot change another administrator")
+	}
+	if err := membershipRepo.UpsertUserBusinessRelation(ctx, businessID, user.ID, role); err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "UPSERT_BUSINESS_MEMBER_ERROR", "failed to save business member", err)
+	}
+	return &domain.BusinessMember{UserID: user.ID, Username: user.Username, Role: role}, nil
+}
+
+func (s *BusinessService) RequireManager(ctx context.Context, userID, businessID uuid.UUID) error {
+	role, err := s.repo.GetUserBusinessRole(ctx, userID, businessID)
+	if err != nil {
+		return apperror.Wrap(apperror.KindInternal, "BUSINESS_ACCESS_ERROR", "failed to check business access", err)
+	}
+	if role != "owner" && role != "admin" {
+		return apperror.New(apperror.KindForbidden, "BUSINESS_ACCESS_DENIED", "you cannot manage this business")
+	}
+	return nil
 }

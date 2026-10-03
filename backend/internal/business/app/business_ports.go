@@ -7,6 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type MembershipAdminRepo interface {
+	FindMembershipUser(ctx context.Context, identifier string, byEmail bool) (*domain.MembershipUser, error)
+	UpsertUserBusinessRelation(ctx context.Context, businessID, userID uuid.UUID, role string) error
+}
+
 type BusinessRepo interface {
 	GetUserBusinesses(ctx context.Context, userID uuid.UUID) ([]domain.BusinessMembership, error)
 	GetUserBusinessRole(ctx context.Context, userID, businessID uuid.UUID) (string, error)

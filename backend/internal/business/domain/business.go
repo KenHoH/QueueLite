@@ -13,7 +13,21 @@ type BusinessMembership struct {
 	Role     string
 }
 
-var ErrBusinessNotFound = errors.New("business not found")
+type BusinessMember struct {
+	UserID   uuid.UUID `json:"userId"`
+	Username string    `json:"username"`
+	Role     string    `json:"role"`
+}
+
+type MembershipUser struct {
+	ID       uuid.UUID
+	Username string
+}
+
+var (
+	ErrBusinessNotFound       = errors.New("business not found")
+	ErrMembershipUserNotFound = errors.New("membership user not found")
+)
 
 type Business struct {
 	ID          uuid.UUID

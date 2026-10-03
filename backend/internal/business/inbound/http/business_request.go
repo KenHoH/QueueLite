@@ -10,6 +10,11 @@ type CreateBusinessRequest struct {
 	PhoneNumber string  `json:"phoneNumber"`
 }
 
+type UpsertBusinessMemberRequest struct {
+	Identifier string `json:"identifier"`
+	Role       string `json:"role"`
+}
+
 type UpdateBusinessRequest struct {
 	Operational *bool   `json:"operational"`
 	Name        *string `json:"name"`
