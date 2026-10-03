@@ -1,11 +1,13 @@
 package inbound
 
 import (
-	httpadapter "QueueLite/internal/adapter/http"
-	"QueueLite/internal/apperror"
-	"QueueLite/internal/middleware"
 	"context"
 	"net/http"
+
+	httpadapter "QueueLite/internal/adapter/http"
+	"QueueLite/internal/apperror"
+	"QueueLite/internal/httputil"
+	"QueueLite/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -39,7 +41,7 @@ func unavailableAdministration(w http.ResponseWriter, r *http.Request) {
 func (h *SubscriptionHandlerImpl) requireOwnedSubscription(roles BusinessRoleLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			id, ok := parseUUIDParam(w, r, "subscriptionID", "INVALID_SUBSCRIPTION_ID", "invalid subscription id")
+			id, ok := httputil.ParseUUIDParam(w, r, "subscriptionID", "INVALID_SUBSCRIPTION_ID", "invalid subscription id")
 			if !ok {
 				return
 			}

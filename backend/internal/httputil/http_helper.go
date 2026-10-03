@@ -51,3 +51,36 @@ func ParseBusinessTime(w http.ResponseWriter, value string, code string, message
 	}
 	return parsed, true
 }
+
+func ParseDateTime(w http.ResponseWriter, value string, code string, message string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		parsed, err = time.Parse("2006-01-02", value)
+	}
+	if err != nil {
+		WriteInvalid(w, code, message)
+		return time.Time{}, false
+	}
+	return parsed, true
+}
+
+func ParseOptionalDateTime(w http.ResponseWriter, value *string, code string, message string) (*time.Time, bool) {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil, true
+	}
+	parsed, ok := ParseDateTime(w, *value, code, message)
+	if !ok {
+		return nil, false
+	}
+	return &parsed, true
+}
+
+func ParseUUIDValue(w http.ResponseWriter, value string, code string, message string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(strings.TrimSpace(value))
+	if err != nil {
+		WriteInvalid(w, code, message)
+		return uuid.Nil, false
+	}
+	return id, true
+}
