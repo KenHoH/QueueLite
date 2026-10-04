@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY . .
 
-RUN VITE_BASE_URL=/queuelite/ VITE_API_BASE_URL=/api npm run build
+RUN VITE_BASE_URL=/queuelite/ VITE_API_BASE_URL=/queuelite/api npm run build
 
 FROM nginx:1.28-alpine AS runtime
 
