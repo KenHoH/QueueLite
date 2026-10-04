@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { updateQueueState } from '../api/queues';
 import { CounterBoard } from '../components/CounterBoard';
 import { Button, Card, InlineError, LoadingSkeleton, PageContainer, StatusBadge } from '../components/foundation';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../components/ui/alert-dialog';
 import { useAppState } from '../state/AppState';
 import { cancellationErrorMessage, queueHeadings, ticketErrorMessage } from './queueDisplay';
 import { useCustomerQueueStatus } from './useCustomerQueueStatus';
@@ -18,13 +19,11 @@ function Ticket({ queueId }: { queueId: string }) {
   const [cancelled, setCancelled] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [cancelError, setCancelError] = useState('');
-  const { data, error, refresh } = useCustomerQueueStatus(queueId, busy || cancelled);
+  const { data, error, persistencePending, refresh } = useCustomerQueueStatus(queueId, busy || cancelled);
   const mutation = useRef<AbortController | null>(null);
   const submitting = useRef(false);
-  const confirmRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => mutation.current?.abort(), []);
-  useEffect(() => { if (confirm) confirmRef.current?.focus(); }, [confirm]);
 
   async function cancel() {
     if (submitting.current || !confirm || !data || data.queue.state !== 'waiting') return;
@@ -48,7 +47,9 @@ function Ticket({ queueId }: { queueId: string }) {
   const back = auth.status === 'authenticated' ? '/my-queues' : '/#businesses';
   return <PageContainer className="ql-ticket-page">
     <Link className="ql-back-link" to={back}>{auth.status === 'authenticated' ? 'Back to My Queues' : 'Back to businesses'}</Link>
-    {!data && !error ? <Card><LoadingSkeleton label="Loading your queue" lines={8} /></Card> : <>
+    {persistencePending && !data ? <Card><p className="ql-eyebrow">TICKET CONFIRMATION</p><h1>Saving your ticket</h1><p>Your place was accepted and is still being confirmed. Keep this page open—we’ll retry automatically.</p><LoadingSkeleton label="Confirming your ticket" lines={2} /><Button variant="secondary" onClick={refresh}>Check now</Button></Card>
+      : !data && !error ? <Card><LoadingSkeleton label="Loading your queue" lines={8} /></Card> : <>
+      {persistencePending && data && <Card role="status"><p>Your latest queue update is still being confirmed. Showing the last known ticket state.</p></Card>}
       {data && queue && state && <>
         <Card className={`ql-ticket-card ${state === 'called' ? 'ql-ticket-called' : ''}`}>
           <p className="ql-eyebrow">YOUR QUEUE</p>
@@ -65,7 +66,7 @@ function Ticket({ queueId }: { queueId: string }) {
           {state === 'skipped' && <p className="ql-muted">Please ask the team about the next step.</p>}
           <Link to={`/business/${queue.businessId}`}>View business details</Link>
           {cancelError && <InlineError>{cancelError}</InlineError>}
-          {state === 'waiting' && !error && <div className="ql-ticket-actions">{confirm ? <div ref={confirmRef} tabIndex={-1} role="group" aria-label="Confirm leaving queue"><h2>Leave this queue?</h2><p>Your place will be released. You can join again later.</p><div className="ql-actions"><Button variant="secondary" disabled={busy} onClick={() => { setConfirm(false); setCancelError(''); }}>Keep my place</Button><Button variant="danger" loading={busy} onClick={() => { void cancel(); }}>Confirm leave</Button></div></div> : <Button variant="secondary" onClick={() => setConfirm(true)}>Leave queue</Button>}</div>}
+          {state === 'waiting' && !error && <div className="ql-ticket-actions"><AlertDialog open={confirm} onOpenChange={open => { setConfirm(open); if (!open) setCancelError(''); }}><AlertDialogTrigger asChild><Button variant="secondary">Leave queue</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Leave this queue?</AlertDialogTitle><AlertDialogDescription>Your place will be released. You can join again later.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>Keep my place</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void cancel(); }}>{busy ? 'Leaving…' : 'Confirm leave'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>}
         </Card>
 
         <section aria-labelledby="counter-board-heading">

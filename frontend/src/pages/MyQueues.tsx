@@ -12,7 +12,7 @@ export default function MyQueues() {
   return <PageContainer><h1>My Queues</h1>{auth.status === 'authenticated' ? <QueueList key={auth.user.id} />
     : auth.status === 'loading' ? <Card><LoadingSkeleton label="Checking your account" /></Card>
     : auth.status === 'error' ? <Card><InlineError>Please retry the session check above to view your queues.</InlineError></Card>
-    : <EmptyState title="Sign in to view your queues." description="My Queues is available for customers with an account. Guest tickets can be opened in the browser where you joined." action={<Link className="ql-button ql-button-primary" to="/login?returnTo=%2Fmy-queues">Sign in</Link>} />}</PageContainer>;
+    : <EmptyState title="Sign in to view your queues." description="My Queues is available for customers with an account. Guest tickets can be opened in the browser where you joined." action={<Button asChild><Link to="/login?returnTo=%2Fmy-queues">Sign in</Link></Button>} />}</PageContainer>;
 }
 function QueueList() {
   const { refreshUser } = useAppState();
@@ -43,6 +43,6 @@ function QueueList() {
   if (status === 'error') return <Card><InlineError>We couldn’t load your queues.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>;
   return <><div className="ql-section-heading"><p className="ql-muted">Your active visits</p><Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Refresh queues</Button></div>
     {queues.length === 0 ? <EmptyState title="You don’t have any active queues." description="Find a business and save your place. Recently joined queues may take a moment to appear here." action={<Link to="/#businesses">Browse businesses</Link>} />
-      : <div className="ql-business-grid">{queues.map(queue => <Link className="ql-card ql-queue-card" key={queue.id} to={`/queue/${queue.id}`}><h2>{names[queue.businessId]}</h2><p className="ql-queue-number">{queue.name}</p><StatusBadge state={queue.state} /><span className="ql-meta">View queue →</span></Link>)}</div>}
+      : <div className="ql-business-grid">{queues.map(queue => <Card asChild className="ql-queue-card" key={queue.id}><Link to={`/queue/${queue.id}`}><h2>{names[queue.businessId]}</h2><p className="ql-queue-number">{queue.name}</p><StatusBadge state={queue.state} /><span className="ql-meta">View queue →</span></Link></Card>)}</div>}
   </>;
 }

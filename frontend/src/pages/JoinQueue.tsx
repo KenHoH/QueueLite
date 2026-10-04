@@ -67,8 +67,8 @@ function JoinBusiness({ businessId }: { businessId: string }) {
     {load === 'loading' ? <Card><LoadingSkeleton label="Loading business" /></Card>
       : load === 'not-found' ? <EmptyState title="Business not found." description="Choose a business to join its queue." action={<Link to="/#businesses">Browse businesses</Link>} />
       : load === 'error' ? <Card><InlineError>We couldn’t load this business.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>
-      : ticket ? <Card className="ql-ticket-card"><p className="ql-eyebrow">YOUR QUEUE</p><h1 tabIndex={-1} ref={successRef}>Your place is saved.</h1><p>{business?.name}</p><p className="ql-queue-number">{ticket.name}</p><StatusBadge state="waiting" /><p className="ql-muted">Keep this ticket handy for your visit.</p><Link className="ql-button ql-button-primary" to={`/queue/${ticket.id}`}>View my queue</Link></Card>
-      : <Card><p className="ql-eyebrow">{business?.name}</p><h1>Join queue</h1>
+      : ticket ? <Card className="ql-ticket-card"><p className="ql-eyebrow">YOUR QUEUE</p><h1 tabIndex={-1} ref={successRef}>Your place is saved.</h1><p>{business?.name}</p><p className="ql-queue-number">{ticket.name}</p><StatusBadge state="waiting" /><p className="ql-muted">Keep this ticket handy for your visit.{auth.status === 'guest' ? ' Reopen it in this browser so your guest credentials remain available.' : ''}</p><Button asChild><Link to={`/queue/${ticket.id}`}>View my queue</Link></Button></Card>
+      : <Card><p className="ql-eyebrow">QUEUE ACCESS · {business?.name}</p><h1>Join queue</h1><p className="ql-muted">Confirm your identity below to save your place from this page or a business QR code.</p>
         {!business?.operational ? <p className="ql-muted">This business is currently unavailable. Joining is paused.</p>
           : auth.status === 'loading' ? <LoadingSkeleton label="Checking your account" />
           : auth.status === 'error' ? <InlineError>Please retry the session check above before joining.</InlineError>
@@ -78,6 +78,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
             <div tabIndex={-1} ref={errorRef}>{error && <InlineError>{error}</InlineError>}</div>
             <Button type="submit" loading={busy} disabled={uncertain}>Join queue</Button>
             {(error || uncertain) && auth.status === 'authenticated' && <Link to="/my-queues">Check My Queues</Link>}
+            {uncertain && auth.status === 'guest' && <p className="ql-meta">Do not submit again yet. Keep this browser open and ask the business to confirm whether your ticket was accepted.</p>}
           </form>}
       </Card>}
   </PageContainer>;

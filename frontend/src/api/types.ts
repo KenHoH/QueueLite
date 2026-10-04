@@ -15,6 +15,7 @@ export interface Business {
 }
 export interface BusinessMembership extends Business { role: BusinessRole }
 export interface BusinessMember { userId: UUID; username: string; role: BusinessRole }
+export interface UpsertBusinessMemberRequest { identifier: string; role: 'admin' | 'counter' }
 export interface Queue {
   id: UUID; businessId: UUID; userId?: UUID; calledByCounterId?: UUID;
   name: string; state: QueueState; priority: boolean;

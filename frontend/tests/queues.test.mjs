@@ -26,6 +26,20 @@ test('canonical and QR join use cookie credentials, guest-only identity and abor
   } finally { globalThis.fetch = original; }
 });
 
+test('QR resolution uses the public resolve contract without joining', async () => {
+  const original = globalThis.fetch;
+  const id = '11111111-1111-4111-8111-111111111111';
+  let call;
+  globalThis.fetch = async (url, init) => { call = { url, init }; return Response.json({ businessId: id, authenticated: false, requiresGuestForm: true, requiredFields: ['username', 'phoneNumber'] }); };
+  try {
+    const api = await vite.ssrLoadModule('/src/api/queues.ts');
+    assert.equal((await api.resolveQueueQR(id)).requiresGuestForm, true);
+    assert.equal(call.url, `/api/queues/qr/${id}/resolve`);
+    assert.equal(call.init.method, 'GET');
+    assert.equal(call.init.body, undefined);
+  } finally { globalThis.fetch = original; }
+});
+
 test('join retains typed business and phone errors', async () => {
   const original = globalThis.fetch;
   try {

@@ -4,14 +4,14 @@ import { updateUser } from '../api/users';
 import { APIError } from '../api/errors';
 import type { User } from '../api/types';
 import { AccountAccess } from '../components/AccountAccess';
-import { Button, Card, InlineError, Input, PageContainer, PasswordInput } from '../components/foundation';
+import { Button, Card, InlineError, Input, PageContainer, PageHeader, PasswordInput } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { accountError, canManage, validatePassword, validateProfile } from './accountForms';
 import { UserSubscriptionSummary } from './Plans';
 
 export default function Profile() {
   const { auth } = useAppState();
-  return <PageContainer className="ql-account-page"><h1>Profile</h1><AccountAccess>{auth.status === 'authenticated' && <ProfileContent key={auth.user.id} user={auth.user} />}</AccountAccess></PageContainer>;
+  return <PageContainer className="ql-account-page"><PageHeader title="Account" description="Manage your contact details, security, and QueueLite access." /><AccountAccess>{auth.status === 'authenticated' && <ProfileContent key={auth.user.id} user={auth.user} />}</AccountAccess></PageContainer>;
 }
 function ProfileContent({ user }: { user: User }) {
   const { refreshUser, businesses, businessesStatus, refreshBusinesses } = useAppState();
@@ -59,6 +59,6 @@ function ProfileContent({ user }: { user: User }) {
     </form></Card>
     {error && <InlineError>{error}</InlineError>}{message && <p role="status">{message}</p>}
     <UserSubscriptionSummary userId={user.id} /><Link to="/plans">Plans &amp; Subscription →</Link>
-    <Card><h2>Your businesses</h2>{businessesStatus === 'error' ? <><InlineError>We couldn’t load your businesses.</InlineError><Button onClick={() => refreshBusinesses()}>Try again</Button></> : businessesStatus === 'loading' ? <p role="status">Loading your businesses…</p> : businesses.length ? <p><Link to="/business/manage">{businesses.some(canManage) ? 'Manage business →' : 'Open your assigned business →'}</Link></p> : <p className="ql-muted">You don’t own or manage a business yet.</p>}<Link to="/business/create">Create a business</Link></Card>
+    <Card><h2>Your businesses</h2>{businessesStatus === 'error' ? <><InlineError>We couldn’t load your businesses.</InlineError><Button onClick={() => refreshBusinesses()}>Try again</Button></> : businessesStatus === 'loading' ? <p role="status">Loading your businesses…</p> : businesses.length ? <div className="ql-stack"><Link to="/business/manage">{businesses.some(canManage) ? 'Manage business →' : 'Open your assigned business →'}</Link><Link to="/counters">My service counters →</Link></div> : <p className="ql-muted">You don’t own or manage a business yet.</p>}<p><Link to="/business/create">Create a business →</Link></p></Card>
   </div>;
 }

@@ -4,7 +4,7 @@ import type { BusinessMembership } from '../api/types';
 import { APIError } from '../api/errors';
 import { AccountAccess } from '../components/AccountAccess';
 import { BusinessNavigation } from '../components/BusinessNavigation';
-import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer } from '../components/foundation';
+import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer, PageHeader } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { canManage } from './accountForms';
 import { operationsError } from './operationsDisplay';
@@ -19,7 +19,7 @@ export function OperationsFeedback({ loading, error, retry }: { loading: boolean
 }
 export function BusinessOperationsPage({ title, children }: { title: string; children: (business: BusinessMembership) => ReactNode }) {
   const { businessId = '' } = useParams();
-  return <PageContainer className="ql-operations-page"><Link className="ql-back-link" to="/business/manage">← Your businesses</Link><h1>{title}</h1><AccountAccess><Membership key={businessId} businessId={businessId}>{children}</Membership></AccountAccess></PageContainer>;
+  return <PageContainer className="ql-operations-page"><PageHeader eyebrow="Business tools" title={title} action={<Link to="/business/manage">All businesses</Link>} /><AccountAccess><Membership key={businessId} businessId={businessId}>{children}</Membership></AccountAccess></PageContainer>;
 }
 function Membership({ businessId, children }: { businessId: string; children: (business: BusinessMembership) => ReactNode }) {
   const { businesses, businessesStatus, refreshBusinesses } = useAppState();

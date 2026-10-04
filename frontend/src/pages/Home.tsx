@@ -4,6 +4,9 @@ import { Search, X } from 'lucide-react';
 import { BusinessCard } from '../components/BusinessCard';
 import { JoinedQueuesPreview } from '../components/JoinedQueuesPreview';
 import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer, Spinner } from '../components/foundation';
+import { Button as IconButton } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { useAppState } from '../state/AppState';
 import { greeting } from './businessDisplay';
 import { useBusinessDiscovery } from './useBusinessDiscovery';
@@ -16,15 +19,15 @@ export default function Home() {
   useEffect(() => { if (hash === '#businesses') document.getElementById('businesses')?.scrollIntoView(); }, [hash]);
   return <PageContainer className="ql-discovery-page">
     <section className="ql-discovery-intro">
-      <p className="ql-eyebrow">MORE LIFE. LESS WAITING.</p>
-      <h1>{auth.status === 'authenticated' ? greeting(auth.user.username) : 'Find your next queue.'}</h1>
-      <p className="ql-muted">Find a business and join the queue without standing in line.</p>
+      <p className="ql-eyebrow">QueueLite</p>
+      <h1>{auth.status === 'authenticated' ? greeting(auth.user.username) : 'Find a business queue'}</h1>
+      <p className="ql-muted">Search nearby businesses, join remotely, and keep your place from this device.</p>
     </section>
     <div className="ql-search">
       <Search size={21} aria-hidden="true" />
-      <label className="ql-sr-only" htmlFor="business-search">Search businesses</label>
-      <input id="business-search" type="search" placeholder="Search businesses..." value={query} onChange={event => setQuery(event.target.value)} />
-      {query && <button type="button" aria-label="Clear search" onClick={() => setQuery('')}><X size={18} aria-hidden="true" /></button>}
+      <Label className="ql-sr-only" htmlFor="business-search">Search businesses</Label>
+      <Input id="business-search" className="border-0 bg-transparent shadow-none focus-visible:ring-0" type="search" placeholder="Search businesses..." value={query} onChange={event => setQuery(event.target.value)} />
+      {query && <IconButton variant="ghost" size="icon" type="button" aria-label="Clear search" onClick={() => setQuery('')}><X size={18} aria-hidden="true" /></IconButton>}
     </div>
     <JoinedQueuesPreview />
     <section id="businesses" className="ql-discovery-section" aria-labelledby="businesses-heading" aria-busy={discovery.loading || discovery.loadingMore}>

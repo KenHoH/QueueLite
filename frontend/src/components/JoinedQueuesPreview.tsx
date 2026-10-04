@@ -42,7 +42,7 @@ export function JoinedQueuesPreview() {
     return <section className="ql-joined-queues" aria-labelledby="joined-queues-heading">
       <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues</h2><p className="ql-muted">Queues you have joined appear here.</p></div></div>
       {activeTicket ? <div className="ql-business-grid"><QueueCard queue={activeTicket.queue} businessName="Your guest queue" /></div>
-        : <EmptyState title="No joined queues yet." description="Sign in to view your queues across devices, or join a business as a guest from this browser." action={<Link className="ql-button ql-button-primary" to="/login?returnTo=%2F">Sign in</Link>} />}
+        : <EmptyState title="No joined queues yet." description="Sign in to view your queues across devices, or join a business as a guest from this browser." action={<Button asChild><Link to="/login?returnTo=%2F">Sign in</Link></Button>} />}
     </section>;
   }
 
@@ -59,5 +59,5 @@ export function JoinedQueuesPreview() {
 }
 
 function QueueCard({ queue, businessName }: { queue: Queue; businessName: string }) {
-  return <Link className="ql-card ql-queue-card" to={`/queue/${queue.id}`}><h3>{businessName}</h3><p className="ql-queue-number">{queue.name}</p><StatusBadge state={queue.state} /><span className="ql-meta">View queue →</span></Link>;
+  return <Card asChild className="ql-queue-card"><Link to={`/queue/${queue.id}`}><h3>{businessName}</h3><p className="ql-queue-number">{queue.name}</p><StatusBadge state={queue.state} /><span className="ql-meta">View queue →</span></Link></Card>;
 }

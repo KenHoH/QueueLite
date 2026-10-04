@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import type { Business, BusinessMembership, Counter, Queue, QueueState } from '../api/types';
 import { getBusinessSubscription } from '../api/subscriptions';
 import { Button, Card, EmptyState, StatusBadge } from '../components/foundation';
+import { Badge } from '../components/ui/badge';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { BusinessOperationsPage, OperationsFeedback, useBusinessOperations } from './BusinessOperations';
 import { canManage } from './accountForms';
 import { averageServiceSeconds, counterStatus, currentQueue, formatDuration } from './operationsDisplay';
@@ -22,7 +27,7 @@ const filters: Array<{ value: QueueFilter; label: string }> = [
 const pageSizes = [10, 25, 50] as const;
 
 export function PriorityBadge({ queue }: { queue: Queue }) {
-  return queue.priority ? <span className="ql-badge ql-priority">Priority</span> : null;
+  return queue.priority ? <Badge className="ql-priority">Priority</Badge> : null;
 }
 
 function ServicesDashboardHeader({ business, refresh }: { business: Business; refresh: () => void }) {
@@ -38,28 +43,26 @@ function ServicesDashboardHeader({ business, refresh }: { business: Business; re
 
 function QueueFilterTabs({ value, queues, onChange }: { value: QueueFilter; queues: Queue[]; onChange: (value: QueueFilter) => void }) {
   const count = (filter: QueueFilter) => queues.filter(queue => filter === 'current' ? activeStates.includes(queue.state) : queue.state === filter).length;
-  return <div className="ql-queue-tabs" role="tablist" aria-label="Filter customer queues">
-    {filters.map(filter => <button key={filter.value} type="button" role="tab" aria-selected={value === filter.value} onClick={() => onChange(filter.value)}>
-      {filter.label} <span>{count(filter.value)}</span>
-    </button>)}
-  </div>;
+  return <Tabs value={value} onValueChange={next => onChange(next as QueueFilter)}><TabsList className="ql-queue-tabs" aria-label="Filter customer queues">
+    {filters.map(filter => <TabsTrigger key={filter.value} value={filter.value}>{filter.label} <span>{count(filter.value)}</span></TabsTrigger>)}
+  </TabsList></Tabs>;
 }
 
 function CurrentQueueList({ queues, counters }: { queues: Queue[]; counters: Counter[] }) {
   if (!queues.length) return <EmptyState title="No queues in this view" description="No waiting queues. Choose another status or wait for a customer to join." />;
   return <div className="ql-queue-table-wrap">
-    <table className="ql-queue-table">
-      <thead><tr><th>Customer</th><th>Status</th><th>Counter</th><th>Queue type</th></tr></thead>
-      <tbody>{queues.map(queue => {
+    <Table className="ql-queue-table">
+      <TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Status</TableHead><TableHead>Counter</TableHead><TableHead>Queue type</TableHead></TableRow></TableHeader>
+      <TableBody>{queues.map(queue => {
         const counter = counters.find(item => item.currentQueueId === queue.id || item.id === queue.calledByCounterId);
-        return <tr key={queue.id} className={queue.priority ? 'ql-priority-row' : undefined}>
-          <th scope="row" data-label="Customer"><span role="region" aria-label={`${queue.state} queues`}>{queue.name}</span></th>
-          <td data-label="Status"><StatusBadge state={queue.state} /></td>
-          <td data-label="Counter">{counter?.name ?? '—'}</td>
-          <td data-label="Queue type"><PriorityBadge queue={queue} />{!queue.priority && <span className="ql-muted">Standard</span>}</td>
-        </tr>;
-      })}</tbody>
-    </table>
+        return <TableRow key={queue.id} className={queue.priority ? 'ql-priority-row' : undefined}>
+          <TableHead scope="row" data-label="Customer">{queue.name}</TableHead>
+          <TableCell data-label="Status"><StatusBadge state={queue.state} /></TableCell>
+          <TableCell data-label="Counter">{counter?.name ?? '—'}</TableCell>
+          <TableCell data-label="Queue type"><PriorityBadge queue={queue} />{!queue.priority && <span className="ql-muted">Standard</span>}</TableCell>
+        </TableRow>;
+      })}</TableBody>
+    </Table>
   </div>;
 }
 
@@ -78,7 +81,7 @@ function QueueBoard({ queues, counters }: { queues: Queue[]; counters: Counter[]
     <div className="ql-section-heading"><div><h2 id="current-queue-heading">Customer queues</h2><p className="ql-muted">Priority customers are highlighted.</p></div></div>
     <QueueFilterTabs value={filter} queues={queues} onChange={changeFilter} />
     <div className="ql-queue-toolbar">
-      <label>Rows per page <select className="ql-input" value={pageSize} onChange={event => changePageSize(Number(event.target.value))}>{pageSizes.map(size => <option key={size}>{size}</option>)}</select></label>
+      <div className="flex items-center gap-2"><Label htmlFor="queue-page-size">Rows per page</Label><Select value={String(pageSize)} onValueChange={value => changePageSize(Number(value))}><SelectTrigger id="queue-page-size" className="w-20"><SelectValue /></SelectTrigger><SelectContent>{pageSizes.map(size => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectContent></Select></div>
       <span className="ql-meta">{filtered.length ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filtered.length)} of ${filtered.length}` : '0 customers'}</span>
     </div>
     <CurrentQueueList queues={displayed} counters={counters} />
@@ -95,7 +98,7 @@ export function CounterOverview({ counters, queues }: { counters: Counter[]; que
   return <div className="ql-counter-grid">{counters.map(counter => {
     const queue = currentQueue(counter, queues);
     return <Card key={counter.id} className="ql-counter-service-card">
-      <div className="ql-counter-card-heading"><h3>{counter.name}</h3><span className={`ql-counter-state ${queue ? 'ql-counter-state-busy' : ''}`}>{counterStatus(counter, queues)}</span></div>
+      <div className="ql-counter-card-heading"><h3>{counter.name}</h3><Badge variant={queue ? 'secondary' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
       <p className="ql-meta">Customer being handled</p>
       {queue ? <p className="ql-counter-customer"><strong>{queue.name}</strong> <PriorityBadge queue={queue} /></p> : <p className="ql-muted">No active customer</p>}
       <Link to={`/counter/${counter.id}`}>Open workspace →</Link>

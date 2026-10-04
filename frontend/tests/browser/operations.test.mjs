@@ -67,7 +67,7 @@ test('dashboard filters and pages queues without losing the selected page size',
   await visible(page.getByText('1–10 of 12', { exact: true }));
   assert.equal(await page.locator('tbody tr').count(), 10);
   await page.getByRole('button', { name: 'Next', exact: true }).click(); await visible(page.getByText('11–12 of 12', { exact: true }));
-  await page.getByLabel('Rows per page').selectOption('25'); await visible(page.getByText('1–12 of 12', { exact: true }));
+  await page.getByLabel('Rows per page').click(); await page.getByRole('option', { name: '25', exact: true }).click(); await visible(page.getByText('1–12 of 12', { exact: true }));
   assert.equal(await page.locator('tbody tr').count(), 12);
   await page.getByRole('tab', { name: /Completed/ }).click(); await visible(page.getByText('Q999', { exact: true }));
   assert.equal(await page.locator('tbody tr').count(), 1);
@@ -89,11 +89,11 @@ test('management creates, renames, assigns, clears assignment and confirms delet
   const { page, requests, counters } = await scenario(t); await page.goto(`${origin}/business/${business.id}/counters`);
   await page.getByLabel('Counter name', { exact: true }).fill('Desk B'); await page.getByRole('button', { name: 'Create counter', exact: true }).click(); await visible(page.getByRole('heading', { name: 'Desk B', exact: true }));
   const card = page.locator('.ql-card').filter({ has: page.getByRole('heading', { name: 'Desk B', exact: true }) });
-  await card.getByLabel('Name for Desk B').fill('Desk C'); await card.getByLabel('Employee for Desk B').selectOption(user.id); await card.getByRole('button', { name: 'Save counter' }).click(); await visible(page.getByRole('heading', { name: 'Desk C', exact: true }));
+  await card.getByLabel('Name for Desk B').fill('Desk C'); await card.getByLabel('Employee for Desk B').click(); await page.getByRole('option', { name: `${user.username} (counter)` }).click(); await card.getByRole('button', { name: 'Save counter' }).click(); await visible(page.getByRole('heading', { name: 'Desk C', exact: true }));
   assert.equal(counters.find(c => c.name === 'Desk C').currentEmployeeId, user.id);
   const renamed = page.locator('.ql-card').filter({ has: page.getByRole('heading', { name: 'Desk C', exact: true }) });
-  await renamed.getByLabel('Employee for Desk C').selectOption(''); await renamed.getByRole('button', { name: 'Save counter' }).click(); await visible(renamed.getByText('Assigned employee: Unassigned'));
-  await renamed.getByRole('button', { name: 'Delete counter', exact: true }).click(); await renamed.getByRole('button', { name: 'Confirm delete' }).click(); await page.getByRole('heading', { name: 'Desk C', exact: true }).waitFor({ state: 'hidden' });
+  await renamed.getByLabel('Employee for Desk C').click(); await page.getByRole('option', { name: 'Unassigned', exact: true }).click(); await renamed.getByRole('button', { name: 'Save counter' }).click(); await visible(renamed.getByText('Assigned employee: Unassigned'));
+  await renamed.getByRole('button', { name: 'Delete counter', exact: true }).click(); await page.getByRole('button', { name: 'Confirm delete' }).click(); await page.getByRole('heading', { name: 'Desk C', exact: true }).waitFor({ state: 'hidden' });
   assert.ok(requests.find(r => r.method === 'POST').body.businessId === business.id);
   assert.ok(requests.filter(r => r.method !== 'GET').every(r => !('userId' in (r.body ?? {}))));
   await page.screenshot({ path: 'output/playwright/operations-counters-desktop.png', fullPage: true });
@@ -156,7 +156,7 @@ test('workspace uses protected counter reads and fails closed on 403', async t =
   const { page, requests } = await scenario(t, { respond: path => path === `/api/counters/${counter.id}` ? { status: 403, json: {} } : undefined }); await page.goto(`${origin}/counter/${counter.id}`); await visible(page.getByRole('heading', { name: 'Permission required' })); assert.equal(await page.getByRole('button', { name: 'Call next', exact: true }).count(), 0); assert.ok(!requests.some(r => r.path.endsWith('/queues')));
 });
 test('business links preserve multi-business selection and plans use explicit IDs', async t => {
-  const { page, requests } = await scenario(t); await page.goto(`${origin}/business/manage`); await page.getByLabel('Select business').selectOption(other.id); await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  const { page, requests } = await scenario(t); await page.goto(`${origin}/business/manage`); await page.getByLabel('Select business').click(); await page.getByRole('option', { name: `${other.name} (admin)` }).click(); await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
   await visible(page.getByRole('heading', { name: other.name })); assert.match(page.url(), new RegExp(`${other.id}/dashboard$`)); await page.getByRole('link', { name: 'Plans', exact: true }).click(); await visible(page.getByText('Queue capacity remaining: 43'));
   assert.match(page.url(), new RegExp(`${other.id}/plans$`)); assert.ok(requests.some(r => r.path === `/api/subscriptions/businesses/${other.id}`));
 });

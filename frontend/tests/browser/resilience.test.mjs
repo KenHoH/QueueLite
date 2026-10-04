@@ -241,7 +241,7 @@ test('keyboard focus, error association and leave confirmation are usable',async
  assert.equal(await username.getAttribute('aria-invalid'),'true');assert.ok(await username.getAttribute('aria-describedby'));assert.equal(await username.evaluate(input=>input===document.activeElement),true);
  await page.keyboard.press('Tab');assert.ok(await page.evaluate(()=>getComputedStyle(document.activeElement).outlineStyle!=='none'));
  await page.goto(origin+`/queue/${queue.id}`);await ready(page,true);await page.getByRole('button',{name:'Leave queue',exact:true}).focus();await page.keyboard.press('Enter');
- await visible(page.getByRole('group',{name:'Confirm leaving queue'}));await page.keyboard.press('Tab');await page.keyboard.press('Enter');await page.getByRole('group',{name:'Confirm leaving queue'}).waitFor({state:'hidden'});
+ await visible(page.getByRole('alertdialog'));await page.keyboard.press('Escape');await page.getByRole('alertdialog').waitFor({state:'hidden'});
 });
 test('slow auth has understandable loading and times out with manual recovery',async t=>{
  const {page}=await scenario(t,{respond:async path=>{if(path==='/api/users/me'){await pause(21000);return {json:user};}}});

@@ -2,6 +2,7 @@ import { APIError } from '../api/errors';
 import type { GuestQueueRequest, QueueState } from '../api/types';
 
 export const isActiveQueue = (state: QueueState) => ['waiting', 'called', 'processing'].includes(state);
+export const isQueuePersistencePending = (error: unknown) => error instanceof APIError && ['QUEUE_PERSISTENCE_PENDING', 'QUEUE_NOT_READY'].includes(error.code);
 export const queueHeadings: Record<QueueState, string> = {
   waiting: 'You’re in the queue.', called: 'It’s your turn.', processing: 'You’re being served.',
   done: 'Your visit is complete.', skipped: 'Your turn was skipped.', cancelled: 'Your queue is cancelled.',
@@ -28,6 +29,7 @@ export function joinErrorMessage(error: unknown) {
   return error instanceof APIError && messages[error.code] || 'We couldn’t join this queue. Please check your details and try again.';
 }
 export function ticketErrorMessage(error: unknown) {
+  if (isQueuePersistencePending(error)) return 'Your ticket is still being confirmed. Keep this page open and try again in a moment.';
   if (error instanceof APIError) {
     if (error.status === 401 || error.status === 403) return 'This ticket isn’t available in this session. Sign in to the account that joined, or open it in the browser you used as a guest.';
     if (error.status === 404 || error.code === 'INVALID_QUEUE_ID') return 'This queue ticket could not be found.';

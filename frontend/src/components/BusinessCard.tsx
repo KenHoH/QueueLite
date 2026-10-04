@@ -3,14 +3,16 @@ import { Link } from 'react-router-dom';
 import type { Business } from '../api/types';
 import { businessHours, businessStatus } from '../pages/businessDisplay';
 import { BusinessQueueSummary } from './BusinessQueueSummary';
+import { Badge } from './ui/badge';
+import { Card } from './ui/card';
 
 export function BusinessAvailability({ business }: { business: Business }) {
-  return <span className={`ql-badge ql-availability ${business.operational ? '' : 'ql-unavailable'}`}>
+  return <Badge variant={business.operational ? 'default' : 'secondary'} className={`ql-availability ${business.operational ? '' : 'ql-unavailable'}`}>
     <span className="ql-status-dot" aria-hidden="true" />{businessStatus(business)}
-  </span>;
+  </Badge>;
 }
 export function BusinessCard({ business }: { business: Business }) {
-  return <Link className="ql-card ql-business-card" to={`/business/${encodeURIComponent(business.id)}`}>
+  return <Card asChild className="ql-card ql-business-card"><Link to={`/business/${encodeURIComponent(business.id)}`}>
     <BusinessAvailability business={business} />
     <h3>{business.name}</h3>
     <p className="ql-business-location"><MapPin size={16} aria-hidden="true" />{business.location || 'Location not provided'}</p>
@@ -19,5 +21,5 @@ export function BusinessCard({ business }: { business: Business }) {
     <div className="ql-business-card-footer"><span><Clock3 size={16} aria-hidden="true" />{businessHours(business)}</span>
       <span className="ql-view-business">View business <ArrowUpRight size={17} aria-hidden="true" /></span>
     </div>
-  </Link>;
+  </Link></Card>;
 }

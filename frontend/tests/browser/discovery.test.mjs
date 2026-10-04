@@ -64,6 +64,20 @@ test('Home initial loading, real fields, guest header, card keyboard navigation 
   await visible(page.getByRole('heading', { name: 'Business information' }));
   assert.equal(new URL(page.url()).pathname, `/business/${first.id}`);
 });
+test('guest Create account button renders through Radix Slot and navigates without a page error', async t => {
+  const { page } = await scenario(t);
+  await page.goto(origin);
+  const createAccount = page.getByRole('link', { name: 'Create account', exact: true });
+  await visible(createAccount);
+  const colors = await createAccount.evaluate(element => {
+    const style = getComputedStyle(element);
+    return { foreground: style.color, background: style.backgroundColor };
+  });
+  assert.notEqual(colors.foreground, colors.background, 'button-link label must contrast with its background');
+  await createAccount.click();
+  await visible(page.getByRole('heading', { name: 'Create your QueueLite account.' }));
+  assert.equal(new URL(page.url()).pathname, '/register');
+});
 test('logged-in Home greets the real username and preserves account controls', async t => {
   const { page } = await scenario(t, { user });
   await page.goto(origin);

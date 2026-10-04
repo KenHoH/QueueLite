@@ -36,13 +36,13 @@ export default function BusinessDetail() {
         <h1>{current.business.name}</h1>
         <p className="ql-business-location"><MapPin size={18} aria-hidden="true" />{current.business.location || 'Location not provided'}</p>
         <Card className="ql-detail-description"><h2>About this business</h2><p className="ql-muted">{current.business.description || 'No description provided.'}</p></Card>
-      </section><aside className="ql-card ql-business-information"><h2>Business information</h2>
+      </section><Card asChild className="ql-business-information"><aside><h2>Business information</h2>
         <dl><div><dt><Clock3 size={18} aria-hidden="true" />Hours</dt><dd>{businessHours(current.business)}</dd></div>
           <div><dt><Phone size={18} aria-hidden="true" />Phone</dt><dd>{current.business.phoneNumber ? <a href={`tel:${current.business.phoneNumber.replace(/[^+\d]/g, '')}`}>{current.business.phoneNumber}</a> : 'Not provided'}</dd></div>
           <div><dt><Mail size={18} aria-hidden="true" />Email</dt><dd>{current.business.email ? <a href={`mailto:${current.business.email}`}>{current.business.email}</a> : 'Not provided'}</dd></div></dl>
         <BusinessQueueSummary businessId={current.business.id} />
-        {current.business.operational ? <Link className="ql-button ql-button-primary ql-join-link" to={`/business/${encodeURIComponent(current.business.id)}/join`}>Join queue <ArrowRight size={17} aria-hidden="true" /></Link> : <Button className="ql-join-link" disabled>Join queue</Button>}
+        {current.business.operational ? <Button asChild className="ql-join-link"><Link to={`/business/${encodeURIComponent(current.business.id)}/join`}>Join queue <ArrowRight size={17} aria-hidden="true" /></Link></Button> : <Button className="ql-join-link" disabled>Join queue</Button>}
         <p className="ql-meta ql-join-note">{current.business.operational ? 'Save your place and keep your ticket handy.' : 'This business is currently unavailable.'}</p>
-      </aside></div>}
+      </aside></Card></div>}
   </PageContainer>;
 }

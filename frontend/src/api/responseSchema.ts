@@ -43,7 +43,8 @@ export function validateAPIResponse(path: string, method: string, value: unknown
   else if (path === '/businesses/search') schema = array(business);
   else if (path === '/businesses/' && method === 'GET') schema = page(business);
   else if (/^\/businesses\/[^/]+\/counters$/.test(path)) schema = array(counter);
-  else if (/^\/businesses\/[^/]+\/members$/.test(path)) schema = array(member);
+  else if (/^\/businesses\/[^/]+\/members$/.test(path) && method === 'GET') schema = array(member);
+  else if (/^\/businesses\/[^/]+\/members$/.test(path) && method === 'PUT') schema = member;
   else if (/^\/businesses\/[^/]+\/queues$/.test(path)) schema = array(queue);
   else if (/^\/businesses\/[^/]+$/.test(path) && method === 'GET' || path === '/businesses/' && method === 'POST') schema = business;
   else if (path === '/queues/me' || /^\/queues\/business\/[^/]+$/.test(path)) schema = array(queue);

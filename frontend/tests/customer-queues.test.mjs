@@ -26,7 +26,12 @@ test('all wire states have distinct copy and terminal states are inactive', () =
   for (const state of ['waiting', 'called', 'processing']) assert.equal(display.isActiveQueue(state), true);
   for (const state of ['done', 'skipped', 'cancelled']) assert.equal(display.isActiveQueue(state), false);
   assert.equal(Object.keys(display.queueHeadings).length, 6);
-  assert.match(display.cancellationErrorMessage(new APIError(409, 'QUEUE_PERSISTENCE_PENDING', 'raw')), /still being saved/);
+  const persistencePending = new APIError(409, 'QUEUE_PERSISTENCE_PENDING', 'raw');
+  assert.equal(display.isQueuePersistencePending(persistencePending), true);
+  assert.equal(display.isQueuePersistencePending(new APIError(404, 'QUEUE_NOT_READY', 'raw')), true);
+  assert.equal(display.isQueuePersistencePending(new APIError(404, 'QUEUE_NOT_FOUND', 'raw')), false);
+  assert.match(display.cancellationErrorMessage(persistencePending), /still being saved/);
+  assert.match(display.ticketErrorMessage(persistencePending), /still being confirmed/);
   assert.match(display.ticketErrorMessage(new APIError(403, 'QUEUE_ACCESS_DENIED', 'raw')), /session/);
 });
 test('My Queues and cancellation use credentials and the owned state transition', async () => {

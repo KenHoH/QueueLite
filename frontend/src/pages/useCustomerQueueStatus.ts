@@ -3,12 +3,13 @@ import { APIError } from '../api/errors';
 import { getCustomerQueueStatus } from '../api/queues';
 import type { CustomerQueueStatus } from '../api/types';
 import { isBusinessId } from './businessDisplay';
-import { isActiveQueue } from './queueDisplay';
+import { isActiveQueue, isQueuePersistencePending } from './queueDisplay';
 
 /** Polls without overlapping requests and pauses while the tab is hidden. */
 export function useCustomerQueueStatus(queueId: string, paused: boolean) {
   const [data, setData] = useState<CustomerQueueStatus | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [persistencePending, setPersistencePending] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -30,9 +31,19 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
         active = isActiveQueue(next.queue.state);
         setData(next);
         setError(null);
+        setPersistencePending(false);
         if (active) timer = setTimeout(() => { void read(); }, 5000);
       } catch (failure) {
-        if (!controller.signal.aborted) { active = false; setError(failure); }
+        if (!controller.signal.aborted && isQueuePersistencePending(failure)) {
+          active = true;
+          setError(null);
+          setPersistencePending(true);
+          timer = setTimeout(() => { void read(); }, 2000);
+        } else if (!controller.signal.aborted) {
+          active = false;
+          setPersistencePending(false);
+          setError(failure);
+        }
       } finally {
         pending = false;
       }
@@ -42,6 +53,7 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
       if (!document.hidden && active) void read();
     };
     setError(null);
+    setPersistencePending(false);
     void read();
     document.addEventListener('visibilitychange', visibility);
     return () => {
@@ -51,5 +63,5 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
     };
   }, [queueId, paused, attempt]);
 
-  return { data, error, refresh: () => setAttempt(value => value + 1) };
+  return { data, error, persistencePending, refresh: () => setAttempt(value => value + 1) };
 }

@@ -66,6 +66,8 @@ test('profile loads current user, saves phone/email, clears email, and changes p
   assert.deepEqual(requests.filter(r => r.method === 'PUT').at(-1).body, { password: 'new password' });
   assert.equal(await page.getByLabel('New password', { exact: true }).inputValue(), '');
   assert.equal(await page.getByRole('link', { name: 'Plans & Subscription →' }).getAttribute('href'), '/plans');
+  assert.equal(await page.getByRole('link', { name: 'My service counters →' }).getAttribute('href'), '/counters');
+  assert.equal(await page.locator('main').getByRole('link', { name: 'Create a business →' }).getAttribute('href'), '/business/create');
   await page.screenshot({ path: 'output/playwright/account-profile-desktop.png', fullPage: true });
 });
 test('profile validation blocks requests and API errors are safe', async t => {
@@ -82,9 +84,13 @@ for (const path of ['/profile', '/plans', '/business/create', `/business/${busin
   assert.ok((await page.locator('main').getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).includes('returnTo='));
   assert.ok(requests.length > 0 && requests.every(r => r.path === '/api/users/me'));
 });
-test('profile no businesses and management selector support empty/staff/multiple account roles', async t => {
+test('new account can discover business creation from the header and profile', async t => {
   const { page } = await scenario(t, { businesses: [] }); await page.goto(`${origin}/profile`); await visible(page.getByText('You don’t own or manage a business yet.'));
-  assert.equal(await page.getByRole('link', { name: 'Manage Business', exact: true }).count(), 0); await visible(page.getByRole('link', { name: 'Create a business' }));
+  assert.equal(await page.getByRole('link', { name: 'Manage Business', exact: true }).count(), 0);
+  const headerCreate = page.locator('header').getByRole('link', { name: 'Create Business', exact: true });
+  assert.equal(await headerCreate.getAttribute('href'), '/business/create');
+  await visible(page.locator('main').getByRole('link', { name: 'Create a business →', exact: true }));
+  await headerCreate.click(); await visible(page.getByRole('button', { name: 'Create business', exact: true }));
 });
 test('create validates, submits only backend fields once, and navigates to settings', async t => {
   let release; const held = new Promise(resolve => { release = resolve; });
@@ -106,7 +112,7 @@ test('create error remains actionable; ambiguous setup blocks duplicate creation
 });
 test('settings load, save all editable fields and false operational state', async t => {
   const { page, requests } = await scenario(t); await page.goto(`${origin}/business/${business.id}/settings`); await visible(page.getByLabel('Business name', { exact: true }));
-  assert.equal(await page.getByLabel('Business name', { exact: true }).inputValue(), business.name); await page.getByLabel('Business name', { exact: true }).fill('Updated business'); await page.getByLabel('Operational', { exact: true }).uncheck();
+  assert.equal(await page.getByLabel('Business name', { exact: true }).inputValue(), business.name); await page.getByLabel('Business name', { exact: true }).fill('Updated business'); await page.getByRole('checkbox', { name: 'Operational', exact: true }).click();
   await page.getByRole('button', { name: 'Save business settings' }).click(); await visible(page.getByText('Business settings saved.'));
   assert.deepEqual(requests.find(r => r.method === 'PUT').body, { name: 'Updated business', location: business.location, description: business.description, openTime: business.openTime, closeTime: business.closeTime, email: business.email, phoneNumber: business.phoneNumber, operational: false });
   await page.screenshot({ path: 'output/playwright/account-settings-desktop.png', fullPage: true });
@@ -123,20 +129,33 @@ test('server rejects revoked business authorization with a proper permission mes
   await page.goto(`${origin}/business/${business.id}/settings`); await visible(page.getByRole('button', { name: 'Save business settings' })); await page.getByRole('button', { name: 'Save business settings' }).click();
   await visible(page.getByText('You do not have permission to manage this business or account.'));
 });
-test('plans show fetched customer/business quotas and selection with honest no-payment behavior', async t => {
+test('plans show fetched subscriptions and user/business comparison tables without purchase actions', async t => {
   const { page, requests } = await scenario(t); await page.goto(`${origin}/plans`); await visible(page.getByText('Priority slots remaining: 7')); await visible(page.getByText('Queue capacity remaining: 43'));
-  await page.getByLabel('Select business').selectOption(second.id); await visible(page.getByText('Queue capacity remaining: 321')); await visible(page.getByRole('heading', { name: 'Plus', exact: true }));
+  await visible(page.getByRole('heading', { name: 'Customer plans', exact: true })); await visible(page.getByRole('heading', { name: 'Business plans', exact: true }));
+  await visible(page.getByRole('columnheader', { name: 'Premium', exact: true })); await visible(page.getByRole('columnheader', { name: 'Max', exact: true }));
+  await visible(page.getByRole('rowheader', { name: 'Extra Priority Pass', exact: true })); await visible(page.getByRole('rowheader', { name: 'AI Weekly Insights', exact: true }));
+  await page.getByLabel('Select business').click(); await page.getByRole('option', { name: `${second.name} (admin)` }).click(); await visible(page.getByText('Queue capacity remaining: 321')); await visible(page.getByRole('heading', { name: 'Plus', exact: true }));
   assert.equal(await page.getByRole('button', { name: 'Upgrade — coming later' }).isDisabled(), true); assert.equal(await page.getByRole('button', { name: 'Change plan — coming later' }).isDisabled(), true);
   assert.ok(requests.every(r => r.method === 'GET')); const text = await page.locator('main').innerText(); assert.doesNotMatch(text, /499|299|\$|checkout/i);
   await page.screenshot({ path: 'output/playwright/account-plans-desktop.png', fullPage: true });
   await page.getByRole('link', { name: 'Manage Business', exact: true }).click(); await visible(page.getByRole('heading', { name: second.name }));
   assert.equal(await page.getByRole('link', { name: 'Business settings →' }).getAttribute('href'), `/business/${second.id}/settings`);
 });
-test('subscription errors can be retried and staff cannot fetch business subscription', async t => {
+test('subscription errors can be retried and counter-only staff cannot see business plans', async t => {
   let fail = true;
   const { page, requests } = await scenario(t, { businesses: [{ ...business, role: 'counter' }], respond: path => path === `/api/subscriptions/users/${user.id}` && fail ? { status: 500, json: {} } : undefined });
   await page.goto(`${origin}/plans`); await visible(page.getByText('We couldn’t complete this request. Please try again.')); fail = false;
-  await page.getByRole('button', { name: 'Try again' }).click(); await visible(page.getByText('Priority slots remaining: 7')); assert.equal(requests.some(r => r.path.startsWith('/api/subscriptions/businesses/')), false);
+  await page.getByRole('button', { name: 'Try again' }).click(); await visible(page.getByText('Priority slots remaining: 7'));
+  assert.equal(await page.getByRole('heading', { name: 'Business plans', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Change plan — coming later' }).count(), 0);
+  assert.equal(requests.some(r => r.path.startsWith('/api/subscriptions/businesses/')), false);
+});
+test('account without a business sees user plans but no business plan list', async t => {
+  const { page, requests } = await scenario(t, { businesses: [] }); await page.goto(`${origin}/plans`);
+  await visible(page.getByRole('heading', { name: 'Customer plans', exact: true }));
+  assert.equal(await page.getByRole('heading', { name: 'Business plans', exact: true }).count(), 0);
+  assert.equal(await page.getByLabel('Select business').count(), 0);
+  assert.equal(requests.some(r => r.path.startsWith('/api/subscriptions/businesses/')), false);
 });
 test('mobile forms and account navigation fit without horizontal overflow', async t => {
   const { page } = await scenario(t); await page.setViewportSize({ width: 390, height: 844 });

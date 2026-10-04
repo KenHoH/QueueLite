@@ -28,11 +28,33 @@
   --ql-space-4: 1rem;
   --ql-space-6: 1.5rem;
   --ql-space-8: 2rem;
+  --ql-space-10: 2.5rem;
   --ql-space-12: 3rem;
   --ql-space-16: 4rem;
-  --ql-radius-control: .625rem;
-  --ql-radius-card: 1rem;
+  --ql-radius-control: .5rem;
+  --ql-radius-card: .75rem;
   --ql-radius-pill: 999px;
   --ql-content-width: 72rem;
   --ql-control-height: 2.875rem;
+
+  /* shadcn/Tailwind semantic aliases backed by QueueLite product tokens. */
+  --background: var(--ql-background);
+  --foreground: var(--ql-text);
+  --card: var(--ql-surface);
+  --card-foreground: var(--ql-text);
+  --popover: var(--ql-surface);
+  --popover-foreground: var(--ql-text);
+  --primary: var(--ql-action);
+  --primary-foreground: var(--ql-surface);
+  --secondary: var(--ql-soft-mint);
+  --secondary-foreground: var(--ql-action);
+  --muted: var(--ql-background);
+  --muted-foreground: var(--ql-text-secondary);
+  --accent: var(--ql-soft-mint);
+  --accent-foreground: var(--ql-action);
+  --destructive: var(--ql-error-text);
+  --border: var(--ql-border);
+  --input: var(--ql-border);
+  --ring: var(--ql-action);
+  --radius: var(--ql-radius-control);
 }

@@ -4,17 +4,28 @@ import { BusinessNavigation } from '../components/BusinessNavigation';
 import { EmptyState, LoadingSkeleton } from '../components/foundation';
 import { getBusinessSubscription, getUserSubscription } from '../api/subscriptions';
 import type { Subscription } from '../api/types';
+import type { PlanComparison } from './subscriptionPlans';
+import { businessPlanComparison, canShowBusinessPlans, userPlanComparison } from './subscriptionPlans';
 import { AccountAccess } from '../components/AccountAccess';
-import { Button, Card, PageContainer } from '../components/foundation';
+import { Button, Card, PageContainer, PageHeader } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { BusinessSelector } from './ManageBusinesses';
 import { canManage } from './accountForms';
 import { ResourceFeedback, useAccountResource } from './useAccountResource';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const planName = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 const date = (value: string) => { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? 'Not provided' : parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
 function SubscriptionDates({ subscription }: { subscription: Subscription }) {
   return <dl className="ql-summary"><dt>Status</dt><dd>{planName(subscription.status)}</dd><dt>Started</dt><dd>{date(subscription.startDate)}</dd>{subscription.endDate && <><dt>Ends</dt><dd>{date(subscription.endDate)}</dd></>}</dl>;
+}
+function PlanValue({ value }: { value: string }) {
+  if (value === '✓') return <><span aria-hidden="true">✓</span><span className="ql-sr-only">Included</span></>;
+  if (value === '—') return <><span aria-hidden="true">—</span><span className="ql-sr-only">Not included</span></>;
+  return value;
+}
+function PlanComparisonTable({ id, title, comparison }: { id: string; title: string; comparison: PlanComparison }) {
+  return <section className="ql-stack" aria-labelledby={`${id}-heading`}><div><p className="ql-eyebrow">PLAN COMPARISON</p><h2 id={`${id}-heading`}>{title}</h2></div><div className="ql-plan-table-wrap" role="region" aria-label={`${title} comparison`} tabIndex={0}><Table className="ql-plan-table"><caption className="ql-sr-only">{title} feature comparison</caption><TableHeader><TableRow><TableHead scope="col">Feature</TableHead>{comparison.plans.map(plan => <TableHead scope="col" key={plan}>{plan}</TableHead>)}</TableRow></TableHeader><TableBody>{comparison.features.map(feature => <TableRow key={feature.name}><TableHead scope="row">{feature.name}</TableHead>{feature.values.map((value, index) => <TableCell key={comparison.plans[index]}><PlanValue value={value} /></TableCell>)}</TableRow>)}</TableBody></Table></div></section>;
 }
 export function UserSubscriptionSummary({ userId }: { userId: string }) {
   const load = useCallback((signal: AbortSignal) => getUserSubscription(userId, { signal }), [userId]);
@@ -29,19 +40,25 @@ function BusinessSubscriptionSummary({ businessId }: { businessId: string }) {
 }
 export default function Plans() {
   const { auth } = useAppState();
-  return <PageContainer className="ql-account-page"><h1>Plans &amp; Subscription</h1><AccountAccess>{auth.status === 'authenticated' && <PlansContent key={auth.user.id} userId={auth.user.id} />}</AccountAccess></PageContainer>;
+  return <PageContainer className="ql-account-page ql-plans-page"><PageHeader title="Plans & Subscription" description="Review current allowances and compare the available plan catalog." /><AccountAccess>{auth.status === 'authenticated' && <PlansContent key={auth.user.id} userId={auth.user.id} />}</AccountAccess></PageContainer>;
 }
 function PlansContent({ userId }: { userId: string }) {
   const { businessId } = useParams();
   const { businesses, businessesStatus, refreshBusinesses, selectedBusinessId } = useAppState();
   const managers = businesses.filter(canManage);
+  const showBusinessPlans = canShowBusinessPlans(businesses);
   const selected = businessId ? managers.find(item => item.id === businessId) : managers.find(item => item.id === selectedBusinessId) ?? managers[0];
   if (businessId && businessesStatus === 'loading') return <LoadingSkeleton label="Checking business access" />;
   if (businessId && businessesStatus === 'error') return <Card><p>We couldn’t check business access.</p><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>;
   if (businessId && !selected) return <EmptyState title="Permission required" description="Owner or admin access is required to view business plans." />;
   return <div className="ql-stack"><UserSubscriptionSummary userId={userId} />
-    <Card><h2>Customer plans</h2><p>Standard · Premium</p><p className="ql-muted">Plan changes and payments are coming later. Upgrades are currently unavailable.</p><Button disabled>Upgrade — coming later</Button></Card>
-    {businessId ? <BusinessNavigation businessId={businessId} /> : <BusinessSelector />}{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}
-    <Card><h2>Business plans</h2><p>Free · Plus · Pro · Max</p><p className="ql-muted">Choose a business above to see its current subscription. Plan changes and payments are coming later.</p><Button disabled>Change plan — coming later</Button></Card><Link to="/profile">Back to profile</Link>
+    <PlanComparisonTable id="user-plans" title="Customer plans" comparison={userPlanComparison} />
+    <Card><p className="ql-muted">This comparison describes the planned catalog. Plan changes, payments, integrations, and extra priority-pass purchases are currently unavailable.</p><Button disabled>Upgrade — coming later</Button></Card>
+    {businessesStatus === 'loading' ? <Card><LoadingSkeleton label="Checking managed businesses" /></Card>
+      : businessesStatus === 'error' ? <Card><p>We couldn’t check your managed businesses.</p><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>
+      : showBusinessPlans && <>{businessId ? <BusinessNavigation businessId={businessId} /> : <BusinessSelector />}{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}
+        <PlanComparisonTable id="business-plans" title="Business plans" comparison={businessPlanComparison} />
+        <Card><p className="ql-muted">Business plan comparisons are informational. Listed integrations, analytics, insights, billing, and plan changes may not yet be available.</p><Button disabled>Change plan — coming later</Button></Card></>}
+    <Link to="/profile">Back to profile</Link>
   </div>;
 }
