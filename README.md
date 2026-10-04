@@ -21,7 +21,11 @@ Priority selection, live server events and billing administration are not expose
 | `backend/` | Go HTTP API using Chi, GORM, PostgreSQL, Redis and JWT cookies |
 | `frontend/` | React 19, TypeScript, Vite 7, React Router, Tailwind CSS and Playwright tests |
 
-The backend separates domain models, application services, HTTP handlers and persistence adapters. The frontend uses typed API services and shared UI components. See the [frontend guide](frontend/README.md) and [API error reference](frontend/docs/backend-errors.md).
+The backend separates domain models, application services, HTTP handlers and persistence adapters. The frontend uses typed API services and shared UI components.
+
+## Canonical documentation
+
+The repository source of truth is the [`docs/`](docs/README.md) suite. AI agents and contributors must read [`docs/AI_WORKFLOW_RULES.md`](docs/AI_WORKFLOW_RULES.md) before proposing or making changes. The older [frontend guide](frontend/README.md), [API error reference](frontend/docs/backend-errors.md), and `.documents/` reports are supplemental rather than canonical.
 
 ## Local setup
 
