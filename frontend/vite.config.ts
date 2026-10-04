@@ -64,10 +64,11 @@ export default defineConfig(({ mode }) => {
 			host: "127.0.0.1",
 			fs: { strict: !needsWindowsTildeFix },
 			proxy: {
-				"^/api(?:/|$)": {
+				"^/queuelite/api(?:/|$)": {
 					target: env.API_PROXY_TARGET || "http://127.0.0.1:8080",
 					changeOrigin: true,
-					rewrite: (url) => url.replace(/^\/api(?=\/|$)/, "") || "/",
+					rewrite: (url) =>
+						url.replace(/^\/queuelite\/api(?=\/|$)/, "") || "/",
 				},
 			},
 		},
