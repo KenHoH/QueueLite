@@ -1,5 +1,5 @@
 # Use the official Golang image for building
-FROM golang:1.21 AS builder
+FROM golang:1.27 AS builder
 # Set working directory
 WORKDIR /app
 # Copy Go modules and dependencies
