@@ -1,0 +1,14 @@
+import { api, pathID, type RequestOptions } from './client';
+import type { Subscription, CursorPage, PageQuery, BusinessSubscriptionInfo, UserSubscriptionInfo, UseSubscriptionResponse, UpdateSubscriptionRequest, UpdateSubscriptionTimeRequest, MessageResponse } from './types';
+export const getSubscriptions = (query: PageQuery = {}, options?: RequestOptions) => api<CursorPage<Subscription>>('/subscriptions/', { ...options, query });
+export const getSubscription = (subscriptionId: string, options?: RequestOptions) => api<Subscription>(`/subscriptions/${pathID(subscriptionId)}`, options);
+export const getBusinessSubscription = (businessId: string, options?: RequestOptions) => api<BusinessSubscriptionInfo>(`/subscriptions/businesses/${pathID(businessId)}`, options);
+export const getUserSubscription = (userId: string, options?: RequestOptions) => api<UserSubscriptionInfo>(`/subscriptions/users/${pathID(userId)}`, options);
+export const useUserSubscription = (userId: string, businessId: string, options?: RequestOptions) => api<UseSubscriptionResponse>(`/subscriptions/users/${pathID(userId)}/use`, { ...options, method: 'POST', body: { businessId } });
+export const addUserSlots = (userId: string, amount: number, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/users/${pathID(userId)}/slots`, { ...options, method: 'PATCH', body: { amount } });
+export const decreaseBusinessCapacity = (businessId: string, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/businesses/${pathID(businessId)}/capacity/decrease`, { ...options, method: 'PATCH' });
+export const updateSubscription = (subscriptionId: string, body: UpdateSubscriptionRequest, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/${pathID(subscriptionId)}`, { ...options, method: 'PUT', body });
+export const updateSubscriptionTime = (subscriptionId: string, body: UpdateSubscriptionTimeRequest, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/${pathID(subscriptionId)}/time`, { ...options, method: 'PATCH', body });
+export const activateSubscription = (subscriptionId: string, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/${pathID(subscriptionId)}/activate`, { ...options, method: 'PATCH' });
+export const deactivateSubscription = (subscriptionId: string, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/${pathID(subscriptionId)}/deactivate`, { ...options, method: 'PATCH' });
+export const deleteSubscription = (subscriptionId: string, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/${pathID(subscriptionId)}`, { ...options, method: 'DELETE' });

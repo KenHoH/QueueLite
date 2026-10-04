@@ -1,16 +1,17 @@
 package app
 
 import (
-	"QueueLite/internal/adapter/postgres/model"
-	"QueueLite/internal/apperror"
-	subscriptionapp "QueueLite/internal/subscription/app"
-	"QueueLite/internal/user/domain"
 	"context"
 	"errors"
 	"strings"
 
+	"QueueLite/internal/adapter/postgres/model"
+	"QueueLite/internal/apperror"
+	subscriptionapp "QueueLite/internal/subscription/app"
+	"QueueLite/internal/user/domain"
+	"QueueLite/internal/validation"
+
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService struct {
@@ -26,18 +27,6 @@ func NewUserService(repo UserRepo, subscriptionService *subscriptionapp.Subscrip
 	return service
 }
 
-func checkPassword(hashedPassword string, password string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)) == nil
-}
-
-func hashPassword(password string) (string, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hashedPassword), nil
-}
-
 func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*domain.User, error) {
 	user.Username = strings.TrimSpace(user.Username)
 	user.PhoneNumber = strings.TrimSpace(user.PhoneNumber)
@@ -49,14 +38,23 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	if user.Username == "" {
 		return nil, apperror.New(apperror.KindInvalid, "USERNAME_REQUIRED", "missing username")
 	}
-	if user.Password == "" {
+	if strings.TrimSpace(user.Password) == "" {
 		return nil, apperror.New(apperror.KindInvalid, "PASSWORD_REQUIRED", "missing password")
 	}
 	if user.PhoneNumber == "" {
 		return nil, apperror.New(apperror.KindInvalid, "PHONENUMBER_REQUIRED", "missing phonenumber")
 	}
+	if !validation.Phone(user.PhoneNumber) {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+	}
+	if user.Email != nil && *user.Email != "" && !validation.Email(*user.Email) {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
+	}
+	if len([]byte(user.Password)) > 72 {
+		return nil, apperror.New(apperror.KindInvalid, "PASSWORD_TOO_LONG", "password must be at most 72 bytes")
+	}
 
-	hashedPassword, err := hashPassword(user.Password)
+	hashedPassword, err := HashPassword(user.Password)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER", "hash password error", err)
 	}
@@ -66,16 +64,17 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to create user", err)
 	}
-	if s.subscriptionService != nil {
-		if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
-			return nil, err
-		}
+
+	// creating the default subscription
+	if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
+		return nil, err
 	}
 	return record, nil
 }
 
 func (s *UserService) LoginUser(ctx context.Context, user domain.User) (*model.User, error) {
 	user.Username = strings.TrimSpace(user.Username)
+
 	userRecord, err := s.repo.GetUserByName(ctx, user.Username)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
@@ -84,7 +83,7 @@ func (s *UserService) LoginUser(ctx context.Context, user domain.User) (*model.U
 		return nil, apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER_ERROR", "failed to get user", err)
 	}
 
-	if !checkPassword(*userRecord.Password, user.Password) {
+	if !CheckPassword(*userRecord.Password, user.Password) {
 		return nil, apperror.Wrap(apperror.KindUnauthorized, "INVALID_CREDENTIALS", "invalid username or password", ErrInvalidPassword)
 	}
 
@@ -112,6 +111,9 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain
 	}
 
 	if strings.TrimSpace(input.PhoneNumber) != "" {
+		if !validation.Phone(input.PhoneNumber) {
+			return apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+		}
 		user.PhoneNumber = strings.TrimSpace(input.PhoneNumber)
 	}
 	if input.Email != nil {
@@ -119,11 +121,20 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain
 		if email == "" {
 			user.Email = nil
 		} else {
+			if !validation.Email(email) {
+				return apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
+			}
 			user.Email = &email
 		}
 	}
 	if input.Password != "" {
-		hashedPassword, err := hashPassword(input.Password)
+		if strings.TrimSpace(input.Password) == "" {
+			return apperror.New(apperror.KindInvalid, "PASSWORD_REQUIRED", "password required")
+		}
+		if len([]byte(input.Password)) > 72 {
+			return apperror.New(apperror.KindInvalid, "PASSWORD_TOO_LONG", "password must be at most 72 bytes")
+		}
+		hashedPassword, err := HashPassword(input.Password)
 		if err != nil {
 			return apperror.Wrap(apperror.KindInternal, "INTERNAL_SERVER", "hash password error", err)
 		}

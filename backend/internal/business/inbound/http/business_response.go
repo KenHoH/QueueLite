@@ -35,3 +35,8 @@ func NewBusinessResponses(businesses []domain.Business) []BusinessResponse {
 	}
 	return responses
 }
+
+type BusinessMembershipResponse struct {
+	BusinessResponse
+	Role string `json:"role"`
+}

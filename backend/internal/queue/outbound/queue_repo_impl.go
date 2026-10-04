@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"QueueLite/internal/adapter/postgres/model"
+	"QueueLite/internal/apperror"
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
 	"context"
@@ -47,7 +48,19 @@ func (r *QueueRepoImpl) CreateQueues(ctx context.Context, queues []domain.Queue)
 }
 
 func (r *QueueRepoImpl) UpdateQueue(ctx context.Context, queue *domain.Queue) error {
-	result := r.db.WithContext(ctx).Model(&model.Queue{}).Where("id = ?", queue.ID).Updates(map[string]any{
+	return r.updateQueue(ctx, queue, nil)
+}
+
+func (r *QueueRepoImpl) UpdateQueueIfState(ctx context.Context, queue *domain.Queue, expected domain.QueueState) error {
+	return r.updateQueue(ctx, queue, &expected)
+}
+
+func (r *QueueRepoImpl) updateQueue(ctx context.Context, queue *domain.Queue, expected *domain.QueueState) error {
+	query := r.db.WithContext(ctx).Model(&model.Queue{}).Where("id = ?", queue.ID)
+	if expected != nil {
+		query = query.Where("state = ?", model.QueueState(*expected))
+	}
+	result := query.Updates(map[string]any{
 		"business_id":          queue.BusinessID,
 		"user_id":              queue.UserID,
 		"called_by_counter_id": queue.CalledByCounterID,
@@ -63,6 +76,9 @@ func (r *QueueRepoImpl) UpdateQueue(ctx context.Context, queue *domain.Queue) er
 		return fmt.Errorf("update queue: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
+		if expected != nil {
+			return apperror.New(apperror.KindConflict, "QUEUE_STATE_CHANGED", "queue state changed")
+		}
 		return fmt.Errorf("%w: %s", app.ErrQueueNotFound, queue.ID)
 	}
 	return nil
@@ -99,6 +115,14 @@ func (r *QueueRepoImpl) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *QueueRepoImpl) GetActiveQueuesByUser(ctx context.Context, userID uuid.UUID) ([]domain.Queue, error) {
+	var records []model.Queue
+	if err := r.db.WithContext(ctx).Where("user_id = ? AND state IN ?", userID, activeQueueStates()).Order("created_at ASC, id ASC").Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("get active user queues: %w", err)
+	}
+	return toDomainQueues(records), nil
+}
+
 func (r *QueueRepoImpl) GetActiveQueueByUserAndBusiness(ctx context.Context, userID uuid.UUID, businessID uuid.UUID) (*domain.Queue, error) {
 	var record model.Queue
 	err := r.db.WithContext(ctx).
@@ -114,17 +138,19 @@ func (r *QueueRepoImpl) GetActiveQueueByUserAndBusiness(ctx context.Context, use
 	return toDomainQueue(&record), nil
 }
 
-func (r *QueueRepoImpl) GenerateDailyQueueName(ctx context.Context, businessID uuid.UUID, date time.Time) (string, error) {
-	day := date.Truncate(24 * time.Hour)
+func (r *QueueRepoImpl) GetDailyQueueNumberFloor(ctx context.Context, businessID uuid.UUID, date time.Time) (int64, error) {
+	date = date.UTC()
+	day := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
 	nextDay := day.Add(24 * time.Hour)
-	var count int64
+	var highest int64
 	if err := r.db.WithContext(ctx).
 		Model(&model.Queue{}).
-		Where("business_id = ? AND created_at >= ? AND created_at < ?", businessID, day, nextDay).
-		Count(&count).Error; err != nil {
-		return "", fmt.Errorf("generate daily queue name: %w", err)
+		Select("COALESCE(MAX(CAST(SUBSTRING(name FROM 2) AS BIGINT)), 0)").
+		Where("business_id = ? AND created_at >= ? AND created_at < ? AND name ~ '^A[0-9]+$'", businessID, day, nextDay).
+		Scan(&highest).Error; err != nil {
+		return 0, fmt.Errorf("get daily queue number floor: %w", err)
 	}
-	return fmt.Sprintf("A%03d", count+1), nil
+	return highest, nil
 }
 
 func (r *QueueRepoImpl) GetTopQueueByBusinessPrivateForUpdate(ctx context.Context, businessID uuid.UUID) (*domain.Queue, error) {

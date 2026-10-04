@@ -2,11 +2,63 @@
 /backend/.devenv
 /backend/devenv.nix
 /backend/devenv.yaml
-/backend/.env
 /backend/tmp
 /frontend/devenv.lock
 /frontend/devenv.nix
 /frontend/devenv.yaml
 /frontend/.devenv
-/frontend/node_modules
 /.documents
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies, caches and build output
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.npm-cache/
+.vite/
+*.tsbuildinfo
+*.exe
+*.test
+*.out
+
+# Browser tests and temporary artifacts
+output/
+test-results/
+playwright-report/
+blob-report/
+.playwright-cli/
+tmp/
+temp/
+*.log
+*.tmp
+*.bak
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+dump.rdb
+appendonly.aof
+appendonlydir/
+
+# Editor, operating-system and local workflow files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.codex/
+.agents/

@@ -26,7 +26,7 @@ func AddQueueStream(ctx context.Context, rdt *redis.Client, record domain.Queue)
 		"name":        record.Name,
 		"priority":    record.Priority,
 		"state":       string(record.State),
-		"created_at":  record.CreatedAt.Format(time.RFC3339Nano),
+		"created_at":  record.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	if record.UserID != nil {
 		values["user_id"] = record.UserID.String()
@@ -34,8 +34,6 @@ func AddQueueStream(ctx context.Context, rdt *redis.Client, record domain.Queue)
 
 	_, err := rdt.XAdd(ctx, &redis.XAddArgs{
 		Stream: config.StreamName,
-		MaxLen: 1000,
-		Approx: true,
 		ID:     "*", // Auto-generate message ID
 		Values: values,
 	}).Result()

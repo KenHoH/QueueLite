@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	_ "embed"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -101,6 +103,18 @@ func SetGuestQueueUser(ctx context.Context, rdt *redis.Client, guest GuestQueueU
 	return rdt.Set(ctx, GuestKey(guest.GuestID), payload, config.GuestExpirationTime).Err()
 }
 
+func GetGuestQueueUser(ctx context.Context, rdt *redis.Client, guestID string) (*GuestQueueUser, error) {
+	payload, err := rdt.Get(ctx, GuestKey(guestID)).Bytes()
+	if err != nil {
+		return nil, err
+	}
+	var guest GuestQueueUser
+	if err := json.Unmarshal(payload, &guest); err != nil {
+		return nil, err
+	}
+	return &guest, nil
+}
+
 func AddQueue(ctx context.Context, rdt *redis.Client, queueKey string, record domain.Queue) error {
 	score := QueueScore(record)
 
@@ -154,61 +168,35 @@ func PopTopWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, busines
 	return item, nil
 }
 
+//go:embed script/pop_next_fair_waiting_queue.lua
+var popNextFairWaitingQueueLua string
+var popNextFairWaitingQueue = redis.NewScript(popNextFairWaitingQueueLua)
+
 func PopNextFairWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, businessID string) (*WaitingQueueItem, error) {
-	streak, err := rdt.Get(ctx, PriorityStreakKey(businessID)).Int()
-	if err != nil && err != redis.Nil {
-		return nil, fmt.Errorf("get priority streak: %w", err)
+	result, err := popNextFairWaitingQueue.Run(ctx, rdt, []string{
+		PriorityStreakKey(businessID), PriorityWaitingQueueKey(businessID),
+		NormalWaitingQueueKey(businessID), LegacyWaitingQueueKey(businessID),
+	}, maxPriorityStreak).Slice()
+	if err != nil {
+		return nil, fmt.Errorf("pop next fair waiting queue: %w", err)
 	}
-
-	priorityKey := PriorityWaitingQueueKey(businessID)
-
-	if streak < maxPriorityStreak {
-		item, err := popTopWaitingQueueFromKey(ctx, rdt, priorityKey)
-		if err != nil {
-			return nil, err
-		}
-		if item != nil {
-			if err := rdt.Set(ctx, PriorityStreakKey(businessID), streak+1, 0).Err(); err != nil {
-				return nil, fmt.Errorf("set priority streak: %w", err)
-			}
-			return &WaitingQueueItem{Z: *item, QueueKey: priorityKey}, nil
-		}
-
-		normalItem, err := popNormalWaitingQueue(ctx, rdt, businessID)
-		if err != nil {
-			return nil, err
-		}
-		if normalItem != nil {
-			if err := rdt.Set(ctx, PriorityStreakKey(businessID), 0, 0).Err(); err != nil {
-				return nil, fmt.Errorf("reset priority streak: %w", err)
-			}
-			return normalItem, nil
-		}
+	if len(result) == 0 {
 		return nil, nil
 	}
-
-	normalItem, err := popNormalWaitingQueue(ctx, rdt, businessID)
+	if len(result) != 3 {
+		return nil, fmt.Errorf("invalid fair waiting queue result")
+	}
+	key, keyOK := result[0].(string)
+	member, memberOK := result[1].(string)
+	scoreString, scoreOK := result[2].(string)
+	if !keyOK || !memberOK || !scoreOK {
+		return nil, fmt.Errorf("invalid fair waiting queue result types")
+	}
+	score, err := strconv.ParseFloat(scoreString, 64)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse waiting queue score: %w", err)
 	}
-	if normalItem != nil {
-		if err := rdt.Set(ctx, PriorityStreakKey(businessID), 0, 0).Err(); err != nil {
-			return nil, fmt.Errorf("reset priority streak: %w", err)
-		}
-		return normalItem, nil
-	}
-
-	item, err := popTopWaitingQueueFromKey(ctx, rdt, priorityKey)
-	if err != nil {
-		return nil, err
-	}
-	if item != nil {
-		if err := rdt.Set(ctx, PriorityStreakKey(businessID), maxPriorityStreak, 0).Err(); err != nil {
-			return nil, fmt.Errorf("keep priority streak capped: %w", err)
-		}
-		return &WaitingQueueItem{Z: *item, QueueKey: priorityKey}, nil
-	}
-	return nil, nil
+	return &WaitingQueueItem{Z: redis.Z{Member: member, Score: score}, QueueKey: key}, nil
 }
 
 func popTopWaitingQueueFromKey(ctx context.Context, rdt *redis.Client, queueKey string) (*redis.Z, error) {
@@ -220,27 +208,6 @@ func popTopWaitingQueueFromKey(ctx context.Context, rdt *redis.Client, queueKey 
 		return nil, nil
 	}
 	return &results[0], nil
-}
-
-func popNormalWaitingQueue(ctx context.Context, rdt *redis.Client, businessID string) (*WaitingQueueItem, error) {
-	normalKey := NormalWaitingQueueKey(businessID)
-	item, err := popTopWaitingQueueFromKey(ctx, rdt, normalKey)
-	if err != nil {
-		return nil, err
-	}
-	if item != nil {
-		return &WaitingQueueItem{Z: *item, QueueKey: normalKey}, nil
-	}
-
-	legacyKey := LegacyWaitingQueueKey(businessID)
-	item, err = popTopWaitingQueueFromKey(ctx, rdt, legacyKey)
-	if err != nil {
-		return nil, err
-	}
-	if item != nil {
-		return &WaitingQueueItem{Z: *item, QueueKey: legacyKey}, nil
-	}
-	return nil, nil
 }
 
 func RestoreWaitingQueue(ctx context.Context, rdt *redis.Client, businessID string, item redis.Z) error {
@@ -297,10 +264,46 @@ func GetWaitingQueues(ctx context.Context, businessID string, rdt *redis.Client)
 	if err != nil {
 		return nil, err
 	}
+	streakRaw, err := rdt.Get(ctx, PriorityStreakKey(businessID)).Result()
+	if err != nil && err != redis.Nil {
+		return nil, fmt.Errorf("read priority streak: %w", err)
+	}
+	streak := 0
+	if err == nil {
+		streak, err = strconv.Atoi(streakRaw)
+		if err != nil || streak < 0 {
+			return nil, fmt.Errorf("invalid priority streak")
+		}
+	}
 
+	// Simulate the same fair selection policy as the atomic pop script without
+	// mutating Redis. This makes customer positions match subsequent call-nexts.
 	tasks := make([]redis.Z, 0, len(priorityTasks)+len(normalTasks)+len(legacyTasks))
-	tasks = append(tasks, priorityTasks...)
-	tasks = append(tasks, normalTasks...)
-	tasks = append(tasks, legacyTasks...)
+	priorityIndex, normalIndex, legacyIndex := 0, 0, 0
+	for priorityIndex < len(priorityTasks) || normalIndex < len(normalTasks) || legacyIndex < len(legacyTasks) {
+		if streak < maxPriorityStreak && priorityIndex < len(priorityTasks) {
+			tasks = append(tasks, priorityTasks[priorityIndex])
+			priorityIndex++
+			streak = min(streak+1, maxPriorityStreak)
+			continue
+		}
+		if normalIndex < len(normalTasks) {
+			tasks = append(tasks, normalTasks[normalIndex])
+			normalIndex++
+			streak = 0
+			continue
+		}
+		if legacyIndex < len(legacyTasks) {
+			tasks = append(tasks, legacyTasks[legacyIndex])
+			legacyIndex++
+			streak = 0
+			continue
+		}
+		if priorityIndex < len(priorityTasks) {
+			tasks = append(tasks, priorityTasks[priorityIndex])
+			priorityIndex++
+			streak = min(streak+1, maxPriorityStreak)
+		}
+	}
 	return tasks, nil
 }

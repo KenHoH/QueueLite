@@ -1,0 +1,60 @@
+:root {
+  color-scheme: light;
+  --ql-background: #F8F9F6;
+  --ql-surface: #FFFFFF;
+  --ql-text: #202825;
+  --ql-text-secondary: #65706A;
+  --ql-mint: #69C5AA;
+  --ql-action: #29473E;
+  --ql-soft-mint: #EDF5EF;
+  --ql-border: #E3E7E2;
+  --ql-error: #B75D57;
+  --ql-priority: #A68542;
+  --ql-priority-surface: #FBE9E7;
+  --ql-priority-border: #E8B4AF;
+  /* Stronger foregrounds for small text on light surfaces. */
+  --ql-error-text: #93453F;
+  --ql-priority-text: #795F2A;
+  --ql-font: Inter, 'Segoe UI', system-ui, sans-serif;
+  --ql-display: 2.25rem;
+  --ql-title: 2rem;
+  --ql-section: 1.25rem;
+  --ql-body: 1rem;
+  --ql-small: .875rem;
+  --ql-meta: .8125rem;
+  --ql-space-1: .25rem;
+  --ql-space-2: .5rem;
+  --ql-space-3: .75rem;
+  --ql-space-4: 1rem;
+  --ql-space-6: 1.5rem;
+  --ql-space-8: 2rem;
+  --ql-space-10: 2.5rem;
+  --ql-space-12: 3rem;
+  --ql-space-16: 4rem;
+  --ql-radius-control: .5rem;
+  --ql-radius-card: .75rem;
+  --ql-radius-pill: 999px;
+  --ql-content-width: 72rem;
+  --ql-control-height: 2.875rem;
+
+  /* shadcn/Tailwind semantic aliases backed by QueueLite product tokens. */
+  --background: var(--ql-background);
+  --foreground: var(--ql-text);
+  --card: var(--ql-surface);
+  --card-foreground: var(--ql-text);
+  --popover: var(--ql-surface);
+  --popover-foreground: var(--ql-text);
+  --primary: var(--ql-action);
+  --primary-foreground: var(--ql-surface);
+  --secondary: var(--ql-soft-mint);
+  --secondary-foreground: var(--ql-action);
+  --muted: var(--ql-background);
+  --muted-foreground: var(--ql-text-secondary);
+  --accent: var(--ql-soft-mint);
+  --accent-foreground: var(--ql-action);
+  --destructive: var(--ql-error-text);
+  --border: var(--ql-border);
+  --input: var(--ql-border);
+  --ring: var(--ql-action);
+  --radius: var(--ql-radius-control);
+}

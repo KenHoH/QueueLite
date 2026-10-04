@@ -1,8 +1,9 @@
 package main
 
 import (
-	"QueueLite/internal/bootstrap"
 	"log"
+
+	"QueueLite/internal/bootstrap"
 )
 
 func main() {

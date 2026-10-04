@@ -58,7 +58,7 @@ func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
 			return false
 		}
 
-		payload, err := json.Marshal(response)
+		payload, err := json.Marshal(NewQueueSnapshotResponses(response))
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
 			flusher.Flush()
@@ -119,30 +119,38 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 	httpadapter.WriteJSON(w, http.StatusOK, response)
 }
 
-func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Request) {
+func (h *QueueHandlerImpl) JoinBusinessQueue(w http.ResponseWriter, r *http.Request) {
 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
 
-	var userID *uuid.UUID
-	var request RegisterQueueByQRRequest
+	var request CustomerJoinRequest
+	if _, authenticated := middleware.OptionalUserIdFromContext(r.Context()); !authenticated {
+		if err := decodeJSON(r, &request); err != nil {
+			writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+			return
+		}
+	}
+	h.registerCustomerQueue(w, r, businessID, request)
+}
 
-	// check if the user have logged in before or not
+func (h *QueueHandlerImpl) registerCustomerQueue(w http.ResponseWriter, r *http.Request, businessID uuid.UUID, request CustomerJoinRequest) {
+	var userID *uuid.UUID
 	if userIDString, authenticated := middleware.OptionalUserIdFromContext(r.Context()); authenticated {
 		parsed, ok := parseUUIDValue(w, userIDString, "INVALID_USER_ID", "invalid user id")
 		if !ok {
 			return
 		}
 		userID = &parsed
-	} else {
-		if err := decodeJSON(r, &request); err != nil {
-			writeInvalid(w, "INVALID_FORMAT", "format is invalid")
-			return
-		}
 	}
 
-	result, err := h.s.RegisterQueueByQR(r.Context(), app.RegisterQueueByQRInput{
+	// Check signing configuration before creating a ticket.
+	if _, err := middleware.CreateQueueToken("", uuid.Nil.String()); err != nil {
+		httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "CREATE_QUEUE_TOKEN_ERROR", "failed to create queue token", err))
+		return
+	}
+	result, err := h.s.RegisterCustomerQueue(r.Context(), app.RegisterCustomerQueueInput{
 		BusinessID:  businessID,
 		UserID:      userID,
 		Username:    request.Username,
@@ -160,7 +168,7 @@ func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Requ
 		httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "CREATE_QUEUE_TOKEN_ERROR", "failed to create queue token", err))
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "queueToken", Value: queueToken, Path: "/", HttpOnly: true, MaxAge: maxAge})
+	setTicketCookie(w, r, "queueToken", queueToken, result.Queue.ID.String(), maxAge)
 
 	// create and set the guest token
 	if result.GuestID != nil {
@@ -169,48 +177,36 @@ func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Requ
 			httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "CREATE_GUEST_TOKEN_ERROR", "failed to create guest token", err))
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: "guestToken", Value: guestToken, Path: "/", HttpOnly: true, MaxAge: maxAge})
+		setTicketCookie(w, r, "guestToken", guestToken, result.Queue.ID.String(), maxAge)
 	}
 
 	httpadapter.WriteJSON(w, http.StatusCreated, NewQueueResponse(result.Queue))
 }
 
+func setTicketCookie(w http.ResponseWriter, r *http.Request, name, value, queueID string, maxAge int) {
+	// Per-ticket names preserve guest tickets even behind the /api reverse proxy.
+	// Legacy root names retain QR compatibility for the newest ticket.
+	for _, cookieName := range []string{name + "_" + queueID, name} {
+		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: value, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: maxAge})
+	}
+}
+
+func (h *QueueHandlerImpl) RegisterQueueByQr(w http.ResponseWriter, r *http.Request) {
+	h.JoinBusinessQueue(w, r)
+}
+
+// Legacy POST /queues/ uses the same contract; userId/name/priority are rejected.
 func (h *QueueHandlerImpl) RegisterQueue(w http.ResponseWriter, r *http.Request) {
 	var request CreateQueueRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
-
-	request.Name = strings.TrimSpace(request.Name)
 	businessID, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
-	var userID *uuid.UUID
-	if strings.TrimSpace(request.UserID) != "" {
-		parsed, ok := parseUUIDValue(w, request.UserID, "INVALID_USER_ID", "invalid user id")
-		if !ok {
-			return
-		}
-		userID = &parsed
-	} else {
-		generated := uuid.New()
-		userID = &generated
-	}
-
-	queue, err := h.s.RegisterQueue(r.Context(), domain.Queue{
-		BusinessID: businessID,
-		UserID:     userID,
-		Name:       request.Name,
-		Priority:   request.Priority,
-	})
-	if err != nil {
-		httpadapter.WriteError(w, err)
-		return
-	}
-
-	httpadapter.WriteJSON(w, http.StatusCreated, NewQueueResponse(queue))
+	h.registerCustomerQueue(w, r, businessID, CustomerJoinRequest{Username: request.Username, PhoneNumber: request.PhoneNumber})
 }
 
 func (h *QueueHandlerImpl) GetQueueNameFromSnapShot(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +225,19 @@ func (h *QueueHandlerImpl) GetQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponse(queue))
+}
+
+func (h *QueueHandlerImpl) GetCustomerQueueStatus(w http.ResponseWriter, r *http.Request) {
+	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
+	if !ok {
+		return
+	}
+	status, err := h.s.GetCustomerQueueStatus(r.Context(), queueID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewCustomerQueueStatusResponse(status))
 }
 
 func (h *QueueHandlerImpl) GetQueueState(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +270,21 @@ func (h *QueueHandlerImpl) GetAllQueueByBusiness(w http.ResponseWriter, r *http.
 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
 }
 
+func (h *QueueHandlerImpl) GetMyQueues(w http.ResponseWriter, r *http.Request) {
+	identity, authenticated := middleware.UserIdFromContext(r.Context())
+	userID, err := uuid.Parse(identity)
+	if !authenticated || err != nil {
+		httpadapter.WriteError(w, apperror.New(apperror.KindUnauthorized, "AUTHENTICATION_REQUIRED", "authentication required"))
+		return
+	}
+	queues, err := h.s.GetActiveQueuesByUser(r.Context(), userID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
+}
+
 func (h *QueueHandlerImpl) UpdateQueue(w http.ResponseWriter, r *http.Request) {
 	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
 	if !ok {
@@ -276,31 +300,14 @@ func (h *QueueHandlerImpl) UpdateQueue(w http.ResponseWriter, r *http.Request) {
 		writeInvalid(w, "NO_QUEUE_FIELDS", "no queue fields provided")
 		return
 	}
-
-	queue, err := h.s.GetQueue(r.Context(), queueID)
-	if err != nil {
-		httpadapter.WriteError(w, err)
+	// Ownership grants customer ticket access, never scheduler/staff authority.
+	if request.Name != nil || request.Priority != nil || request.State == nil || *request.State != string(domain.QueueStateCancelled) {
+		customerMutationDenied(w)
 		return
 	}
-	if request.Name != nil {
-		queue.Name = strings.TrimSpace(*request.Name)
-	}
-	if request.State != nil {
-		state, ok := parseQueueState(w, *request.State)
-		if !ok {
-			return
-		}
-		queue.State = state
-	}
-	if request.Priority != nil {
-		queue.Priority = *request.Priority
-	}
-
-	if err := h.s.UpdateQueue(r.Context(), *queue); err != nil {
-		httpadapter.WriteError(w, err)
+	if !h.cancelCustomerQueue(w, r, queueID) {
 		return
 	}
-
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue updated"})
 }
 
@@ -320,9 +327,11 @@ func (h *QueueHandlerImpl) UpdateState(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-
-	if err := h.s.UpdateState(r.Context(), queueID, state); err != nil {
-		httpadapter.WriteError(w, err)
+	if state != domain.QueueStateCancelled {
+		customerMutationDenied(w)
+		return
+	}
+	if !h.cancelCustomerQueue(w, r, queueID) {
 		return
 	}
 
@@ -330,23 +339,42 @@ func (h *QueueHandlerImpl) UpdateState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandlerImpl) MarkAsDone(w http.ResponseWriter, r *http.Request) {
-	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
-	if !ok {
-		return
-	}
+	customerMutationDenied(w)
+}
 
-	if err := h.s.MarkAsDone(r.Context(), queueID); err != nil {
+func customerMutationDenied(w http.ResponseWriter) {
+	httpadapter.WriteError(w, apperror.New(apperror.KindForbidden, "QUEUE_CUSTOMER_MUTATION_DENIED", "customers may only cancel a waiting ticket; staff workflow controls service states"))
+}
+
+func (h *QueueHandlerImpl) cancelCustomerQueue(w http.ResponseWriter, r *http.Request, queueID uuid.UUID) bool {
+	if err := h.s.CancelWaitingQueue(r.Context(), queueID); err != nil {
 		httpadapter.WriteError(w, err)
-		return
+		return false
 	}
-
-	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "queue marked as done"})
+	return true
 }
 
 func (h *QueueHandlerImpl) DeleteQueue(w http.ResponseWriter, r *http.Request) {
 	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
 	if !ok {
 		return
+	}
+	queue, err := h.s.GetQueue(r.Context(), queueID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	if queue.State != domain.QueueStateWaiting && !queue.IsTerminal() {
+		httpadapter.WriteError(w, apperror.New(apperror.KindConflict, "QUEUE_NOT_TERMINAL", "cancel a waiting queue before deleting the ticket"))
+		return
+	}
+	if queue.State == domain.QueueStateWaiting {
+		// Win the waiting-state transition before hard deletion, so a concurrent
+		// Call Next cannot assign a ticket that is about to disappear.
+		if err := h.s.CancelWaitingQueue(r.Context(), queueID); err != nil {
+			httpadapter.WriteError(w, err)
+			return
+		}
 	}
 
 	if err := h.s.DeleteQueue(r.Context(), queueID); err != nil {

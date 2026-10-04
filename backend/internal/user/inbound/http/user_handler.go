@@ -1,15 +1,15 @@
 package inbound
 
 import (
-	httpadapter "QueueLite/internal/adapter/http"
-	"QueueLite/internal/apperror"
-	"QueueLite/internal/middleware"
-	"QueueLite/internal/user/app"
-	"QueueLite/internal/user/domain"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
+
+	httpadapter "QueueLite/internal/adapter/http"
+	"QueueLite/internal/httputil"
+	"QueueLite/internal/middleware"
+	"QueueLite/internal/user/app"
+	"QueueLite/internal/user/domain"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -25,8 +25,8 @@ func NewUserHandler(s *app.UserService) *UserHandlerImpl {
 
 func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	var request UserRegisterRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
@@ -35,15 +35,15 @@ func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	request.Email = strings.TrimSpace(request.Email)
 
 	if request.Username == "" {
-		writeInvalid(w, "USERNAME_REQUIRED", "Missing username")
+		httputil.WriteInvalid(w, "USERNAME_REQUIRED", "Missing username")
 		return
 	}
 	if request.Password == "" {
-		writeInvalid(w, "PASSWORD_REQUIRED", "Missing password")
+		httputil.WriteInvalid(w, "PASSWORD_REQUIRED", "Missing password")
 		return
 	}
 	if request.PhoneNumber == "" {
-		writeInvalid(w, "PHONENUMBER_REQUIRED", "Missing phonenumber")
+		httputil.WriteInvalid(w, "PHONENUMBER_REQUIRED", "Missing phonenumber")
 		return
 	}
 
@@ -68,18 +68,18 @@ func (u *UserHandlerImpl) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var request UserLoginRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
 	request.Username = strings.TrimSpace(request.Username)
 	if request.Username == "" {
-		writeInvalid(w, "USERNAME_REQUIRED", "Missing username")
+		httputil.WriteInvalid(w, "USERNAME_REQUIRED", "Missing username")
 		return
 	}
 	if request.Password == "" {
-		writeInvalid(w, "PASSWORD_REQUIRED", "Missing password")
+		httputil.WriteInvalid(w, "PASSWORD_REQUIRED", "Missing password")
 		return
 	}
 
@@ -91,6 +91,10 @@ func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 
 	userStringID := userEntity.ID.String()
 	tokenString, err := middleware.CreateToken(userEntity.Username, userStringID)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
@@ -103,6 +107,30 @@ func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 	})
 
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "login successful"})
+}
+
+func (u *UserHandlerImpl) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIdFromContext(r.Context())
+	id, err := uuid.Parse(userID)
+	if !ok || err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	user, err := u.s.GetUser(r.Context(), id)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewUserResponse(user))
+}
+
+func (u *UserHandlerImpl) LogoutUser(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name: "token", Value: "", Path: "/", HttpOnly: true,
+		Secure: false, SameSite: http.SameSiteLaxMode,
+		MaxAge: -1, Expires: time.Unix(1, 0),
+	})
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "logout successful"})
 }
 
 func (u *UserHandlerImpl) GetUser(w http.ResponseWriter, r *http.Request) {
@@ -127,20 +155,28 @@ func (u *UserHandlerImpl) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request UpdateUserInformationRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 	if request.PhoneNumber == nil && request.Password == nil && request.Email == nil {
-		writeInvalid(w, "NO_USER_FIELDS", "no user fields provided")
+		httputil.WriteInvalid(w, "NO_USER_FIELDS", "no user fields provided")
 		return
 	}
 
 	input := domain.User{}
 	if request.PhoneNumber != nil {
+		if strings.TrimSpace(*request.PhoneNumber) == "" {
+			httputil.WriteInvalid(w, "PHONENUMBER_REQUIRED", "phone number required")
+			return
+		}
 		input.PhoneNumber = *request.PhoneNumber
 	}
 	if request.Password != nil {
+		if strings.TrimSpace(*request.Password) == "" {
+			httputil.WriteInvalid(w, "PASSWORD_REQUIRED", "password required")
+			return
+		}
 		input.Password = *request.Password
 	}
 	if request.Email != nil {
@@ -158,18 +194,8 @@ func (u *UserHandlerImpl) UpdateUser(w http.ResponseWriter, r *http.Request) {
 func parseUUIDParam(w http.ResponseWriter, r *http.Request, name string, code string, message string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(strings.TrimSpace(chi.URLParam(r, name)))
 	if err != nil {
-		writeInvalid(w, code, message)
+		httputil.WriteInvalid(w, code, message)
 		return uuid.Nil, false
 	}
 	return id, true
-}
-
-func writeInvalid(w http.ResponseWriter, code string, message string) {
-	httpadapter.WriteError(w, apperror.New(apperror.KindInvalid, code, message))
-}
-
-func decodeJSON(r *http.Request, dst any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(dst)
 }

@@ -184,6 +184,9 @@ func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID u
 	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return apperror.Wrap(apperror.KindInternal, "REMOVE_QUEUE_COUNTER_ERROR", "failed to remove queue from counter", err)
 	}
+	if err := cache.SyncCustomerQueue(ctx, s.rdt, *queue); err != nil {
+		return apperror.Wrap(apperror.KindInternal, "RELEASE_QUEUE_PHONE_ERROR", "failed to release queue reservation", err)
+	}
 
 	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
 	s.publishQueueUpdate(ctx, queue.BusinessID)
@@ -209,7 +212,15 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 		if err == nil {
 			current.State = queuedomain.QueueStateCompleted
 			current.DoneAt = nowPtr()
-			_ = s.queueRepo.UpdateQueue(ctx, current)
+			if err := s.queueRepo.UpdateQueue(ctx, current); err != nil {
+				return nil, err
+			}
+			if err := cache.SyncCustomerQueue(ctx, s.rdt, *current); err != nil {
+				return nil, err
+			}
+			if err := cache.RemoveWaitingQueue(ctx, s.rdt, businessID.String(), current.ID.String()); err != nil {
+				return nil, err
+			}
 		}
 		if err := s.repo.UpdateCounterCustomer(ctx, counterID, nil); err != nil {
 			return nil, err
@@ -225,32 +236,54 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 	}
 	queueIDString, ok := queueItem.Member.(string)
 	if !ok {
-		_ = cache.RestoreWaitingQueueItem(ctx, s.rdt, *queueItem)
-		return nil, apperror.New(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache")
+		return nil, s.restoreWaitingQueueAfterFailure(ctx, *queueItem, apperror.New(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache"))
 	}
 	queueID, err := uuid.Parse(queueIDString)
 	if err != nil {
-		_ = cache.RestoreWaitingQueueItem(ctx, s.rdt, *queueItem)
-		return nil, apperror.Wrap(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache", err)
+		return nil, s.restoreWaitingQueueAfterFailure(ctx, *queueItem, apperror.Wrap(apperror.KindInternal, "INVALID_QUEUE_CACHE_ID", "invalid queue id in waiting cache", err))
 	}
 
 	next, err := s.getQueueWithRetry(ctx, queueID)
 	if err != nil {
-		_ = cache.RestoreWaitingQueueItem(ctx, s.rdt, *queueItem)
-		return nil, err
+		return nil, s.restoreWaitingQueueAfterFailure(ctx, *queueItem, err)
 	}
+	if next.BusinessID != businessID || next.State != queuedomain.QueueStateWaiting {
+		// A stale/mis-scoped entry must never resurrect or disclose this queue.
+		return nil, apperror.New(apperror.KindConflict, "QUEUE_STATE_CHANGED", "waiting queue state changed; refresh before calling again")
+	}
+	previous := *next
 	next.State = queuedomain.QueueStateCalled
 	next.CalledByCounterID = &counterID
 	next.CalledAt = nowPtr()
-	if err := s.queueRepo.UpdateQueue(ctx, next); err != nil {
-		return nil, apperror.Wrap(apperror.KindInternal, "CALL_NEXT_QUEUE_ERROR", "failed to call next queue", err)
+	if err := s.queueRepo.UpdateQueueIfState(ctx, next, queuedomain.QueueStateWaiting); err != nil {
+		var appErr *apperror.Error
+		if errors.As(err, &appErr) && appErr.Code == "QUEUE_STATE_CHANGED" {
+			return nil, err
+		}
+		return nil, s.restoreWaitingQueueAfterFailure(ctx, *queueItem, apperror.Wrap(apperror.KindInternal, "CALL_NEXT_QUEUE_ERROR", "failed to call next queue", err))
 	}
 	if err := s.repo.UpdateCounterCustomer(ctx, counterID, &next.ID); err != nil {
-		return nil, err
+		// Restore the waiting state before making this item selectable again.
+		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if rollbackErr := s.queueRepo.UpdateQueueIfState(recoveryCtx, &previous, queuedomain.QueueStateCalled); rollbackErr != nil {
+			return nil, errors.Join(err, rollbackErr)
+		}
+		return nil, s.restoreWaitingQueueAfterFailure(recoveryCtx, *queueItem, err)
 	}
 	s.publishQueueUpdate(ctx, next.BusinessID)
 	s.scheduleCalledQueueTimeout(next.ID, counterID)
 	return next, nil
+}
+
+func (s *CounterService) restoreWaitingQueueAfterFailure(ctx context.Context, item cache.WaitingQueueItem, cause error) error {
+	// The original request may have been cancelled while waiting for persistence.
+	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := cache.RestoreWaitingQueueItem(recoveryCtx, s.rdt, item); err != nil {
+		return apperror.Wrap(apperror.KindInternal, "RESTORE_WAITING_QUEUE_ERROR", "failed to restore waiting queue", errors.Join(cause, err))
+	}
+	return cause
 }
 
 func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) (*queuedomain.Queue, error) {
@@ -299,9 +332,11 @@ func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, que
 		return nil, apperror.New(apperror.KindInvalid, "QUEUE_INVALID_STATE", "queue cannot be skipped")
 	}
 	queue.State = queuedomain.QueueStateSkipped
-	queue.CancelledAt = nowPtr()
 	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return nil, err
+	}
+	if err := cache.SyncCustomerQueue(ctx, s.rdt, *queue); err != nil {
+		return nil, apperror.Wrap(apperror.KindInternal, "RELEASE_QUEUE_PHONE_ERROR", "failed to release queue reservation", err)
 	}
 	s.removeWaitingQueue(ctx, queue.BusinessID, queue.ID)
 	counter, err := s.GetCounter(ctx, counterID)

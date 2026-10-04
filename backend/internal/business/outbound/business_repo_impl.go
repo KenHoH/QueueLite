@@ -1,15 +1,17 @@
 package outbound
 
 import (
-	"QueueLite/internal/adapter/postgres/model"
-	"QueueLite/internal/business/app"
-	"QueueLite/internal/business/domain"
 	"context"
 	"errors"
 	"fmt"
 
+	"QueueLite/internal/adapter/postgres/model"
+	"QueueLite/internal/business/app"
+	"QueueLite/internal/business/domain"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type BusinessRepoImpl struct {
@@ -126,7 +128,6 @@ func (r *BusinessRepoImpl) GetAllBusiness(
 	cursor *domain.BusinessCursor,
 	limit int,
 ) ([]domain.Business, *domain.BusinessCursor, error) {
-
 	var businesses []model.Business
 
 	query := r.db.
@@ -136,8 +137,8 @@ func (r *BusinessRepoImpl) GetAllBusiness(
 		Limit(limit)
 
 	if cursor != nil {
-
-		query = query.Where(`
+		query = query.Where(
+			`
             created_at < ?
             OR
             (
@@ -167,18 +168,9 @@ func (r *BusinessRepoImpl) GetAllBusiness(
 		}
 	}
 
-	result := make([]domain.Business, 0, len(businesses))
-
-	for _, b := range businesses {
-		result = append(result, domain.Business{
-			ID:        b.ID,
-			Name:      b.Name,
-			CreatedAt: b.CreatedAt,
-		})
-	}
-
-	return result, nextCursor, nil
+	return toDomainBusinesses(businesses), nextCursor, nil
 }
+
 func (r *BusinessRepoImpl) SearchBusiness(
 	ctx context.Context,
 	searchQuery string,
@@ -193,7 +185,6 @@ func (r *BusinessRepoImpl) SearchBusiness(
 		).
 		Find(&businesses).
 		Error
-
 	if err != nil {
 		return nil, err
 	}
@@ -216,4 +207,65 @@ func (r *BusinessRepoImpl) DeleteBusiness(ctx context.Context, id uuid.UUID) err
 	}
 
 	return nil
+}
+
+func (r *BusinessRepoImpl) ListBusinessMembers(ctx context.Context, businessID uuid.UUID) ([]domain.BusinessMember, error) {
+	var result []domain.BusinessMember
+	err := r.db.WithContext(ctx).Table("user_business_relations AS relations").
+		Select("relations.user_id, users.username, relations.role").
+		Joins("JOIN users ON users.id = relations.user_id").
+		Where("relations.business_id = ?", businessID).Order("users.username ASC, relations.user_id ASC").Scan(&result).Error
+	return result, err
+}
+
+func (r *BusinessRepoImpl) GetUserBusinesses(ctx context.Context, userID uuid.UUID) ([]domain.BusinessMembership, error) {
+	var relations []model.UserBusinessRelation
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at ASC, business_id ASC").Preload("Business").Find(&relations).Error; err != nil {
+		return nil, err
+	}
+	items := make([]domain.BusinessMembership, 0, len(relations))
+	for _, relation := range relations {
+		items = append(items, domain.BusinessMembership{Business: *toDomainBusiness(&relation.Business), Role: string(relation.Role)})
+	}
+	return items, nil
+}
+
+func (r *BusinessRepoImpl) FindMembershipUser(ctx context.Context, identifier string, byEmail bool) (*domain.MembershipUser, error) {
+	var user domain.MembershipUser
+	query := r.db.WithContext(ctx).Model(&model.User{}).Select("id, username")
+	if byEmail {
+		query = query.Where("LOWER(email) = LOWER(?)", identifier)
+	} else {
+		query = query.Where("username = ?", identifier)
+	}
+	if err := query.Take(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %s", domain.ErrMembershipUserNotFound, identifier)
+		}
+		return nil, fmt.Errorf("find membership user: %w", err)
+	}
+	return &user, nil
+}
+
+func (r *BusinessRepoImpl) UpsertUserBusinessRelation(ctx context.Context, businessID, userID uuid.UUID, role string) error {
+	relation := model.UserBusinessRelation{BusinessID: businessID, UserID: userID, Role: model.BusinessRole(role)}
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "business_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"role", "updated_at"}),
+	}).Create(&relation).Error; err != nil {
+		return fmt.Errorf("upsert user business relation: %w", err)
+	}
+	return nil
+}
+
+func (r *BusinessRepoImpl) GetUserBusinessRole(ctx context.Context, userID, businessID uuid.UUID) (string, error) {
+	var relation model.UserBusinessRelation
+	err := r.db.WithContext(ctx).Where("user_id = ? AND business_id = ?", userID, businessID).Take(&relation).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(relation.Role), nil
 }

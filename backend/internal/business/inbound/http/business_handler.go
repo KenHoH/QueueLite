@@ -1,18 +1,17 @@
 package inbound
 
 import (
-	httpadapter "QueueLite/internal/adapter/http"
-	"QueueLite/internal/apperror"
-	"QueueLite/internal/business/app"
-	"QueueLite/internal/business/domain"
-	"QueueLite/internal/middleware"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	httpadapter "QueueLite/internal/adapter/http"
+	"QueueLite/internal/business/app"
+	"QueueLite/internal/business/domain"
+
+	"QueueLite/internal/httputil"
+
 	"github.com/google/uuid"
 )
 
@@ -25,29 +24,23 @@ func NewBusinessHandler(s *app.BusinessService) *BusinessHandlerImpl {
 }
 
 func (h *BusinessHandlerImpl) CreateBusiness(w http.ResponseWriter, r *http.Request) {
+	ownerID, ok := httputil.CurrentUserID(w, r)
+	if !ok {
+		return
+	}
 	var request CreateBusinessRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
-	openTime, ok := parseBusinessTime(w, request.OpenTime, "INVALID_OPEN_TIME", "invalid open time")
+	openTime, ok := httputil.ParseBusinessTime(w, request.OpenTime, "INVALID_OPEN_TIME", "invalid open time")
 	if !ok {
 		return
 	}
-	closeTime, ok := parseBusinessTime(w, request.CloseTime, "INVALID_CLOSE_TIME", "invalid close time")
+	closeTime, ok := httputil.ParseBusinessTime(w, request.CloseTime, "INVALID_CLOSE_TIME", "invalid close time")
 	if !ok {
 		return
-	}
-
-	ownerID := uuid.Nil
-	if ownerIDString, ok := middleware.UserIdFromContext(r.Context()); ok {
-		parsed, err := uuid.Parse(ownerIDString)
-		if err != nil {
-			writeInvalid(w, "INVALID_OWNER_ID", "invalid owner id")
-			return
-		}
-		ownerID = parsed
 	}
 
 	business, err := h.s.RegisterBusiness(r.Context(), ownerID, domain.Business{
@@ -69,7 +62,7 @@ func (h *BusinessHandlerImpl) CreateBusiness(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *BusinessHandlerImpl) GetBusiness(w http.ResponseWriter, r *http.Request) {
-	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	businessID, ok := httputil.ParseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
@@ -106,18 +99,19 @@ func (h *BusinessHandlerImpl) SearchBusiness(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *BusinessHandlerImpl) UpdateBusiness(w http.ResponseWriter, r *http.Request) {
-	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	businessID, ok := httputil.ParseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
 
 	var request UpdateBusinessRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
 	input := domain.UpdateBusiness{
+		Operational: request.Operational,
 		Name:        request.Name,
 		Location:    request.Location,
 		Description: request.Description,
@@ -125,21 +119,21 @@ func (h *BusinessHandlerImpl) UpdateBusiness(w http.ResponseWriter, r *http.Requ
 		PhoneNumber: request.PhoneNumber,
 	}
 	if request.OpenTime != nil {
-		openTime, ok := parseBusinessTime(w, *request.OpenTime, "INVALID_OPEN_TIME", "invalid open time")
+		openTime, ok := httputil.ParseBusinessTime(w, *request.OpenTime, "INVALID_OPEN_TIME", "invalid open time")
 		if !ok {
 			return
 		}
 		input.OpenTime = &openTime
 	}
 	if request.CloseTime != nil {
-		closeTime, ok := parseBusinessTime(w, *request.CloseTime, "INVALID_CLOSE_TIME", "invalid close time")
+		closeTime, ok := httputil.ParseBusinessTime(w, *request.CloseTime, "INVALID_CLOSE_TIME", "invalid close time")
 		if !ok {
 			return
 		}
 		input.CloseTime = &closeTime
 	}
-	if input.Name == nil && input.Location == nil && input.Description == nil && input.OpenTime == nil && input.CloseTime == nil && input.Email == nil && input.PhoneNumber == nil {
-		writeInvalid(w, "NO_BUSINESS_FIELDS", "no business fields provided")
+	if input.Operational == nil && input.Name == nil && input.Location == nil && input.Description == nil && input.OpenTime == nil && input.CloseTime == nil && input.Email == nil && input.PhoneNumber == nil {
+		httputil.WriteInvalid(w, "NO_BUSINESS_FIELDS", "no business fields provided")
 		return
 	}
 
@@ -152,7 +146,7 @@ func (h *BusinessHandlerImpl) UpdateBusiness(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *BusinessHandlerImpl) DeleteBusiness(w http.ResponseWriter, r *http.Request) {
-	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	businessID, ok := httputil.ParseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
@@ -192,30 +186,60 @@ func newBusinessCursorResponse(cursor *domain.BusinessCursor) map[string]string 
 	}
 }
 
-func parseBusinessTime(w http.ResponseWriter, value string, code string, message string) (time.Time, bool) {
-	parsed, err := time.Parse("15:04", strings.TrimSpace(value))
-	if err != nil {
-		writeInvalid(w, code, message)
-		return time.Time{}, false
+func (h *BusinessHandlerImpl) UpsertBusinessMember(w http.ResponseWriter, r *http.Request) {
+	businessID, ok := httputil.ParseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
 	}
-	return parsed, true
-}
-
-func parseUUIDParam(w http.ResponseWriter, r *http.Request, name string, code string, message string) (uuid.UUID, bool) {
-	id, err := uuid.Parse(strings.TrimSpace(chi.URLParam(r, name)))
-	if err != nil {
-		writeInvalid(w, code, message)
-		return uuid.Nil, false
+	actorID, ok := httputil.CurrentUserID(w, r)
+	if !ok {
+		return
 	}
-	return id, true
+	var request UpsertBusinessMemberRequest
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
+		return
+	}
+	member, err := h.s.UpsertBusinessMember(r.Context(), actorID, businessID, request.Identifier, request.Role)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, member)
 }
 
-func writeInvalid(w http.ResponseWriter, code string, message string) {
-	httpadapter.WriteError(w, apperror.New(apperror.KindInvalid, code, message))
+func (h *BusinessHandlerImpl) GetMyBusinesses(w http.ResponseWriter, r *http.Request) {
+	id, ok := httputil.CurrentUserID(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.s.GetUserBusinesses(r.Context(), id)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	response := make([]BusinessMembershipResponse, 0, len(items))
+	for _, item := range items {
+		response = append(response, BusinessMembershipResponse{BusinessResponse: NewBusinessResponse(&item.Business), Role: item.Role})
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, response)
 }
 
-func decodeJSON(r *http.Request, dst any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(dst)
+// Applies the same owner/admin policy to business mutation and subscription reads.
+func (h *BusinessHandlerImpl) RequireManagement(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		businessID, ok := httputil.ParseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+		if !ok {
+			return
+		}
+		userID, ok := httputil.CurrentUserID(w, r)
+		if !ok {
+			return
+		}
+		if err := h.s.RequireManager(r.Context(), userID, businessID); err != nil {
+			httpadapter.WriteError(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

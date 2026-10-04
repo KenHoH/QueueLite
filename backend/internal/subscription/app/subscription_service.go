@@ -273,6 +273,9 @@ func (s *SubscriptionService) DecreaseBusinessCapacity(ctx context.Context, busi
 		return err
 	}
 	if err := s.repo.DecreaseBusinessCapacity(ctx, businessID); err != nil {
+		if errors.Is(err, ErrBusinessQueueFull) {
+			return apperror.Wrap(apperror.KindConflict, "BUSINESS_QUEUE_FULL", "the business queue is full", err)
+		}
 		if errors.Is(err, ErrSubscriptionNotFound) {
 			return apperror.Wrap(apperror.KindNotFound, "SUBSCRIPTION_NOT_FOUND", "business subscription not found", err)
 		}

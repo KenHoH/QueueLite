@@ -14,6 +14,10 @@ func toQueueRecord(queue *domain.Queue) model.Queue {
 		Name:              queue.Name,
 		State:             model.QueueState(queue.State),
 		Priority:          queue.Priority,
+		CalledAt:          queue.CalledAt,
+		ProcessingAt:      queue.ProcessingAt,
+		DoneAt:            queue.DoneAt,
+		CancelledAt:       queue.CancelledAt,
 		CreatedAt:         queue.CreatedAt,
 		UpdatedAt:         queue.UpdatedAt,
 	}
@@ -28,6 +32,10 @@ func toDomainQueue(record *model.Queue) *domain.Queue {
 		Name:              record.Name,
 		State:             domain.QueueState(record.State),
 		Priority:          record.Priority,
+		CalledAt:          record.CalledAt,
+		ProcessingAt:      record.ProcessingAt,
+		DoneAt:            record.DoneAt,
+		CancelledAt:       record.CancelledAt,
 		CreatedAt:         record.CreatedAt,
 		UpdatedAt:         record.UpdatedAt,
 	}
