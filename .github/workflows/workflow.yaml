@@ -62,6 +62,7 @@ jobs:
             - name: connect and pull
               run: |
                   ssh centos@${{ secrets.SSH_HOST }} "cd ${{ secrets.WORK_DIR }} &&
+                  DOCKERHUB_NAMESPACE='${{ env.DOCKERHUB_NAMESPACE }}' IMAGE_TAG='${{ env.IMAGE_TAG }}' docker compose down &&
                   DOCKERHUB_NAMESPACE='${{ env.DOCKERHUB_NAMESPACE }}' IMAGE_TAG='${{ env.IMAGE_TAG }}' docker compose pull &&
                   DOCKERHUB_NAMESPACE='${{ env.DOCKERHUB_NAMESPACE }}' IMAGE_TAG='${{ env.IMAGE_TAG }}' docker compose up -d --remove-orphans"
             - name: cleanup
