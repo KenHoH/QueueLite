@@ -58,7 +58,7 @@ func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
 			return false
 		}
 
-		payload, err := json.Marshal(response)
+		payload, err := json.Marshal(NewQueueSnapshotResponses(response))
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
 			flusher.Flush()

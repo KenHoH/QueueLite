@@ -1,14 +1,16 @@
 package app
 
 import (
-	cache "QueueLite/internal/adapter/redis"
-	"QueueLite/internal/apperror"
-	businessdomain "QueueLite/internal/business/domain"
-	"QueueLite/internal/queue/domain"
 	"context"
 	"errors"
 	"strings"
 	"time"
+
+	cache "QueueLite/internal/adapter/redis"
+	"QueueLite/internal/apperror"
+	businessdomain "QueueLite/internal/business/domain"
+
+	"QueueLite/internal/queue/domain"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -21,48 +23,6 @@ type QueueService struct {
 	counterLookup       QueueCounterLookup
 	subscriptionService QueueQuota
 	rdt                 *redis.Client
-}
-
-type QueueSnapshotItem struct {
-	QueueID   string `json:"queueId"`
-	QueueName string `json:"queueName"`
-}
-
-type CustomerCounterStatus struct {
-	ID               uuid.UUID
-	Name             string
-	CurrentQueueID   *uuid.UUID
-	CurrentQueueName *string
-	State            string
-}
-
-type CurrentlyServingQueue struct {
-	CounterID   uuid.UUID
-	CounterName string
-	QueueID     uuid.UUID
-	QueueName   string
-	State       domain.QueueState
-}
-
-type CustomerQueuePosition struct {
-	Position  int
-	Ahead     int
-	QueueName string
-}
-
-type CustomerQueueStatus struct {
-	Queue                domain.Queue
-	Business             businessdomain.Business
-	Counters             []CustomerCounterStatus
-	TotalCounters        int
-	ActiveCounters       int
-	CurrentlyServing     []CurrentlyServingQueue
-	NextQueue            *QueueSnapshotItem
-	CustomerPosition     *CustomerQueuePosition
-	TotalWaiting         int
-	TotalActiveQueues    int
-	EstimatedWaitMinutes *int
-	UpdatedAt            time.Time
 }
 
 func NewQueueService(repo QueueRepo, subscriptionService QueueQuota, redis *redis.Client, lookups ...any) *QueueService {
@@ -141,6 +101,7 @@ func (s *QueueService) GetWaitingQueueSnapshot(ctx context.Context, businessID u
 	}
 	return response, nil
 }
+
 func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.UUID) (*CustomerQueueStatus, error) {
 	queue, err := s.GetQueue(ctx, queueID)
 	if err != nil {
@@ -338,8 +299,10 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 }
 
 // Existing QR callers are aliases of the canonical customer service.
-type RegisterQueueByQRInput = RegisterCustomerQueueInput
-type RegisterQueueByQRResult = RegisterCustomerQueueResult
+type (
+	RegisterQueueByQRInput  = RegisterCustomerQueueInput
+	RegisterQueueByQRResult = RegisterCustomerQueueResult
+)
 
 func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueueByQRInput) (*RegisterQueueByQRResult, error) {
 	return s.RegisterCustomerQueue(ctx, input)
@@ -395,7 +358,7 @@ func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*
 		queue.CreatedAt = time.Now()
 	}
 
-	//generate the queue name
+	// generate the queue name
 	if strings.TrimSpace(queue.Name) == "" {
 		floor, err := s.repo.GetDailyQueueNumberFloor(ctx, queue.BusinessID, queue.CreatedAt)
 		if err != nil {
@@ -443,7 +406,6 @@ func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*
 
 // database layer
 func (s *QueueService) GetQueue(ctx context.Context, id uuid.UUID) (*domain.Queue, error) {
-
 	queue, err := s.repo.GetQueue(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrQueueNotFound) {

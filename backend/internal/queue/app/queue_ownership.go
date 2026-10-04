@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
+	"errors"
+
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/queue/domain"
-	"context"
-	"errors"
+
 	"github.com/redis/go-redis/v9"
 )
 

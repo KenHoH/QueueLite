@@ -1,9 +1,10 @@
 package inbound
 
 import (
+	"time"
+
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
-	"time"
 )
 
 type QueueResponse struct {
@@ -114,6 +115,17 @@ func NewQueueResponse(queue *domain.Queue) QueueResponse {
 		CreatedAt:         queue.CreatedAt,
 		UpdatedAt:         queue.UpdatedAt,
 	}
+}
+
+func NewQueueSnapshotResponses(items []app.QueueSnapshotItem) []QueueSnapshotResponse {
+	responses := make([]QueueSnapshotResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, QueueSnapshotResponse{
+			QueueID:   item.QueueID,
+			QueueName: item.QueueName,
+		})
+	}
+	return responses
 }
 
 func NewQueueResponses(queues []domain.Queue) []QueueResponse {
