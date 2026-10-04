@@ -8,7 +8,7 @@ RUN go mod download
 # Copy source code
 COPY . .
 # Build the application
-RUN go build -o ./tmp/main .
+RUN go build -o main ./cmd/api
 # Use a minimal base image for final deployment
 FROM alpine:latest
 # Set working directory in the container
