@@ -298,16 +298,6 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	return &RegisterCustomerQueueResult{Queue: &q, GuestID: guestID, Username: username, PhoneNumber: normalized}, nil
 }
 
-// Existing QR callers are aliases of the canonical customer service.
-type (
-	RegisterQueueByQRInput  = RegisterCustomerQueueInput
-	RegisterQueueByQRResult = RegisterCustomerQueueResult
-)
-
-func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueueByQRInput) (*RegisterQueueByQRResult, error) {
-	return s.RegisterCustomerQueue(ctx, input)
-}
-
 func customerQuotaError(err error) error {
 	var appErr *apperror.Error
 	if errors.As(err, &appErr) && (appErr.Code == "QUEUE_FULL" || appErr.Code == "BUSINESS_QUEUE_FULL") {

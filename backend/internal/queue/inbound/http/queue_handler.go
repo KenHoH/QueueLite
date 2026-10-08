@@ -1,16 +1,17 @@
 package inbound
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
 	httpadapter "QueueLite/internal/adapter/http"
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/config"
 	"QueueLite/internal/middleware"
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
