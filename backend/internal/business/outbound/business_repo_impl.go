@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type BusinessRepoImpl struct {
@@ -245,17 +244,6 @@ func (r *BusinessRepoImpl) FindMembershipUser(ctx context.Context, identifier st
 		return nil, fmt.Errorf("find membership user: %w", err)
 	}
 	return &user, nil
-}
-
-func (r *BusinessRepoImpl) UpsertUserBusinessRelation(ctx context.Context, businessID, userID uuid.UUID, role string) error {
-	relation := model.UserBusinessRelation{BusinessID: businessID, UserID: userID, Role: model.BusinessRole(role)}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "business_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"role", "updated_at"}),
-	}).Create(&relation).Error; err != nil {
-		return fmt.Errorf("upsert user business relation: %w", err)
-	}
-	return nil
 }
 
 func (r *BusinessRepoImpl) GetUserBusinessRole(ctx context.Context, userID, businessID uuid.UUID) (string, error) {
