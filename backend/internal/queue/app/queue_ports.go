@@ -1,25 +1,27 @@
 package app
 
 import (
-	businessdomain "QueueLite/internal/business/domain"
-	counterdomain "QueueLite/internal/counter/domain"
-	"QueueLite/internal/queue/domain"
-	userdomain "QueueLite/internal/user/domain"
 	"context"
 	"time"
+
+	"QueueLite/internal/queue/domain"
+
+	businessdomain "QueueLite/internal/business/domain"
+	counterdomain "QueueLite/internal/counter/domain"
+	userdomain "QueueLite/internal/user/domain"
 
 	"github.com/google/uuid"
 )
 
-type BusinessLookup interface {
+type QueueBusinessRepo interface {
 	GetBusiness(ctx context.Context, id uuid.UUID) (*businessdomain.Business, error)
 }
 
-type UserLookup interface {
+type QueueUserRepo interface {
 	GetUser(ctx context.Context, id uuid.UUID) (*userdomain.User, error)
 }
 
-type QueueCounterLookup interface {
+type QueueCounterRepo interface {
 	ListBusinessCounters(ctx context.Context, businessID uuid.UUID) ([]counterdomain.Counter, error)
 }
 

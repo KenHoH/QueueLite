@@ -18,45 +18,23 @@ import (
 
 type QueueService struct {
 	repo                QueueRepo
-	businessLookup      BusinessLookup
-	userLookup          UserLookup
-	counterLookup       QueueCounterLookup
+	queueBusinessRepo   QueueBusinessRepo
+	queueUserRepo       QueueUserRepo
+	queueCounterRepo    QueueCounterRepo
 	subscriptionService QueueQuota
 	rdt                 *redis.Client
 }
 
-func NewQueueService(repo QueueRepo, subscriptionService QueueQuota, redis *redis.Client, lookups ...any) *QueueService {
+func NewQueueService(repo QueueRepo, subscriptionService QueueQuota, redis *redis.Client, queueBusinessRepo QueueBusinessRepo, queueUserRepo QueueUserRepo, queueCounterRepo QueueCounterRepo) *QueueService {
 	service := &QueueService{
 		repo:                repo,
 		subscriptionService: subscriptionService,
 		rdt:                 redis,
-	}
-	for _, lookup := range lookups {
-		if businessLookup, ok := lookup.(BusinessLookup); ok {
-			service.businessLookup = businessLookup
-		}
-		if userLookup, ok := lookup.(UserLookup); ok {
-			service.userLookup = userLookup
-		}
-		if counterLookup, ok := lookup.(QueueCounterLookup); ok {
-			service.counterLookup = counterLookup
-		}
+		queueBusinessRepo:   queueBusinessRepo,
+		queueUserRepo:       queueUserRepo,
+		queueCounterRepo:    queueCounterRepo,
 	}
 	return service
-}
-
-type RegisterCustomerQueueInput struct {
-	BusinessID  uuid.UUID
-	UserID      *uuid.UUID
-	Username    string
-	PhoneNumber string
-}
-
-type RegisterCustomerQueueResult struct {
-	Queue       *domain.Queue
-	GuestID     *uuid.UUID
-	Username    string
-	PhoneNumber string
 }
 
 // helper function cache redis related
@@ -107,14 +85,11 @@ func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.
 	if err != nil {
 		return nil, err
 	}
-	if s.businessLookup == nil || s.counterLookup == nil {
-		return nil, apperror.New(apperror.KindInternal, "QUEUE_STATUS_LOOKUP_UNAVAILABLE", "customer queue status unavailable")
-	}
-	business, err := s.businessLookup.GetBusiness(ctx, queue.BusinessID)
+	business, err := s.queueBusinessRepo.GetBusiness(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_ERROR", "failed to get business", err)
 	}
-	counters, err := s.counterLookup.ListBusinessCounters(ctx, queue.BusinessID)
+	counters, err := s.queueCounterRepo.ListBusinessCounters(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_COUNTERS_ERROR", "failed to get counters", err)
 	}
@@ -208,10 +183,10 @@ func (s *QueueService) ValidateBusinessExists(ctx context.Context, businessID uu
 	if businessID == uuid.Nil {
 		return apperror.New(apperror.KindInvalid, "BUSINESS_ID_REQUIRED", "business id is required")
 	}
-	if s.businessLookup == nil {
+	if s.queueBusinessRepo == nil {
 		return apperror.New(apperror.KindInternal, "BUSINESS_LOOKUP_UNAVAILABLE", "business lookup unavailable")
 	}
-	if _, err := s.businessLookup.GetBusiness(ctx, businessID); err != nil {
+	if _, err := s.queueBusinessRepo.GetBusiness(ctx, businessID); err != nil {
 		if errors.Is(err, businessdomain.ErrBusinessNotFound) {
 			return apperror.Wrap(apperror.KindNotFound, "BUSINESS_NOT_FOUND", "business not found", err)
 		}
@@ -225,7 +200,7 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	if err := s.ValidateBusinessExists(ctx, input.BusinessID); err != nil {
 		return nil, err
 	}
-	business, err := s.businessLookup.GetBusiness(ctx, input.BusinessID)
+	business, err := s.queueBusinessRepo.GetBusiness(ctx, input.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_ERROR", "failed to get business", err)
 	}
@@ -236,10 +211,10 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	var guestID *uuid.UUID
 	username, phone := strings.TrimSpace(input.Username), input.PhoneNumber
 	if input.UserID != nil {
-		if s.userLookup == nil {
+		if s.queueUserRepo == nil {
 			return nil, apperror.New(apperror.KindInternal, "USER_LOOKUP_UNAVAILABLE", "user lookup unavailable")
 		}
-		user, err := s.userLookup.GetUser(ctx, *input.UserID)
+		user, err := s.queueUserRepo.GetUser(ctx, *input.UserID)
 		if err != nil {
 			return nil, apperror.Wrap(apperror.KindUnauthorized, "USER_NOT_FOUND", "user not found", err)
 		}
@@ -296,16 +271,6 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	// Notification failure must not turn an accepted registration into a failed join.
 	_ = s.publishQueueUpdate(ctx, q.BusinessID)
 	return &RegisterCustomerQueueResult{Queue: &q, GuestID: guestID, Username: username, PhoneNumber: normalized}, nil
-}
-
-// Existing QR callers are aliases of the canonical customer service.
-type (
-	RegisterQueueByQRInput  = RegisterCustomerQueueInput
-	RegisterQueueByQRResult = RegisterCustomerQueueResult
-)
-
-func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueueByQRInput) (*RegisterQueueByQRResult, error) {
-	return s.RegisterCustomerQueue(ctx, input)
 }
 
 func customerQuotaError(err error) error {
@@ -576,19 +541,3 @@ func (s *QueueService) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	_ = s.publishQueueUpdate(ctx, queue.BusinessID)
 	return nil
 }
-
-// func (s *QueueService) GetBusinessPublicQueueSummary(ctx context.Context, businessID uuid.UUID) (*domain.PublicQueueSummary, error) {
-// 	summary, err := s.repo.GetBusinessPublicQueueSummary(ctx, businessID)
-// 	if err != nil {
-// 		return nil, apperror.Wrap(apperror.KindInternal, "GET_PUBLIC_QUEUE_SUMMARY_ERROR", "failed to get public queue summary", err)
-// 	}
-// 	return summary, nil
-// }
-
-// func (s *QueueService) GetAllQueueByBusinessFilterState(ctx context.Context, businessID uuid.UUID, state domain.QueueState) ([]domain.Queue, error) {
-// 	queues, err := s.repo.GetAllQueueByBusinessFilterState(ctx, businessID, state)
-// 	if err != nil {
-// 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_QUEUES_BY_STATE_ERROR", "failed to get business queues by state", err)
-// 	}
-// 	return queues, nil
-// }
