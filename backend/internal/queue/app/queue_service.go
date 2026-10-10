@@ -9,6 +9,7 @@ import (
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	businessdomain "QueueLite/internal/business/domain"
+	counterdomain "QueueLite/internal/counter/domain"
 
 	"QueueLite/internal/queue/domain"
 
@@ -80,76 +81,157 @@ func (s *QueueService) GetWaitingQueueSnapshot(ctx context.Context, businessID u
 	return response, nil
 }
 
-func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.UUID) (*CustomerQueueStatus, error) {
+func (s *QueueService) loadCustomerQueueStatusData(
+	ctx context.Context,
+	queueID uuid.UUID,
+) (*CustomerQueueStatusData, error) {
 	queue, err := s.GetQueue(ctx, queueID)
 	if err != nil {
 		return nil, err
 	}
+
 	business, err := s.queueBusinessRepo.GetBusiness(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_ERROR", "failed to get business", err)
 	}
+
 	counters, err := s.queueCounterRepo.ListBusinessCounters(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_COUNTERS_ERROR", "failed to get counters", err)
 	}
+
 	queues, err := s.repo.GetAllQueueByBusiness(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_QUEUES_ERROR", "failed to get business queues", err)
 	}
+
 	waiting, err := s.GetWaitingQueueSnapshot(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_WAITING_QUEUE_ERROR", "failed to get waiting queues", err)
 	}
 
+	return &CustomerQueueStatusData{
+		queue:    queue,
+		business: business,
+		counters: counters,
+		queues:   queues,
+		waiting:  waiting,
+	}, nil
+}
+
+func indexQueues(queues []domain.Queue) (map[uuid.UUID]domain.Queue, int) {
 	byID := make(map[uuid.UUID]domain.Queue, len(queues))
-	calledOrProcessing := 0
-	for _, item := range queues {
-		byID[item.ID] = item
-		if item.State == domain.QueueStateCalled || item.State == domain.QueueStateProcessing {
-			calledOrProcessing++
+	activeQueues := 0
+
+	for _, queue := range queues {
+		byID[queue.ID] = queue
+
+		if queue.State == domain.QueueStateCalled || queue.State == domain.QueueStateProcessing {
+			activeQueues++
 		}
 	}
+
+	return byID, activeQueues
+}
+
+func isQueueBeingServed(state domain.QueueState) bool {
+	return state == domain.QueueStateCalled ||
+		state == domain.QueueStateProcessing
+}
+
+func buildCounterStatus(counters []counterdomain.Counter, queuesByID map[uuid.UUID]domain.Queue) ([]CustomerCounterStatus, []CurrentlyServingQueue, int) {
 	counterStatuses := make([]CustomerCounterStatus, 0, len(counters))
+
 	serving := make([]CurrentlyServingQueue, 0, len(counters))
+
 	activeCounters := 0
+
 	for _, counter := range counters {
-		item := CustomerCounterStatus{ID: counter.ID, Name: counter.Name, CurrentQueueID: counter.CurrentQueueID, State: "idle"}
+		item := CustomerCounterStatus{
+			ID:             counter.ID,
+			Name:           counter.Name,
+			CurrentQueueID: counter.CurrentQueueID,
+			State:          "idle",
+		}
+
 		if counter.CurrentQueueID != nil {
-			if current, ok := byID[*counter.CurrentQueueID]; ok && (current.State == domain.QueueStateCalled || current.State == domain.QueueStateProcessing) {
+			current, ok := queuesByID[*counter.CurrentQueueID]
+
+			if ok && isQueueBeingServed(current.State) {
 				name := current.Name
+
 				item.CurrentQueueName = &name
 				item.State = string(current.State)
+
 				activeCounters++
-				serving = append(serving, CurrentlyServingQueue{CounterID: counter.ID, CounterName: counter.Name, QueueID: current.ID, QueueName: current.Name, State: current.State})
+
+				serving = append(
+					serving,
+					CurrentlyServingQueue{
+						CounterID:   counter.ID,
+						CounterName: counter.Name,
+						QueueID:     current.ID,
+						QueueName:   current.Name,
+						State:       current.State,
+					},
+				)
 			}
 		}
+
 		counterStatuses = append(counterStatuses, item)
 	}
 
+	return counterStatuses, serving, activeCounters
+}
+
+func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.UUID) (*CustomerQueueStatus, error) {
+	data, err := s.loadCustomerQueueStatusData(ctx, queueID)
+	if err != nil {
+		return nil, err
+	}
+	queuesByID, activeQueues := indexQueues(data.queues)
+	counterStatuses, serving, activeCounters := buildCounterStatus(data.counters, queuesByID)
+
 	var next *QueueSnapshotItem
-	if len(waiting) > 0 {
-		value := waiting[0]
+
+	if len(data.waiting) > 0 {
+		value := data.waiting[0]
 		next = &value
 	}
+
 	var position *CustomerQueuePosition
 	var estimate *int
-	if queue.State == domain.QueueStateWaiting {
-		for index, item := range waiting {
-			if item.QueueID == queue.ID.String() {
-				position = &CustomerQueuePosition{Position: index + 1, Ahead: index, QueueName: queue.Name}
-				minutes := ((index + max(activeCounters, 1) - 1) / max(activeCounters, 1)) * 5
+
+	if data.queue.State == domain.QueueStateWaiting {
+		for index, item := range data.waiting {
+			if item.QueueID == data.queue.ID.String() {
+				position = &CustomerQueuePosition{
+					Position:  index + 1,
+					Ahead:     index,
+					QueueName: data.queue.Name,
+				}
+
+				activeCounterCount := max(activeCounters, 1)
+				minutes := ((index + activeCounterCount - 1) / activeCounterCount) * 5
 				estimate = &minutes
 				break
 			}
 		}
 	}
+
 	return &CustomerQueueStatus{
-		Queue: *queue, Business: *business, Counters: counterStatuses,
-		TotalCounters: len(counterStatuses), ActiveCounters: activeCounters,
-		CurrentlyServing: serving, NextQueue: next, CustomerPosition: position,
-		TotalWaiting: len(waiting), TotalActiveQueues: len(waiting) + calledOrProcessing,
-		EstimatedWaitMinutes: estimate, UpdatedAt: time.Now().UTC(),
+		Queue:                *data.queue,
+		Business:             *data.business,
+		Counters:             counterStatuses,
+		TotalCounters:        len(counterStatuses),
+		ActiveCounters:       activeCounters,
+		CurrentlyServing:     serving,
+		NextQueue:            next,
+		CustomerPosition:     position,
+		TotalWaiting:         len(data.waiting),
+		TotalActiveQueues:    len(data.waiting) + activeQueues,
+		EstimatedWaitMinutes: estimate,
+		UpdatedAt:            time.Now().UTC(),
 	}, nil
 }
 
@@ -207,6 +289,7 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	if !business.Operational {
 		return nil, apperror.New(apperror.KindConflict, "BUSINESS_UNAVAILABLE", "business is unavailable")
 	}
+
 	ownerID := uuid.New()
 	var guestID *uuid.UUID
 	username, phone := strings.TrimSpace(input.Username), input.PhoneNumber

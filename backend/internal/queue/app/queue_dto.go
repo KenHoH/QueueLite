@@ -1,6 +1,8 @@
 package app
 
 import (
+	businessdomain "QueueLite/internal/business/domain"
+	counterdomain "QueueLite/internal/counter/domain"
 	"QueueLite/internal/queue/domain"
 
 	"github.com/google/uuid"
@@ -18,4 +20,12 @@ type RegisterCustomerQueueResult struct {
 	GuestID     *uuid.UUID
 	Username    string
 	PhoneNumber string
+}
+
+type CustomerQueueStatusData struct {
+	queue    *domain.Queue
+	business *businessdomain.Business
+	counters []counterdomain.Counter
+	queues   []domain.Queue
+	waiting  []QueueSnapshotItem
 }
