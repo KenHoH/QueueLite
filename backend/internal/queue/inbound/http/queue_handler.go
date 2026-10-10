@@ -428,37 +428,3 @@ func decodeJSON(r *http.Request, dst any) error {
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(dst)
 }
-
-// func (h *QueueHandlerImpl) GetBusinessPublicQueueSummary(w http.ResponseWriter, r *http.Request) {
-// 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-// 	if !ok {
-// 		return
-// 	}
-
-// 	summary, err := h.s.GetBusinessPublicQueueSummary(r.Context(), businessID)
-// 	if err != nil {
-// 		httpadapter.WriteError(w, err)
-// 		return
-// 	}
-
-// 	httpadapter.WriteJSON(w, http.StatusOK, NewPublicQueueSummaryResponse(summary))
-// }
-
-// func (h *QueueHandlerImpl) GetAllQueueByBusinessFilterState(w http.ResponseWriter, r *http.Request) {
-// 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-// 	if !ok {
-// 		return
-// 	}
-// 	state, ok := parseQueueState(w, chi.URLParam(r, "state"))
-// 	if !ok {
-// 		return
-// 	}
-
-// 	queues, err := h.s.GetAllQueueByBusinessFilterState(r.Context(), businessID, state)
-// 	if err != nil {
-// 		httpadapter.WriteError(w, err)
-// 		return
-// 	}
-
-// 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
-// }

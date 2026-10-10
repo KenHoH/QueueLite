@@ -250,7 +250,7 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	}
 	if s.subscriptionService != nil {
 		if err := s.subscriptionService.DecreaseBusinessCapacity(ctx, q.BusinessID); err != nil {
-			return nil, customerQuotaError(err)
+			return nil, CustomerQuotaError(err)
 		}
 	}
 	outcome, err := cache.EnqueueCustomerQueue(ctx, s.rdt, cache.CustomerQueue{Queue: q, Username: username, PhoneNumber: normalized, Guest: guestID != nil})
@@ -271,14 +271,6 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	// Notification failure must not turn an accepted registration into a failed join.
 	_ = s.publishQueueUpdate(ctx, q.BusinessID)
 	return &RegisterCustomerQueueResult{Queue: &q, GuestID: guestID, Username: username, PhoneNumber: normalized}, nil
-}
-
-func customerQuotaError(err error) error {
-	var appErr *apperror.Error
-	if errors.As(err, &appErr) && (appErr.Code == "QUEUE_FULL" || appErr.Code == "BUSINESS_QUEUE_FULL") {
-		return apperror.New(apperror.KindConflict, "BUSINESS_QUEUE_FULL", "the business queue is full")
-	}
-	return apperror.Wrap(apperror.KindInternal, "BUSINESS_QUOTA_ERROR", "failed to check business capacity", err)
 }
 
 func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*domain.Queue, error) {
