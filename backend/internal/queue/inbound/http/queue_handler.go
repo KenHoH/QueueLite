@@ -30,14 +30,27 @@ func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 }
 
 func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Request) {
-	currentHost := r.Host
-	currentHost = fmt.Sprintf("%s/queuelite/", currentHost)
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	host := r.Header.Get("X-Forwarded-Host")
 
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+
+	if host == "" {
+		host = r.Host
+	}
+
+	url := fmt.Sprintf("%s://%s", scheme, host)
 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
-	fileBytes, err := h.s.GenerateQRImage(currentHost, businessID.String())
+	fileBytes, err := h.s.GenerateQRImage(url, businessID.String())
 	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
