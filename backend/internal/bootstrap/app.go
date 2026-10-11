@@ -1,12 +1,13 @@
 package bootstrap
 
 import (
-	"QueueLite/internal/adapter/postgres"
-	cache "QueueLite/internal/adapter/redis"
-	"QueueLite/internal/config"
 	"context"
 	"fmt"
 	"net/http"
+
+	"QueueLite/internal/adapter/postgres"
+	cache "QueueLite/internal/adapter/redis"
+	"QueueLite/internal/config"
 )
 
 var ctx = context.Background()

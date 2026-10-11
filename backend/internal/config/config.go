@@ -13,14 +13,17 @@ type Config struct {
 	HTTPAddr    string
 	SecretKey   string
 	RedisAddr   string
+	TelebotAPI  string
 }
 
-const QueueExpirationTime = 12 * time.Hour
-const GuestExpirationTime = 24 * time.Hour
-const StreamName string = "queue_stream"
-const QueueConsumerGroup string = "queue_stream_workers"
-const QueueConsumerName string = "queue-worker-1"
-const QueueDeadLetterStreamName string = "queue_stream_dead_letter"
+const (
+	QueueExpirationTime              = 12 * time.Hour
+	GuestExpirationTime              = 24 * time.Hour
+	StreamName                string = "queue_stream"
+	QueueConsumerGroup        string = "queue_stream_workers"
+	QueueConsumerName         string = "queue-worker-1"
+	QueueDeadLetterStreamName string = "queue_stream_dead_letter"
+)
 
 func Load() (*Config, error) {
 	_ = godotenv.Load()
@@ -45,10 +48,16 @@ func Load() (*Config, error) {
 		return nil, errors.New("Redis is required")
 	}
 
+	telebotAPI := os.Getenv("TELEBOT_API_KEY")
+	if telebotAPI == "" {
+		return nil, errors.New("Telebot API KEY required")
+	}
+
 	return &Config{
 		DatabaseURL: databaseURL,
 		HTTPAddr:    httpAddr,
 		SecretKey:   secretKey,
 		RedisAddr:   redisAddr,
+		TelebotAPI:  telebotAPI,
 	}, nil
 }

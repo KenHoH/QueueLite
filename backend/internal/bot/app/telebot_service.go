@@ -1,0 +1,128 @@
+package app
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"time"
+
+	"QueueLite/internal/config"
+)
+
+type TelebotService struct{}
+
+const (
+	TelebotBaseURL      string = "https://api.telegram.org/bot"
+	UpdateEndpoint      string = "getUpdates"
+	SendMessageEndpoint string = "sendMessage"
+)
+
+func loadTelebotAPIKey() (string, error) {
+	cfg, err := config.Load()
+	if err != nil || cfg == nil || cfg.SecretKey == "" {
+		return "", errors.New("invalid telebot api key")
+	}
+	return cfg.TelebotAPI, nil
+}
+
+func NewTelebotService() *TelebotService {
+	return &TelebotService{}
+}
+
+func (s *TelebotService) SendMessageToUser(chatID string, text string) error {
+	apiKey, err := loadTelebotAPIKey()
+	if err != nil {
+		return err
+	}
+	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, SendMessageEndpoint)
+	fmt.Println(fullURL)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	telebotMSGRequestData := TelebotMSGRequest{
+		ChatID: chatID,
+		Text:   text,
+	}
+
+	// 2. Marshal the struct into a JSON byte slice
+	jsonBytes, err := json.Marshal(telebotMSGRequestData)
+	if err != nil {
+		log.Fatalf("Error encoding JSON: %v", err)
+		return err
+	}
+
+	// 3. Create the POST request using bytes.NewBuffer to create an io.Reader
+	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+		return err
+	}
+
+	// 4. Set headers (Important for APIs expecting JSON)
+	req.Header.Set("Content-Type", "application/json")
+
+	// 5. Execute the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 6. Read and display the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Error reading response: %v", err)
+		return err
+	}
+
+	fmt.Printf("Status Code: %d\n", resp.StatusCode)
+	fmt.Printf("Response Body:\n%s\n", string(body))
+
+	return nil
+}
+
+// TODO: implement and extract the user's phone number and save to database
+func (s *TelebotService) GetUpdateStatus() error {
+	apiKey, err := loadTelebotAPIKey()
+	if err != nil {
+		return err
+	}
+
+	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, UpdateEndpoint)
+	fmt.Println(fullURL)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+		return err
+	}
+
+	// 3. Execute the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Error sending request: %v", err)
+		return err
+	}
+
+	// CRITICAL: Always defer closing the response body to prevent resource leaks
+	defer resp.Body.Close()
+
+	// 4. Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Error reading response: %v", err)
+		return err
+	}
+
+	fmt.Printf("Status Code: %d\n", resp.StatusCode)
+	fmt.Printf("Response Body:\n%s\n", string(body))
+	return nil
+}
