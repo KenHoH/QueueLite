@@ -19,6 +19,9 @@ import (
 	userhttp "QueueLite/internal/user/inbound/http"
 	useroutbound "QueueLite/internal/user/outbound"
 
+	telebotapp "QueueLite/internal/bot/app"
+	telebothttp "QueueLite/internal/bot/inbound/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -48,6 +51,9 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
+
+	telebotService := telebotapp.NewTelebotService()
+	telebotHandler := telebothttp.NewTelebotHandler(telebotService)
 
 	router.Route("/users", func(r chi.Router) {
 		r.Post("/logout", userHandler.LogoutUser)
@@ -130,6 +136,11 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 			private.Use(middleware.AuthMiddleware(userRepo))
 			subscriptionhttp.RegisterAccountRoutes(private, subscriptionHandler, businessHandler.RequireManagement, businessRepo)
 		})
+	})
+
+	router.Route("/telebot", func(r chi.Router) {
+		r.Get("/updatestatus", telebotHandler.UpdateStatus)
+		r.Get("/msg", telebotHandler.NotifyUser)
 	})
 
 	return router
