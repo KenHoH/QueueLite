@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	qr "QueueLite/internal/QRCode"
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	businessdomain "QueueLite/internal/business/domain"
+	counterdomain "QueueLite/internal/counter/domain"
 
 	"QueueLite/internal/queue/domain"
 
@@ -18,45 +21,33 @@ import (
 
 type QueueService struct {
 	repo                QueueRepo
-	businessLookup      BusinessLookup
-	userLookup          UserLookup
-	counterLookup       QueueCounterLookup
+	queueBusinessRepo   QueueBusinessRepo
+	queueUserRepo       QueueUserRepo
+	queueCounterRepo    QueueCounterRepo
 	subscriptionService QueueQuota
 	rdt                 *redis.Client
 }
 
-func NewQueueService(repo QueueRepo, subscriptionService QueueQuota, redis *redis.Client, lookups ...any) *QueueService {
+func NewQueueService(repo QueueRepo, subscriptionService QueueQuota, redis *redis.Client, queueBusinessRepo QueueBusinessRepo, queueUserRepo QueueUserRepo, queueCounterRepo QueueCounterRepo) *QueueService {
 	service := &QueueService{
 		repo:                repo,
 		subscriptionService: subscriptionService,
 		rdt:                 redis,
-	}
-	for _, lookup := range lookups {
-		if businessLookup, ok := lookup.(BusinessLookup); ok {
-			service.businessLookup = businessLookup
-		}
-		if userLookup, ok := lookup.(UserLookup); ok {
-			service.userLookup = userLookup
-		}
-		if counterLookup, ok := lookup.(QueueCounterLookup); ok {
-			service.counterLookup = counterLookup
-		}
+		queueBusinessRepo:   queueBusinessRepo,
+		queueUserRepo:       queueUserRepo,
+		queueCounterRepo:    queueCounterRepo,
 	}
 	return service
 }
 
-type RegisterCustomerQueueInput struct {
-	BusinessID  uuid.UUID
-	UserID      *uuid.UUID
-	Username    string
-	PhoneNumber string
-}
-
-type RegisterCustomerQueueResult struct {
-	Queue       *domain.Queue
-	GuestID     *uuid.UUID
-	Username    string
-	PhoneNumber string
+func (s *QueueService) GenerateQRImage(url string, businessID string) ([]byte, error) {
+	fullURL := fmt.Sprintf("%s/queuelite/qr/%s", url, businessID)
+	var file []byte
+	file, err := qr.GenerateQRCode(fullURL)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // helper function cache redis related
@@ -102,79 +93,157 @@ func (s *QueueService) GetWaitingQueueSnapshot(ctx context.Context, businessID u
 	return response, nil
 }
 
-func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.UUID) (*CustomerQueueStatus, error) {
+func (s *QueueService) loadCustomerQueueStatusData(
+	ctx context.Context,
+	queueID uuid.UUID,
+) (*CustomerQueueStatusData, error) {
 	queue, err := s.GetQueue(ctx, queueID)
 	if err != nil {
 		return nil, err
 	}
-	if s.businessLookup == nil || s.counterLookup == nil {
-		return nil, apperror.New(apperror.KindInternal, "QUEUE_STATUS_LOOKUP_UNAVAILABLE", "customer queue status unavailable")
-	}
-	business, err := s.businessLookup.GetBusiness(ctx, queue.BusinessID)
+
+	business, err := s.queueBusinessRepo.GetBusiness(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_ERROR", "failed to get business", err)
 	}
-	counters, err := s.counterLookup.ListBusinessCounters(ctx, queue.BusinessID)
+
+	counters, err := s.queueCounterRepo.ListBusinessCounters(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_COUNTERS_ERROR", "failed to get counters", err)
 	}
+
 	queues, err := s.repo.GetAllQueueByBusiness(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_QUEUES_ERROR", "failed to get business queues", err)
 	}
+
 	waiting, err := s.GetWaitingQueueSnapshot(ctx, queue.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_WAITING_QUEUE_ERROR", "failed to get waiting queues", err)
 	}
 
+	return &CustomerQueueStatusData{
+		queue:    queue,
+		business: business,
+		counters: counters,
+		queues:   queues,
+		waiting:  waiting,
+	}, nil
+}
+
+func indexQueues(queues []domain.Queue) (map[uuid.UUID]domain.Queue, int) {
 	byID := make(map[uuid.UUID]domain.Queue, len(queues))
-	calledOrProcessing := 0
-	for _, item := range queues {
-		byID[item.ID] = item
-		if item.State == domain.QueueStateCalled || item.State == domain.QueueStateProcessing {
-			calledOrProcessing++
+	activeQueues := 0
+
+	for _, queue := range queues {
+		byID[queue.ID] = queue
+
+		if queue.State == domain.QueueStateCalled || queue.State == domain.QueueStateProcessing {
+			activeQueues++
 		}
 	}
+
+	return byID, activeQueues
+}
+
+func isQueueBeingServed(state domain.QueueState) bool {
+	return state == domain.QueueStateCalled ||
+		state == domain.QueueStateProcessing
+}
+
+func buildCounterStatus(counters []counterdomain.Counter, queuesByID map[uuid.UUID]domain.Queue) ([]CustomerCounterStatus, []CurrentlyServingQueue, int) {
 	counterStatuses := make([]CustomerCounterStatus, 0, len(counters))
+
 	serving := make([]CurrentlyServingQueue, 0, len(counters))
+
 	activeCounters := 0
+
 	for _, counter := range counters {
-		item := CustomerCounterStatus{ID: counter.ID, Name: counter.Name, CurrentQueueID: counter.CurrentQueueID, State: "idle"}
+		item := CustomerCounterStatus{
+			ID:             counter.ID,
+			Name:           counter.Name,
+			CurrentQueueID: counter.CurrentQueueID,
+			State:          "idle",
+		}
+
 		if counter.CurrentQueueID != nil {
-			if current, ok := byID[*counter.CurrentQueueID]; ok && (current.State == domain.QueueStateCalled || current.State == domain.QueueStateProcessing) {
+			current, ok := queuesByID[*counter.CurrentQueueID]
+
+			if ok && isQueueBeingServed(current.State) {
 				name := current.Name
+
 				item.CurrentQueueName = &name
 				item.State = string(current.State)
+
 				activeCounters++
-				serving = append(serving, CurrentlyServingQueue{CounterID: counter.ID, CounterName: counter.Name, QueueID: current.ID, QueueName: current.Name, State: current.State})
+
+				serving = append(
+					serving,
+					CurrentlyServingQueue{
+						CounterID:   counter.ID,
+						CounterName: counter.Name,
+						QueueID:     current.ID,
+						QueueName:   current.Name,
+						State:       current.State,
+					},
+				)
 			}
 		}
+
 		counterStatuses = append(counterStatuses, item)
 	}
 
+	return counterStatuses, serving, activeCounters
+}
+
+func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.UUID) (*CustomerQueueStatus, error) {
+	data, err := s.loadCustomerQueueStatusData(ctx, queueID)
+	if err != nil {
+		return nil, err
+	}
+	queuesByID, activeQueues := indexQueues(data.queues)
+	counterStatuses, serving, activeCounters := buildCounterStatus(data.counters, queuesByID)
+
 	var next *QueueSnapshotItem
-	if len(waiting) > 0 {
-		value := waiting[0]
+
+	if len(data.waiting) > 0 {
+		value := data.waiting[0]
 		next = &value
 	}
+
 	var position *CustomerQueuePosition
 	var estimate *int
-	if queue.State == domain.QueueStateWaiting {
-		for index, item := range waiting {
-			if item.QueueID == queue.ID.String() {
-				position = &CustomerQueuePosition{Position: index + 1, Ahead: index, QueueName: queue.Name}
-				minutes := ((index + max(activeCounters, 1) - 1) / max(activeCounters, 1)) * 5
+
+	if data.queue.State == domain.QueueStateWaiting {
+		for index, item := range data.waiting {
+			if item.QueueID == data.queue.ID.String() {
+				position = &CustomerQueuePosition{
+					Position:  index + 1,
+					Ahead:     index,
+					QueueName: data.queue.Name,
+				}
+
+				activeCounterCount := max(activeCounters, 1)
+				minutes := ((index + activeCounterCount - 1) / activeCounterCount) * 5
 				estimate = &minutes
 				break
 			}
 		}
 	}
+
 	return &CustomerQueueStatus{
-		Queue: *queue, Business: *business, Counters: counterStatuses,
-		TotalCounters: len(counterStatuses), ActiveCounters: activeCounters,
-		CurrentlyServing: serving, NextQueue: next, CustomerPosition: position,
-		TotalWaiting: len(waiting), TotalActiveQueues: len(waiting) + calledOrProcessing,
-		EstimatedWaitMinutes: estimate, UpdatedAt: time.Now().UTC(),
+		Queue:                *data.queue,
+		Business:             *data.business,
+		Counters:             counterStatuses,
+		TotalCounters:        len(counterStatuses),
+		ActiveCounters:       activeCounters,
+		CurrentlyServing:     serving,
+		NextQueue:            next,
+		CustomerPosition:     position,
+		TotalWaiting:         len(data.waiting),
+		TotalActiveQueues:    len(data.waiting) + activeQueues,
+		EstimatedWaitMinutes: estimate,
+		UpdatedAt:            time.Now().UTC(),
 	}, nil
 }
 
@@ -208,10 +277,10 @@ func (s *QueueService) ValidateBusinessExists(ctx context.Context, businessID uu
 	if businessID == uuid.Nil {
 		return apperror.New(apperror.KindInvalid, "BUSINESS_ID_REQUIRED", "business id is required")
 	}
-	if s.businessLookup == nil {
+	if s.queueBusinessRepo == nil {
 		return apperror.New(apperror.KindInternal, "BUSINESS_LOOKUP_UNAVAILABLE", "business lookup unavailable")
 	}
-	if _, err := s.businessLookup.GetBusiness(ctx, businessID); err != nil {
+	if _, err := s.queueBusinessRepo.GetBusiness(ctx, businessID); err != nil {
 		if errors.Is(err, businessdomain.ErrBusinessNotFound) {
 			return apperror.Wrap(apperror.KindNotFound, "BUSINESS_NOT_FOUND", "business not found", err)
 		}
@@ -225,21 +294,22 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	if err := s.ValidateBusinessExists(ctx, input.BusinessID); err != nil {
 		return nil, err
 	}
-	business, err := s.businessLookup.GetBusiness(ctx, input.BusinessID)
+	business, err := s.queueBusinessRepo.GetBusiness(ctx, input.BusinessID)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_ERROR", "failed to get business", err)
 	}
 	if !business.Operational {
 		return nil, apperror.New(apperror.KindConflict, "BUSINESS_UNAVAILABLE", "business is unavailable")
 	}
+
 	ownerID := uuid.New()
 	var guestID *uuid.UUID
 	username, phone := strings.TrimSpace(input.Username), input.PhoneNumber
 	if input.UserID != nil {
-		if s.userLookup == nil {
+		if s.queueUserRepo == nil {
 			return nil, apperror.New(apperror.KindInternal, "USER_LOOKUP_UNAVAILABLE", "user lookup unavailable")
 		}
-		user, err := s.userLookup.GetUser(ctx, *input.UserID)
+		user, err := s.queueUserRepo.GetUser(ctx, *input.UserID)
 		if err != nil {
 			return nil, apperror.Wrap(apperror.KindUnauthorized, "USER_NOT_FOUND", "user not found", err)
 		}
@@ -275,7 +345,7 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	}
 	if s.subscriptionService != nil {
 		if err := s.subscriptionService.DecreaseBusinessCapacity(ctx, q.BusinessID); err != nil {
-			return nil, customerQuotaError(err)
+			return nil, CustomerQuotaError(err)
 		}
 	}
 	outcome, err := cache.EnqueueCustomerQueue(ctx, s.rdt, cache.CustomerQueue{Queue: q, Username: username, PhoneNumber: normalized, Guest: guestID != nil})
@@ -296,24 +366,6 @@ func (s *QueueService) RegisterCustomerQueue(ctx context.Context, input Register
 	// Notification failure must not turn an accepted registration into a failed join.
 	_ = s.publishQueueUpdate(ctx, q.BusinessID)
 	return &RegisterCustomerQueueResult{Queue: &q, GuestID: guestID, Username: username, PhoneNumber: normalized}, nil
-}
-
-// Existing QR callers are aliases of the canonical customer service.
-type (
-	RegisterQueueByQRInput  = RegisterCustomerQueueInput
-	RegisterQueueByQRResult = RegisterCustomerQueueResult
-)
-
-func (s *QueueService) RegisterQueueByQR(ctx context.Context, input RegisterQueueByQRInput) (*RegisterQueueByQRResult, error) {
-	return s.RegisterCustomerQueue(ctx, input)
-}
-
-func customerQuotaError(err error) error {
-	var appErr *apperror.Error
-	if errors.As(err, &appErr) && (appErr.Code == "QUEUE_FULL" || appErr.Code == "BUSINESS_QUEUE_FULL") {
-		return apperror.New(apperror.KindConflict, "BUSINESS_QUEUE_FULL", "the business queue is full")
-	}
-	return apperror.Wrap(apperror.KindInternal, "BUSINESS_QUOTA_ERROR", "failed to check business capacity", err)
 }
 
 func (s *QueueService) RegisterQueue(ctx context.Context, queue domain.Queue) (*domain.Queue, error) {
@@ -576,19 +628,3 @@ func (s *QueueService) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	_ = s.publishQueueUpdate(ctx, queue.BusinessID)
 	return nil
 }
-
-// func (s *QueueService) GetBusinessPublicQueueSummary(ctx context.Context, businessID uuid.UUID) (*domain.PublicQueueSummary, error) {
-// 	summary, err := s.repo.GetBusinessPublicQueueSummary(ctx, businessID)
-// 	if err != nil {
-// 		return nil, apperror.Wrap(apperror.KindInternal, "GET_PUBLIC_QUEUE_SUMMARY_ERROR", "failed to get public queue summary", err)
-// 	}
-// 	return summary, nil
-// }
-
-// func (s *QueueService) GetAllQueueByBusinessFilterState(ctx context.Context, businessID uuid.UUID, state domain.QueueState) ([]domain.Queue, error) {
-// 	queues, err := s.repo.GetAllQueueByBusinessFilterState(ctx, businessID, state)
-// 	if err != nil {
-// 		return nil, apperror.Wrap(apperror.KindInternal, "GET_BUSINESS_QUEUES_BY_STATE_ERROR", "failed to get business queues by state", err)
-// 	}
-// 	return queues, nil
-// }

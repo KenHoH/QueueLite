@@ -1,16 +1,19 @@
 package inbound
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	httpadapter "QueueLite/internal/adapter/http"
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/config"
 	"QueueLite/internal/middleware"
 	"QueueLite/internal/queue/app"
 	"QueueLite/internal/queue/domain"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -26,8 +29,32 @@ func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 	}
 }
 
+func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Request) {
+	currentHost := r.Host
+	currentHost = fmt.Sprintf("%s/queuelite/", currentHost)
+
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	fileBytes, err := h.s.GenerateQRImage(currentHost, businessID.String())
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Disposition", `attachment; filename="qrcode.png"`)
+
+	// Convert []byte to an io.ReadSeeker
+	content := bytes.NewReader(fileBytes)
+
+	// http.ServeContent automatically determines the Content-Type from the filename extension
+	http.ServeContent(w, r, "qrcode.png", time.Now(), content)
+}
+
 func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
-	businessId, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
@@ -45,13 +72,13 @@ func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubsub := h.s.SubscribeQueueChannel(r.Context(), businessId.String())
+	pubsub := h.s.SubscribeQueueChannel(r.Context(), businessID.String())
 	// Always close the PubSub client to prevent connection leaks
 	defer pubsub.Close()
 	ch := pubsub.Channel()
 
 	sendSnapshot := func() bool {
-		response, err := h.s.GetWaitingQueueSnapshot(r.Context(), businessId)
+		response, err := h.s.GetWaitingQueueSnapshot(r.Context(), businessID)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
 			flusher.Flush()
@@ -427,37 +454,3 @@ func decodeJSON(r *http.Request, dst any) error {
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(dst)
 }
-
-// func (h *QueueHandlerImpl) GetBusinessPublicQueueSummary(w http.ResponseWriter, r *http.Request) {
-// 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-// 	if !ok {
-// 		return
-// 	}
-
-// 	summary, err := h.s.GetBusinessPublicQueueSummary(r.Context(), businessID)
-// 	if err != nil {
-// 		httpadapter.WriteError(w, err)
-// 		return
-// 	}
-
-// 	httpadapter.WriteJSON(w, http.StatusOK, NewPublicQueueSummaryResponse(summary))
-// }
-
-// func (h *QueueHandlerImpl) GetAllQueueByBusinessFilterState(w http.ResponseWriter, r *http.Request) {
-// 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-// 	if !ok {
-// 		return
-// 	}
-// 	state, ok := parseQueueState(w, chi.URLParam(r, "state"))
-// 	if !ok {
-// 		return
-// 	}
-
-// 	queues, err := h.s.GetAllQueueByBusinessFilterState(r.Context(), businessID, state)
-// 	if err != nil {
-// 		httpadapter.WriteError(w, err)
-// 		return
-// 	}
-
-// 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
-// }

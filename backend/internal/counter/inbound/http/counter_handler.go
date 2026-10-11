@@ -1,14 +1,14 @@
 package inbound
 
 import (
-	httpadapter "QueueLite/internal/adapter/http"
-	"QueueLite/internal/apperror"
-	"QueueLite/internal/counter/app"
-	"QueueLite/internal/counter/domain"
-	"encoding/json"
 	"net/http"
 	"strings"
 
+	httpadapter "QueueLite/internal/adapter/http"
+	"QueueLite/internal/counter/app"
+	"QueueLite/internal/counter/domain"
+
+	"QueueLite/internal/httputil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -23,12 +23,12 @@ func NewCounterHandler(s *app.CounterService) *CounterHandlerImpl {
 
 func (h *CounterHandlerImpl) CreateCounter(w http.ResponseWriter, r *http.Request) {
 	var request CreateCounterRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
-	businessID, ok := parseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
+	businessID, ok := httputil.ParseUUIDValue(w, request.BusinessID, "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
@@ -77,12 +77,12 @@ func (h *CounterHandlerImpl) UpdateCounter(w http.ResponseWriter, r *http.Reques
 	}
 
 	var request UpdateCounterRequest
-	if err := decodeJSON(r, &request); err != nil {
-		writeInvalid(w, "INVALID_FORMAT", "format is invalid")
+	if err := httputil.DecodeJSON(r, &request); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 	if request.Name == nil && request.CurrentEmployeeID == nil && request.CurrentQueueID == nil {
-		writeInvalid(w, "NO_COUNTER_FIELDS", "no counter fields provided")
+		httputil.WriteInvalid(w, "NO_COUNTER_FIELDS", "no counter fields provided")
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *CounterHandlerImpl) UpdateCounter(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		} else {
-			queueID, ok := parseUUIDValue(w, *request.CurrentQueueID, "INVALID_QUEUE_ID", "invalid queue id")
+			queueID, ok := httputil.ParseUUIDValue(w, *request.CurrentQueueID, "INVALID_QUEUE_ID", "invalid queue id")
 			if !ok {
 				return
 			}
@@ -221,35 +221,16 @@ func (h *CounterHandlerImpl) DeleteCounter(w http.ResponseWriter, r *http.Reques
 }
 
 func parseUUIDParam(w http.ResponseWriter, r *http.Request, name string, code string, message string) (uuid.UUID, bool) {
-	return parseUUIDValue(w, chi.URLParam(r, name), code, message)
-}
-
-func parseUUIDValue(w http.ResponseWriter, value string, code string, message string) (uuid.UUID, bool) {
-	id, err := uuid.Parse(strings.TrimSpace(value))
-	if err != nil {
-		writeInvalid(w, code, message)
-		return uuid.Nil, false
-	}
-	return id, true
+	return httputil.ParseUUIDValue(w, chi.URLParam(r, name), code, message)
 }
 
 func parseOptionalUUIDValue(w http.ResponseWriter, value *string, code string, message string) (*uuid.UUID, bool) {
 	if value == nil || strings.TrimSpace(*value) == "" {
 		return nil, true
 	}
-	id, ok := parseUUIDValue(w, *value, code, message)
+	id, ok := httputil.ParseUUIDValue(w, *value, code, message)
 	if !ok {
 		return nil, false
 	}
 	return &id, true
-}
-
-func writeInvalid(w http.ResponseWriter, code string, message string) {
-	httpadapter.WriteError(w, apperror.New(apperror.KindInvalid, code, message))
-}
-
-func decodeJSON(r *http.Request, dst any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(dst)
 }

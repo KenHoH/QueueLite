@@ -1,16 +1,17 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	"QueueLite/internal/counter/domain"
 	queueapp "QueueLite/internal/queue/app"
 	queuedomain "QueueLite/internal/queue/domain"
 	subscriptionapp "QueueLite/internal/subscription/app"
-	"context"
-	"errors"
-	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -157,10 +158,6 @@ func (s *CounterService) ClearCounterCustomer(ctx context.Context, counterID uui
 }
 
 func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) error {
-	if s.queueRepo == nil {
-		return apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
-	}
-
 	counter, err := s.GetCounter(ctx, counterID)
 	if err != nil {
 		return err
@@ -197,9 +194,6 @@ func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID u
 }
 
 func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID, businessID uuid.UUID) (*queuedomain.Queue, error) {
-	if s.queueRepo == nil {
-		return nil, apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
-	}
 	counter, err := s.GetCounter(ctx, counterID)
 	if err != nil {
 		return nil, err
@@ -287,9 +281,6 @@ func (s *CounterService) restoreWaitingQueueAfterFailure(ctx context.Context, it
 }
 
 func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) (*queuedomain.Queue, error) {
-	if s.queueRepo == nil {
-		return nil, apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
-	}
 	queue, err := s.queueRepo.GetQueue(ctx, queueID)
 	if err != nil {
 		return nil, err
@@ -318,9 +309,6 @@ func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.
 }
 
 func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) (*queuedomain.Queue, error) {
-	if s.queueRepo == nil {
-		return nil, apperror.New(apperror.KindNotImplemented, "QUEUE_REPO_NOT_CONFIGURED", "queue repo is not configured")
-	}
 	queue, err := s.queueRepo.GetQueue(ctx, queueID)
 	if err != nil {
 		return nil, err
@@ -389,11 +377,6 @@ func (s *CounterService) scheduleCalledQueueTimeout(queueID uuid.UUID, counterID
 	})
 }
 
-func nowPtr() *time.Time {
-	now := time.Now()
-	return &now
-}
-
 func (s *CounterService) DeleteCounter(ctx context.Context, id uuid.UUID) error {
 	if err := s.repo.DeleteCounter(ctx, id); err != nil {
 		if errors.Is(err, ErrCounterNotFound) {
@@ -402,4 +385,9 @@ func (s *CounterService) DeleteCounter(ctx context.Context, id uuid.UUID) error 
 		return apperror.Wrap(apperror.KindInternal, "DELETE_COUNTER_ERROR", "failed to delete counter", err)
 	}
 	return nil
+}
+
+func nowPtr() *time.Time {
+	now := time.Now()
+	return &now
 }
