@@ -140,7 +140,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	router.Route("/telebot", func(r chi.Router) {
 		r.Get("/updatestatus", telebotHandler.UpdateStatus)
-		r.Get("/msg", telebotHandler.NotifyUser)
+		// r.Get("/msg", telebotHandler.NotifyUser)
 	})
 
 	return router
