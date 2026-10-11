@@ -1,10 +1,12 @@
 package inbound
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	httpadapter "QueueLite/internal/adapter/http"
 	"QueueLite/internal/apperror"
@@ -27,8 +29,32 @@ func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 	}
 }
 
+func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Request) {
+	currentHost := r.Host
+	currentHost = fmt.Sprintf("%s/queuelite/", currentHost)
+
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	if !ok {
+		return
+	}
+	fileBytes, err := h.s.GenerateQRImage(currentHost, businessID.String())
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Disposition", `attachment; filename="qrcode.png"`)
+
+	// Convert []byte to an io.ReadSeeker
+	content := bytes.NewReader(fileBytes)
+
+	// http.ServeContent automatically determines the Content-Type from the filename extension
+	http.ServeContent(w, r, "qrcode.png", time.Now(), content)
+}
+
 func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
-	businessId, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
+	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
@@ -46,13 +72,13 @@ func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubsub := h.s.SubscribeQueueChannel(r.Context(), businessId.String())
+	pubsub := h.s.SubscribeQueueChannel(r.Context(), businessID.String())
 	// Always close the PubSub client to prevent connection leaks
 	defer pubsub.Close()
 	ch := pubsub.Channel()
 
 	sendSnapshot := func() bool {
-		response, err := h.s.GetWaitingQueueSnapshot(r.Context(), businessId)
+		response, err := h.s.GetWaitingQueueSnapshot(r.Context(), businessID)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
 			flusher.Flush()

@@ -91,10 +91,9 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 			public.Use(middleware.PublicMiddleware(userRepo))
 			public.Get("/qr/{businessID}/resolve", queueHandler.ResolveQueueQR)
 			public.Post("/qr/{businessID}", queueHandler.RegisterQueueByQr)
+			public.Get("/qr/generate/{businessID}", queueHandler.GenerateQRCodeImage)
 			public.Post("/business/{businessID}/join", queueHandler.JoinBusinessQueue)
 			public.Post("/", queueHandler.RegisterQueue)
-			// public.Get("/business/{businessID}/summary", queueHandler.GetBusinessPublicQueueSummary)
-			// public.Get("/business/{businessID}/state/{state}", queueHandler.GetAllQueueByBusinessFilterState)
 		})
 		r.Group(func(protected chi.Router) {
 			protected.Use(middleware.PublicMiddleware(userRepo))

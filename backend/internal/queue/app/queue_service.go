@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	qr "QueueLite/internal/QRCode"
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	businessdomain "QueueLite/internal/business/domain"
@@ -36,6 +38,16 @@ func NewQueueService(repo QueueRepo, subscriptionService QueueQuota, redis *redi
 		queueCounterRepo:    queueCounterRepo,
 	}
 	return service
+}
+
+func (s *QueueService) GenerateQRImage(url string, businessID string) ([]byte, error) {
+	fullURL := fmt.Sprintf("%s/queuelite/qr/%s", url, businessID)
+	var file []byte
+	file, err := qr.GenerateQRCode(fullURL)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // helper function cache redis related
