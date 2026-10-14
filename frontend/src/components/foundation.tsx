@@ -241,11 +241,25 @@ export function EmptyState({
 	title,
 	description,
 	action,
+	compact = false,
 }: {
 	title: string;
 	description: string;
 	action?: ReactNode;
+	/** Slim single-row variant for sections that are not the page's main content. */
+	compact?: boolean;
 }) {
+	if (compact) {
+		return (
+			<Card className="ql-empty-compact">
+				<div>
+					<h3>{title}</h3>
+					<p className="ql-muted">{description}</p>
+				</div>
+				{action}
+			</Card>
+		);
+	}
 	return (
 		<Card>
 			<h2>{title}</h2>

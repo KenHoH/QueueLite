@@ -47,7 +47,7 @@ Browser tests intercept API responses to cover customer tickets, discovery, acco
 - `src/api/`: typed route wrappers, response validation and error handling. The shared client includes cookies, supports cancellation, applies a 20-second deadline and does not retry mutations.
 - `src/pages/`: discovery, joining, ticket status, account, subscription and business operation pages with their form and resource helpers.
 - `src/components/`: shared controls, cards, access feedback and navigation.
-- `src/design/`: design tokens and application styles, including focus and reduced-motion support.
+- `src/design/`: design tokens and application styles, including focus and reduced-motion support. Read the [frontend design system](../docs/FRONTEND_DESIGN_SYSTEM.md) before changing UI.
 - `src/state/`: observed session state, selected business and locally known ticket context. Tokens are not persisted in browser storage.
 - `src/routes.ts` and `src/App.tsx`: route metadata and page routing.
 

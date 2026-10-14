@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getBusinessCounters } from '../api/operations';
 import type { BusinessMembership } from '../api/types';
-import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer } from '../components/foundation';
+import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer, PageHeader } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { canManage } from './accountForms';
 import { useOperations } from './useOperations';
@@ -17,7 +17,7 @@ export default function StaffCounters() {
 function CounterAssignments({ businesses }: { businesses: BusinessMembership[] }) {
   const load = useCallback(async (signal: AbortSignal) => Promise.all(businesses.map(async business => ({ business, counters: await getBusinessCounters(business.id, { signal }) }))), [businesses]);
   const resource = useOperations(load, false);
-  return <PageContainer className="ql-account-page"><div className="ql-section-heading"><div><h1>My service counters</h1><p className="ql-muted">Open an assigned counter workspace or choose a business to manage.</p></div>{businesses.length > 0 && <Button variant="secondary" onClick={resource.retry}>Refresh counters</Button>}</div>
+  return <PageContainer className="ql-account-page"><PageHeader title="My service counters" description="Open an assigned counter workspace or choose a business to manage." action={businesses.length > 0 ? <Button variant="secondary" onClick={resource.retry}>Refresh counters</Button> : undefined} />
     {!businesses.length ? <EmptyState title="No business access yet" description="Ask a business owner or admin to add your account, or create your own business." action={<Link to="/business/create">Create a business</Link>} />
       : resource.loading ? <Card><LoadingSkeleton label="Loading assigned counters" lines={5} /></Card>
       : resource.error ? <Card><InlineError>We couldn’t load your counters.</InlineError><Button variant="secondary" onClick={resource.retry}>Try again</Button></Card>

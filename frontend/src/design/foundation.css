@@ -44,7 +44,8 @@ h2 { font-size: var(--ql-section); line-height: 1.4; }
 .ql-field { display: grid; gap: var(--ql-space-2); }
 .ql-field label { font-size: var(--ql-small); font-weight: 600; }
 .ql-password { position: relative; }
-.ql-password-toggle { position: absolute; right: var(--ql-space-1); top: calc(var(--ql-small) * 1.6 + var(--ql-space-2)); width: var(--ql-control-height); height: var(--ql-control-height); display: grid; place-items: center; border: 0; background: transparent; color: var(--ql-text-secondary); cursor: pointer; }
+/* The label is leading-none (1 line = --ql-small) plus the .ql-field gap, so the toggle must start exactly there to centre on the input. */
+.ql-password-toggle { position: absolute; right: var(--ql-space-1); top: calc(var(--ql-small) + var(--ql-space-2)); width: var(--ql-control-height); height: var(--ql-control-height); display: grid; place-items: center; border: 0; background: transparent; color: var(--ql-text-secondary); cursor: pointer; }
 .ql-badge-cancelled, .ql-badge-skipped { background: var(--ql-background); color: var(--ql-text); }
 .ql-badge-called { color: var(--ql-priority-text); }
 .ql-error { color: var(--ql-error-text); font-size: var(--ql-small); }
@@ -86,7 +87,7 @@ h2 { font-size: var(--ql-section); line-height: 1.4; }
 .ql-section-heading p { margin: 0; }
 .ql-business-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ql-space-6); }
 .ql-business-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ql-space-4); color: var(--ql-text); text-decoration: none; min-height: 16rem; transition: transform .16s ease, box-shadow .16s ease; }
-.ql-business-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgb(32 40 37 / 6%); }
+.ql-business-card:hover { transform: translateY(-2px); box-shadow: var(--ql-shadow-raised); }
 .ql-business-card h3 { font-size: var(--ql-section); line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
 .ql-business-location { display: flex; align-items: flex-start; gap: var(--ql-space-2); color: var(--ql-text-secondary); margin: 0; overflow-wrap: anywhere; }
 .ql-business-location svg { flex-shrink: 0; margin-top: .25rem; }
@@ -247,7 +248,7 @@ body { min-width: 20rem; }
 .ql-page-heading h1, .ql-page-heading p { margin-bottom: 0; }
 .ql-page-heading .ql-eyebrow { margin-bottom: var(--ql-space-2); }
 .ql-page-action { flex: 0 0 auto; }
-.ql-card { box-shadow: 0 1px 2px rgb(32 40 37 / 3%); }
+.ql-card { box-shadow: var(--ql-shadow-card); }
 .ql-narrow-section { max-width: 46rem; }
 .ql-copy-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ql-space-3); align-items: end; margin-bottom: var(--ql-space-4); }
 .ql-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: var(--ql-space-8); margin-top: var(--ql-space-8); padding: var(--ql-space-6); border: 1px solid var(--ql-priority-border); border-radius: var(--ql-radius-card); background: var(--ql-priority-surface); }
@@ -280,4 +281,76 @@ body { min-width: 20rem; }
   .ql-page-heading, .ql-danger-zone { align-items: stretch; flex-direction: column; }
   .ql-copy-row { grid-template-columns: minmax(0, 1fr); }
   .ql-copy-row .ql-button, .ql-danger-zone .ql-button { width: 100%; }
+}
+
+/* ==========================================================================
+   Layout rhythm, hierarchy and phone-safe grids.
+   Documented in docs/FRONTEND_DESIGN_SYSTEM.md. Add new shared layout rules in
+   this section (or tokens.css for values) so teammates can find them.
+   ========================================================================== */
+
+/* Hierarchy: Tailwind's reset makes headings inherit body weight, so set it explicitly. */
+h1, h2 { font-weight: var(--ql-weight-heading); }
+h3 { margin: 0 0 var(--ql-space-2); font-size: 1.0625rem; line-height: 1.4; font-weight: var(--ql-weight-heading); }
+
+/* A grid's implicit column is `auto`, so one wide child (tab row, table) stretches the whole page on phones.
+   minmax(0, 1fr) lets the column shrink and the child scroll inside itself. */
+.ql-stack { grid-template-columns: minmax(0, 1fr); }
+/* Standalone buttons in a stack hug their label; submit buttons inside a form.ql-stack stay full width. */
+.ql-stack:not(form) > .ql-button { justify-self: start; }
+
+/* Labels never wrap inside buttons ("Refresh / counters"); phones may wrap again. */
+.ql-button { white-space: nowrap; }
+.ql-button:not(:disabled):active { transform: translateY(1px); }
+.ql-copy-row .ql-button svg { width: 1rem; height: 1rem; flex: none; }
+
+/* A scroll container must also contain absolutely positioned descendants (.ql-sr-only text in table cells),
+   otherwise they escape its clipping and widen the whole page on phones. */
+.ql-plan-table-wrap, .ql-queue-table-wrap { position: relative; }
+
+/* Customer ticket, join and QR pages: consistent vertical rhythm between sections. */
+.ql-ticket-page { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--ql-space-8); }
+.ql-ticket-page .ql-back-link, .ql-ticket-page .ql-next-queue-card { margin: 0; }
+.ql-ticket-page .ql-back-link { justify-self: start; }
+
+/* Business tool pages: more air between major sections than inside a card. */
+.ql-operations-page > .ql-stack { gap: var(--ql-space-8); }
+.ql-operations-page > .ql-stack > .ql-business-nav { margin-bottom: calc(var(--ql-space-6) - var(--ql-space-8)); }
+.ql-card .ql-business-nav { margin-block: var(--ql-space-4) var(--ql-space-6); }
+
+/* Rows of related actions/links inside cards. */
+.ql-actions-row, .ql-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ql-space-3); }
+.ql-actions-row { margin-top: var(--ql-space-4); }
+.ql-link-row { column-gap: var(--ql-space-6); }
+
+/* Members list. */
+.ql-members-section { margin-top: var(--ql-space-8); padding-top: var(--ql-space-6); border-top: 1px solid var(--ql-border); }
+.ql-members-section h3 { margin: 0; }
+.ql-member-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--ql-border); border-radius: var(--ql-radius-control); overflow: hidden; }
+.ql-member-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--ql-space-3); padding: var(--ql-space-3) var(--ql-space-4); border-bottom: 1px solid var(--ql-border); overflow-wrap: anywhere; }
+.ql-member-list li:last-child { border-bottom: 0; }
+.ql-success-note { margin: 0; padding: var(--ql-space-3) var(--ql-space-4); border-radius: var(--ql-radius-control); background: var(--ql-soft-mint); color: var(--ql-action); font-size: var(--ql-small); font-weight: 600; }
+
+/* Counter management cards: heading + status, facts, then the edit form separated by a rule. */
+.ql-counter-editor { display: flex; flex-direction: column; }
+.ql-counter-editor .ql-counter-card-heading h2 { margin: 0 0 var(--ql-space-4); overflow-wrap: anywhere; }
+.ql-counter-facts { margin-bottom: var(--ql-space-6); }
+.ql-counter-facts p { margin: 0 0 var(--ql-space-2); }
+.ql-counter-facts p:last-child { margin-bottom: 0; }
+.ql-counter-editor form { padding-top: var(--ql-space-6); border-top: 1px solid var(--ql-border); }
+
+/* Compact empty state: one slim row instead of a tall card (used where the page has more important content below). */
+.ql-empty-compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ql-space-4) var(--ql-space-6); padding-block: var(--ql-space-4); }
+.ql-empty-compact > div { flex: 1 1 18rem; min-width: 0; }
+.ql-empty-compact h3, .ql-empty-compact p { margin: 0; }
+.ql-empty-compact p { margin-top: var(--ql-space-1); }
+
+.ql-toolbar-end { display: flex; justify-content: flex-end; margin-bottom: var(--ql-space-6); }
+
+@media (max-width: 640px) {
+  .ql-button { white-space: normal; }
+  .ql-stack:not(form) > .ql-button { justify-self: stretch; }
+  .ql-business-nav { flex-wrap: nowrap; }
+  .ql-actions-row > *, .ql-actions-row .ql-button, .ql-empty-compact .ql-button, .ql-toolbar-end .ql-button { width: 100%; }
+  .ql-link-row { flex-direction: column; align-items: flex-start; gap: var(--ql-space-2); }
 }

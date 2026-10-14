@@ -58,19 +58,21 @@ function Share({ business }: { business: BusinessMembership }) {
 					</Button>
 				</div>
 				{error && <InlineError>{error}</InlineError>}
-				<Button asChild variant="secondary">
-					<a href={url} target="_blank" rel="noreferrer">
-						Preview queue entry <ExternalLink size={16} aria-hidden="true" />
-					</a>
-				</Button>
-				<form
-					onSubmit={(event) => {
-						event.preventDefault();
-						generateQRImage(business.id);
-					}}
-				>
-					<Button type="submit">Generate QR</Button>
-				</form>
+				<div className="ql-actions-row">
+					<Button asChild variant="secondary">
+						<a href={url} target="_blank" rel="noreferrer">
+							Preview queue entry <ExternalLink size={16} aria-hidden="true" />
+						</a>
+					</Button>
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							generateQRImage(business.id);
+						}}
+					>
+						<Button type="submit">Generate QR</Button>
+					</form>
+				</div>
 			</Card>
 			<p className="ql-meta">
 				QueueLite does not send this link to an external QR service. You can use
