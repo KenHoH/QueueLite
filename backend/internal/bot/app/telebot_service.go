@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,9 +13,12 @@ import (
 	"time"
 
 	"QueueLite/internal/config"
+	userapp "QueueLite/internal/user/app"
 )
 
-type TelebotService struct{}
+type TelebotService struct {
+	userRepo userapp.UserRepo
+}
 
 const (
 	TelebotBaseURL      string = "https://api.telegram.org/bot"
@@ -30,8 +34,10 @@ func loadTelebotAPIKey() (string, error) {
 	return cfg.TelebotAPI, nil
 }
 
-func NewTelebotService() *TelebotService {
-	return &TelebotService{}
+func NewTelebotService(repo userapp.UserRepo) *TelebotService {
+	return &TelebotService{
+		userRepo: repo,
+	}
 }
 
 func (s *TelebotService) requestPhonenumber(chatID string) error {
@@ -150,8 +156,7 @@ func (s *TelebotService) SendMessageToUser(chatID string, text string) error {
 	return nil
 }
 
-// TODO: implement and extract the user's phone number and save to database
-func (s *TelebotService) GetUpdateStatus() error {
+func (s *TelebotService) GetUpdateStatus(ctx context.Context) error {
 	apiKey, err := loadTelebotAPIKey()
 	if err != nil {
 		return err
@@ -214,9 +219,9 @@ func (s *TelebotService) GetUpdateStatus() error {
 
 		// The phone number check
 		if msg.Contact != nil {
-			// TODO: Phone number used to insert ChatID
-			// TODO: insert ChatID to user based on the PhoneNumber
-			// phoneNumber := msg.Contact.PhoneNumber
+			// insert to database
+			phoneNumber := msg.Contact.PhoneNumber
+			s.userRepo.InsertChatIDByPhoneNumber(ctx, userID, phoneNumber)
 		} else {
 
 			// TODO: implement message queue use go routine to create a new thread
