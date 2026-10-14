@@ -33,6 +33,69 @@ func NewTelebotService() *TelebotService {
 	return &TelebotService{}
 }
 
+func (s *TelebotService) RequestPhonenumber(chatID string) error {
+	apiKey, err := loadTelebotAPIKey()
+	if err != nil {
+		return err
+	}
+	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, SendMessageEndpoint)
+	fmt.Println(fullURL)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	telebotMSGRequestData := TelebotPhonenumberRequest{
+		ChatID: chatID,
+		Text:   "Please share your phone number to enable notification",
+		ReplyMarkup: ReplyMarkup{
+			OneTimeKeyboard: true,
+			ResizeKeyboard:  true,
+			Keyboard: [][]KeyboardButton{
+				{
+					{
+						Text:           "Share Phone Number",
+						RequestContact: true,
+					},
+				},
+			},
+		},
+	}
+	// 2. Marshal the struct into a JSON byte slice
+	jsonBytes, err := json.Marshal(telebotMSGRequestData)
+	if err != nil {
+		log.Fatalf("Error encoding JSON: %v", err)
+		return err
+	}
+
+	// 3. Create the POST request using bytes.NewBuffer to create an io.Reader
+	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+		return err
+	}
+
+	// 4. Set headers (Important for APIs expecting JSON)
+	req.Header.Set("Content-Type", "application/json")
+
+	// 5. Execute the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 6. Read and display the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Error reading response: %v", err)
+		return err
+	}
+
+	fmt.Printf("Status Code: %d\n", resp.StatusCode)
+	fmt.Printf("Response Body:\n%s\n", string(body))
+	return nil
+}
+
 func (s *TelebotService) SendMessageToUser(chatID string, text string) error {
 	apiKey, err := loadTelebotAPIKey()
 	if err != nil {
