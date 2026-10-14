@@ -1,9 +1,10 @@
 package app
 
 import (
+	"context"
+
 	"QueueLite/internal/adapter/postgres/model"
 	userdomain "QueueLite/internal/user/domain"
-	"context"
 
 	"github.com/google/uuid"
 )
@@ -13,4 +14,5 @@ type UserRepo interface {
 	UpdateUser(ctx context.Context, user *userdomain.User) error
 	GetUserByName(ctx context.Context, username string) (*model.User, error)
 	GetUser(ctx context.Context, id uuid.UUID) (*userdomain.User, error)
+	InsertChatIDByPhoneNumber(ctx context.Context, chatID string, phoneNumber string) error
 }
