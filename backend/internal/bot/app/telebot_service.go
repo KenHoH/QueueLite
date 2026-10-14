@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"QueueLite/internal/config"
@@ -33,7 +34,7 @@ func NewTelebotService() *TelebotService {
 	return &TelebotService{}
 }
 
-func (s *TelebotService) RequestPhonenumber(chatID string) error {
+func (s *TelebotService) requestPhonenumber(chatID string) error {
 	apiKey, err := loadTelebotAPIKey()
 	if err != nil {
 		return err
@@ -187,5 +188,45 @@ func (s *TelebotService) GetUpdateStatus() error {
 
 	fmt.Printf("Status Code: %d\n", resp.StatusCode)
 	fmt.Printf("Response Body:\n%s\n", string(body))
+
+	var apiResponse TeleUpdateStatusResponse
+	err = json.Unmarshal(body, &apiResponse)
+	if err != nil {
+		fmt.Printf("Error unmarshaling JSON: %v\n", err)
+		return err
+	}
+
+	if !apiResponse.Ok {
+		fmt.Println("Telegram returned ok: false")
+		return fmt.Errorf("There's something wrong with telegram response")
+	}
+
+	for _, update := range apiResponse.Result {
+		fmt.Printf("Processing Update ID: %d\n", update.UpdateID)
+
+		msg := update.Message
+
+		userID := strconv.FormatInt(msg.Chat.ID, 10)
+		fromID := strconv.FormatInt(msg.From.ID, 10)
+		if userID != fromID {
+			return fmt.Errorf("Different ID missmatch")
+		}
+
+		// The phone number check
+		if msg.Contact != nil {
+			// TODO: Phone number used to insert ChatID
+			// TODO: insert ChatID to user based on the PhoneNumber
+			// phoneNumber := msg.Contact.PhoneNumber
+		} else {
+
+			// TODO: implement message queue use go routine to create a new thread
+			// Send Request Phone Number
+			err := s.requestPhonenumber(userID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
