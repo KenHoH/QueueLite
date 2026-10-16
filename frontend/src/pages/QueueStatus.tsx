@@ -44,6 +44,7 @@ function Ticket({ queueId }: { queueId: string }) {
 
   const queue = data?.queue;
   const state = cancelled ? 'cancelled' : queue?.state;
+  const myCounter = queue ? data?.counters.find(counter => counter.currentQueueId === queue.id) : undefined;
   const back = auth.status === 'authenticated' ? '/my-queues' : '/#businesses';
   return <PageContainer className="ql-ticket-page">
     <Link className="ql-back-link" to={back}>{auth.status === 'authenticated' ? 'Back to My Queues' : 'Back to businesses'}</Link>
@@ -61,7 +62,7 @@ function Ticket({ queueId }: { queueId: string }) {
             <p className="ql-muted">Position {data.customerPosition.position} of {data.totalWaiting} waiting</p>
             {data.estimatedWaitMinutes !== undefined && <p>Estimated wait: <strong>{data.estimatedWaitMinutes} minutes</strong></p>}
           </div>}
-          {state === 'called' && <p>Head to your assigned counter. The team is ready for you.</p>}
+          {state === 'called' && <p className="ql-ticket-callout"><strong>{myCounter ? `Please go to ${myCounter.name}.` : 'Head to your assigned counter.'}</strong> The team is ready for you.</p>}
           {state === 'processing' && <p>You are currently being served.</p>}
           {state === 'skipped' && <p className="ql-muted">Please ask the team about the next step.</p>}
           <Link to={`/business/${queue.businessId}`}>View business details</Link>

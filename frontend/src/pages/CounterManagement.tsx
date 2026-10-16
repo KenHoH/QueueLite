@@ -91,7 +91,7 @@ function CounterEditor({ counter, queues, members, manager, refresh }: { counter
     catch (failure) { setError(operationsError(failure)); setUncertain(true); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <Card className="ql-counter-editor"><div className="ql-counter-card-heading"><h2>{counter.name}</h2><Badge variant={queue ? 'secondary' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
+  return <Card className="ql-counter-editor"><div className="ql-counter-card-heading"><h2>{counter.name}</h2><Badge variant={queue ? 'outline' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
     <div className="ql-counter-facts"><p>Assigned employee: {assigned?.username ?? (counter.currentEmployeeId ? 'Assigned member (details unavailable)' : 'Unassigned')}</p>{queue && <p>Current queue: <strong>{queue.name}</strong></p>}
     <p><Link to={`/counter/${counter.id}`}>Open workspace →</Link></p></div>
     {manager && <form className="ql-stack" onSubmit={event => { event.preventDefault(); if (!name.trim()) { setError('Enter a counter name.'); return; } void mutate(() => updateCounter(counter.id, { name: name.trim(), currentEmployeeId: employee })); }}>

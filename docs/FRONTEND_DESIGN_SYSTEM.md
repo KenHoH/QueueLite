@@ -83,6 +83,16 @@ Font: **Inter Variable**, bundled with the app through `@fontsource-variable/int
 - Elevation: borders do most of the work. `--ql-shadow-card` is a barely visible resting shadow; `--ql-shadow-raised` is used for hover on clickable cards.
 - Control height: `--ql-control-height` 2.75rem (44 px). Every tappable control is at least 44 px high (`min-h-11`).
 
+### Page widths (one rule per page type)
+
+| Type | Class | Max width | Pages |
+| --- | --- | --- | --- |
+| Wide (default) | `.ql-page` only | 72rem | Home, My Queues, Manage businesses, My service counters, Plans, every business tool tab (Overview, Counters, Members, Subscription, Share queue), Counter workspace |
+| Narrow | `.ql-account-page` | 46rem, centred | Single-column forms: Profile, Create business, Business settings |
+| Ticket | `.ql-ticket-page` | 38rem, centred | Customer flow: join, QR landing, ticket status |
+
+Pages that sit under the same tab bar (business tools) must share one width, so switching tabs never changes the layout. Inside a wide page, cap line length of long paragraphs (about 46rem) instead of narrowing the whole card.
+
 ### Breakpoints
 
 The CSS uses `max-width` media queries at these four widths. Reuse them; do not invent new ones without a reason documented here.
@@ -112,10 +122,11 @@ Use the shared component before writing a new one. Wrappers live in `frontend/sr
 | `PageContainer` | `foundation.tsx` | Page wrapper described above. |
 | `PageHeader` | `foundation.tsx` | `title`, optional `description`, optional `action` (right-aligned button or link), bottom divider. Use on every top-level page so headers look the same. |
 | `StatusBadge` | `foundation.tsx` | Queue/ticket states (waiting, called, in service, cancelled, ...). Text label always shown. |
-| `Badge` | `ui/badge` | Roles and counter status. `secondary` = soft mint, `default` = filled action colour. |
+| `Badge` | `ui/badge` | Roles and counter status. `default` = soft mint (positive/available, roles), `outline` = bordered neutral (busy / in use), `secondary` = page-background tint (low emphasis only; almost invisible on white cards). |
 | `LoadingSkeleton`, `Spinner` | `foundation.tsx` | Skeleton for page/section loading, spinner inside buttons. |
 | `EmptyState` | `foundation.tsx` | `title`, `description`, optional `action`. `compact` renders a slim single-row version for secondary sections (for example "Joined queues" on Home). |
 | `InlineError` | `foundation.tsx` | `role="alert"` message, always with a retry action when the request can be retried. |
+| `AccountMenu` | `components/AccountMenu.tsx` | Header avatar button that reveals Account, Create Business and Logout. Disclosure pattern (`aria-expanded`), closes on Escape (focus returns to the button), outside click and navigation. Inside the phone menu the same list is shown inline. Day-to-day work links (My queues, My Counters, Manage Business) stay in the primary nav, not in this menu. |
 | `BusinessNavigation` | `components/BusinessNavigation.tsx` | Tab-style business section nav. Its first link ("Public page") uses `end` so it is not highlighted on every route under the business. |
 | `Tabs`, `Table`, `Select`, `AlertDialog`, `Label` | `ui/*` | Standard shadcn components. Tables go inside a `*-table-wrap`. Destructive actions use `AlertDialog`. |
 
@@ -127,6 +138,9 @@ Page-level patterns (CSS classes in `foundation.css`):
 - `.ql-counter-editor` / `.ql-counter-facts`: counter card with heading, status badge and fact lines.
 - `.ql-success-note`: confirmation message (`role="status"`).
 - `.ql-toolbar-end`: right-aligned toolbar above a list.
+- `.ql-manage-card`: business card on Manage businesses. Header (name, location, role badge), three shortcut buttons (Open dashboard, Counters, Share queue) and a link row for settings and subscription. Do not repeat the business tab bar inside it.
+- `.ql-plan-cards` / `.ql-plan-card`: stacked plan cards. Plan comparison renders as a table above 640px and as one card per plan on phones (the table is hidden, not removed, so both stay in sync from one data source).
+- `.ql-ticket-callout`, `.ql-position-summary`: the two moments on the customer ticket that must be loud (see below).
 
 ---
 
@@ -144,6 +158,8 @@ Every interactive or data-driven element must handle these states.
 | Empty | `EmptyState` with a short explanation and the next action. |
 | Error | `InlineError` in a card with a retry. Show the backend-provided message when available (see `frontend/docs/backend-errors.md`). |
 | Success | `.ql-success-note` with `role="status"`. |
+| Ticket: called | Card gets a 2 px action border and mint glow, the badge turns solid action colour with a pulsing dot (static under reduced motion), and a callout names the counter when the backend reports one ("Please go to Front desk."). |
+| Ticket: waiting | "N queues ahead of you" is the largest text after the queue number; position and estimated wait sit below it. Only backend-provided values are shown. |
 | Active nav item | Filled `--ql-action` tab (business nav) or bold action-coloured link (header). |
 
 Accessibility baseline: semantic landmarks, one `h1` per page, visible focus, 44 px targets, text labels on all statuses, `prefers-reduced-motion` respected, text contrast at or above WCAG AA (that is why the `-text` colour variants exist).
@@ -193,6 +209,11 @@ Stack: React 19, TypeScript, Vite, Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/
 | Counter cards show status as a badge, not text | Faster scanning of busy/idle counters; matches the badge pattern used elsewhere. |
 | Disabled "Upgrade — coming later" and explanatory text on Plans | Payments and plan changes are not implemented; the UI must not suggest otherwise. |
 | `--ql-control-height` set to 2.75rem | The token said 46 px while real controls were 44 px; the token now matches reality. |
+| Account links in an avatar menu, work links stay in the nav | Six or seven inline links crowded the header. Rarely used account actions collapse into one menu; My Counters and Manage Business are daily tools and stay visible. No new dependency: the menu is a small disclosure component. |
+| Three width types | Pages in one tab bar used three different widths and Share left a large empty area. See [Page widths](#page-widths-one-rule-per-page-type). |
+| Manage card uses shortcut buttons, not the tab bar | The tab bar was duplicated inside the card and wrapped on one line. Three buttons cover the common jobs; everything else is on the dashboard tabs. |
+| Ticket called/waiting states are emphasised | The ticket is the screen customers (and reviewers) look at most. "Called" and "N ahead" are the two facts that matter. |
+| Plan cards on phones | A 44rem table cannot fit 390px without cutting off a plan column; cards show every plan without sideways scrolling. |
 | Light theme only | Dark mode is not in scope and half-implemented dark styles would create inconsistency. |
 
 ---
