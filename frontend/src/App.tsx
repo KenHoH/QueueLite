@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { CustomerHeader } from "./components/CustomerHeader";
-import { Card, PageContainer } from "./components/foundation";
+import { Button, Card, PageContainer } from "./components/foundation";
 import { AccountRoute, BusinessRoute } from "./components/RouteAccess";
 import { RouteEffects } from "./components/RouteEffects";
 import { ForbiddenPage, UnauthorizedPage } from "./pages/AccessPage";
@@ -157,10 +157,15 @@ export default function App() {
 				<Route
 					path="*"
 					element={
-						<PageContainer>
+						<PageContainer className="ql-account-page">
 							<Card>
 								<h1>Page not found</h1>
-								<Link to="/">Return to QueueLite</Link>
+								<p className="ql-muted">
+									The page you’re looking for doesn’t exist or may have moved.
+								</p>
+								<Button asChild>
+									<Link to="/">Return to QueueLite</Link>
+								</Button>
 							</Card>
 						</PageContainer>
 					}

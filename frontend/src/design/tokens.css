@@ -15,7 +15,11 @@
   /* Stronger foregrounds for small text on light surfaces. */
   --ql-error-text: #93453F;
   --ql-priority-text: #795F2A;
-  --ql-font: Inter, 'Segoe UI', system-ui, sans-serif;
+  /* Inter is bundled locally (main.tsx) so the UI looks identical on every machine, offline. */
+  --ql-font: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif;
+  --ql-weight-heading: 600;
+  --ql-shadow-card: 0 1px 2px rgb(32 40 37 / 3%);
+  --ql-shadow-raised: 0 8px 24px rgb(32 40 37 / 6%);
   --ql-display: 2.25rem;
   --ql-title: 2rem;
   --ql-section: 1.25rem;
@@ -35,7 +39,8 @@
   --ql-radius-card: .75rem;
   --ql-radius-pill: 999px;
   --ql-content-width: 72rem;
-  --ql-control-height: 2.875rem;
+  /* Matches the real height of inputs, selects and buttons (min-h-11 = 44px). */
+  --ql-control-height: 2.75rem;
 
   /* shadcn/Tailwind semantic aliases backed by QueueLite product tokens. */
   --background: var(--ql-background);

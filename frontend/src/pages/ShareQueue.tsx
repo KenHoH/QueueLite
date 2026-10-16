@@ -30,8 +30,8 @@ function Share({ business }: { business: BusinessMembership }) {
 		}
 	}
 	return (
-		<div className="ql-narrow-section ql-stack">
-			<Card>
+		<div className="ql-stack">
+			<Card className="ql-share-card">
 				<h2>Customer queue link</h2>
 				<p className="ql-muted">
 					Put this link in a QR code, message, or sign. It opens the queue entry
@@ -58,21 +58,23 @@ function Share({ business }: { business: BusinessMembership }) {
 					</Button>
 				</div>
 				{error && <InlineError>{error}</InlineError>}
-				<Button asChild variant="secondary">
-					<a href={url} target="_blank" rel="noreferrer">
-						Preview queue entry <ExternalLink size={16} aria-hidden="true" />
-					</a>
-				</Button>
-				<form
-					onSubmit={(event) => {
-						event.preventDefault();
-						generateQRImage(business.id);
-					}}
-				>
-					<Button type="submit">Generate QR</Button>
-				</form>
+				<div className="ql-actions-row">
+					<Button asChild variant="secondary">
+						<a href={url} target="_blank" rel="noreferrer">
+							Preview queue entry <ExternalLink size={16} aria-hidden="true" />
+						</a>
+					</Button>
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							generateQRImage(business.id);
+						}}
+					>
+						<Button type="submit">Generate QR</Button>
+					</form>
+				</div>
 			</Card>
-			<p className="ql-meta">
+			<p className="ql-meta ql-share-note">
 				QueueLite does not send this link to an external QR service. You can use
 				the copied URL with your preferred local print or QR workflow.
 			</p>

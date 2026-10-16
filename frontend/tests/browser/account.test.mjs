@@ -87,10 +87,20 @@ for (const path of ['/profile', '/plans', '/business/create', `/business/${busin
 test('new account can discover business creation from the header and profile', async t => {
   const { page } = await scenario(t, { businesses: [] }); await page.goto(`${origin}/profile`); await visible(page.getByText('You don’t own or manage a business yet.'));
   assert.equal(await page.getByRole('link', { name: 'Manage Business', exact: true }).count(), 0);
+  await page.getByRole('button', { name: /^Account menu for/ }).click();
   const headerCreate = page.locator('header').getByRole('link', { name: 'Create Business', exact: true });
   assert.equal(await headerCreate.getAttribute('href'), '/business/create');
   await visible(page.locator('main').getByRole('link', { name: 'Create a business →', exact: true }));
   await headerCreate.click(); await visible(page.getByRole('button', { name: 'Create business', exact: true }));
+});
+test('account menu opens from the avatar and closes with Escape, returning focus', async t => {
+  const { page } = await scenario(t, {}); await page.goto(`${origin}/profile`);
+  const trigger = page.getByRole('button', { name: /^Account menu for/ }); await visible(trigger);
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+  const logout = page.getByRole('button', { name: 'Logout' }); assert.equal(await logout.isVisible(), false);
+  await trigger.click(); await visible(logout); assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+  await page.keyboard.press('Escape'); assert.equal(await logout.isVisible(), false);
+  assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
 });
 test('create validates, submits only backend fields once, and navigates to settings', async t => {
   let release; const held = new Promise(resolve => { release = resolve; });
