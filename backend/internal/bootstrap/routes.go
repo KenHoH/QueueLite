@@ -52,7 +52,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
 
-	telebotService := telebotapp.NewTelebotService()
+	telebotService := telebotapp.NewTelebotService(userRepo)
 	telebotHandler := telebothttp.NewTelebotHandler(telebotService)
 
 	router.Route("/users", func(r chi.Router) {
@@ -140,8 +140,8 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	router.Route("/telebot", func(r chi.Router) {
 		r.Get("/updatestatus", telebotHandler.UpdateStatus)
-		r.Get("/msg", telebotHandler.NotifyUser)
-		r.Get("/phone", telebotHandler.RequestPhonenumer)
+		// r.Get("/msg", telebotHandler.NotifyUser)
+		// r.Get("/phone", telebotHandler.RequestPhonenumer)
 	})
 
 	return router

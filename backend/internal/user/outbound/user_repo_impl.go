@@ -44,7 +44,7 @@ func (u *UserRepoImpl) InsertChatIDByPhoneNumber(ctx context.Context, chatID str
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("%w: %s", app.ErrUserNotFound, user.ID)
+		return fmt.Errorf("%w: %s", app.ErrUserNotFound, phoneNormalized)
 	}
 
 	return nil
