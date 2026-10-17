@@ -16,14 +16,18 @@ import (
 )
 
 type BusinessService struct {
-	membershipRepo      MembershipAdminRepo
+	membershipRepo      BusinessMembershipRepo
 	repo                BusinessRepo
 	subscriptionService *subscriptionapp.SubscriptionService
 	counterService      *counterapp.CounterService
 }
 
-func NewBusinessService(repo BusinessRepo, subscriptionService *subscriptionapp.SubscriptionService, counterService ...*counterapp.CounterService) *BusinessService {
-	service := &BusinessService{repo: repo, subscriptionService: subscriptionService}
+func NewBusinessService(repo BusinessRepo, membershipRepo BusinessMembershipRepo, subscriptionService *subscriptionapp.SubscriptionService, counterService ...*counterapp.CounterService) *BusinessService {
+	service := &BusinessService{
+		repo:                repo,
+		subscriptionService: subscriptionService,
+		membershipRepo:      membershipRepo,
+	}
 	if len(counterService) > 0 {
 		service.counterService = counterService[0]
 	}

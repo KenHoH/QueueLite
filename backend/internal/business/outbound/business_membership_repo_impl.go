@@ -17,8 +17,8 @@ type BusinessMembershipRepoImpl struct {
 	db *gorm.DB
 }
 
-func NewBusinessMembershipRepo(db *gorm.DB) *BusinessRepoImpl {
-	return &BusinessRepoImpl{
+func NewBusinessMembershipRepo(db *gorm.DB) *BusinessMembershipRepoImpl {
+	return &BusinessMembershipRepoImpl{
 		db: db,
 	}
 }

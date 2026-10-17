@@ -44,7 +44,8 @@ h2 { font-size: var(--ql-section); line-height: 1.4; }
 .ql-field { display: grid; gap: var(--ql-space-2); }
 .ql-field label { font-size: var(--ql-small); font-weight: 600; }
 .ql-password { position: relative; }
-.ql-password-toggle { position: absolute; right: var(--ql-space-1); top: calc(var(--ql-small) * 1.6 + var(--ql-space-2)); width: var(--ql-control-height); height: var(--ql-control-height); display: grid; place-items: center; border: 0; background: transparent; color: var(--ql-text-secondary); cursor: pointer; }
+/* The label is leading-none (1 line = --ql-small) plus the .ql-field gap, so the toggle must start exactly there to centre on the input. */
+.ql-password-toggle { position: absolute; right: var(--ql-space-1); top: calc(var(--ql-small) + var(--ql-space-2)); width: var(--ql-control-height); height: var(--ql-control-height); display: grid; place-items: center; border: 0; background: transparent; color: var(--ql-text-secondary); cursor: pointer; }
 .ql-badge-cancelled, .ql-badge-skipped { background: var(--ql-background); color: var(--ql-text); }
 .ql-badge-called { color: var(--ql-priority-text); }
 .ql-error { color: var(--ql-error-text); font-size: var(--ql-small); }
@@ -86,7 +87,7 @@ h2 { font-size: var(--ql-section); line-height: 1.4; }
 .ql-section-heading p { margin: 0; }
 .ql-business-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ql-space-6); }
 .ql-business-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ql-space-4); color: var(--ql-text); text-decoration: none; min-height: 16rem; transition: transform .16s ease, box-shadow .16s ease; }
-.ql-business-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgb(32 40 37 / 6%); }
+.ql-business-card:hover { transform: translateY(-2px); box-shadow: var(--ql-shadow-raised); }
 .ql-business-card h3 { font-size: var(--ql-section); line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
 .ql-business-location { display: flex; align-items: flex-start; gap: var(--ql-space-2); color: var(--ql-text-secondary); margin: 0; overflow-wrap: anywhere; }
 .ql-business-location svg { flex-shrink: 0; margin-top: .25rem; }
@@ -192,7 +193,6 @@ h2 { font-size: var(--ql-section); line-height: 1.4; }
 .ql-metrics-grid .ql-card > span:last-child { color: var(--ql-text-secondary); font-size: var(--ql-small); }
 .ql-metric-unavailable { background: var(--ql-background); }
 @media (max-width: 900px) { .ql-counter-grid, .ql-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.ql-counter-workspace-page { max-width: 64rem; }
 .ql-workspace-header { display: flex; align-items: center; justify-content: space-between; gap: var(--ql-space-6); }
 .ql-workspace-header h2 { margin-bottom: var(--ql-space-2); }
 .ql-workspace-header p:last-child { margin-bottom: 0; }
@@ -247,7 +247,7 @@ body { min-width: 20rem; }
 .ql-page-heading h1, .ql-page-heading p { margin-bottom: 0; }
 .ql-page-heading .ql-eyebrow { margin-bottom: var(--ql-space-2); }
 .ql-page-action { flex: 0 0 auto; }
-.ql-card { box-shadow: 0 1px 2px rgb(32 40 37 / 3%); }
+.ql-card { box-shadow: var(--ql-shadow-card); }
 .ql-narrow-section { max-width: 46rem; }
 .ql-copy-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ql-space-3); align-items: end; margin-bottom: var(--ql-space-4); }
 .ql-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: var(--ql-space-8); margin-top: var(--ql-space-8); padding: var(--ql-space-6); border: 1px solid var(--ql-priority-border); border-radius: var(--ql-radius-card); background: var(--ql-priority-surface); }
@@ -280,4 +280,142 @@ body { min-width: 20rem; }
   .ql-page-heading, .ql-danger-zone { align-items: stretch; flex-direction: column; }
   .ql-copy-row { grid-template-columns: minmax(0, 1fr); }
   .ql-copy-row .ql-button, .ql-danger-zone .ql-button { width: 100%; }
+}
+
+/* ==========================================================================
+   Layout rhythm, hierarchy and phone-safe grids.
+   Documented in docs/FRONTEND_DESIGN_SYSTEM.md. Add new shared layout rules in
+   this section (or tokens.css for values) so teammates can find them.
+   ========================================================================== */
+
+/* Hierarchy: Tailwind's reset makes headings inherit body weight, so set it explicitly. */
+h1, h2 { font-weight: var(--ql-weight-heading); }
+h3 { margin: 0 0 var(--ql-space-2); font-size: 1.0625rem; line-height: 1.4; font-weight: var(--ql-weight-heading); }
+
+/* A grid's implicit column is `auto`, so one wide child (tab row, table) stretches the whole page on phones.
+   minmax(0, 1fr) lets the column shrink and the child scroll inside itself. */
+.ql-stack { grid-template-columns: minmax(0, 1fr); }
+/* Standalone buttons in a stack hug their label; submit buttons inside a form.ql-stack stay full width. */
+.ql-stack:not(form) > .ql-button { justify-self: start; }
+
+/* Labels never wrap inside buttons ("Refresh / counters"); phones may wrap again. */
+.ql-button { white-space: nowrap; }
+.ql-button:not(:disabled):active { transform: translateY(1px); }
+.ql-copy-row .ql-button svg { width: 1rem; height: 1rem; flex: none; }
+
+/* A scroll container must also contain absolutely positioned descendants (.ql-sr-only text in table cells),
+   otherwise they escape its clipping and widen the whole page on phones. */
+.ql-plan-table-wrap, .ql-queue-table-wrap { position: relative; }
+
+/* Customer ticket, join and QR pages: consistent vertical rhythm between sections. */
+.ql-ticket-page { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--ql-space-8); }
+.ql-ticket-page .ql-back-link, .ql-ticket-page .ql-next-queue-card { margin: 0; }
+.ql-ticket-page .ql-back-link { justify-self: start; }
+
+/* Business tool pages: more air between major sections than inside a card. */
+.ql-operations-page > .ql-stack { gap: var(--ql-space-8); }
+.ql-operations-page > .ql-stack > .ql-business-nav { margin-bottom: calc(var(--ql-space-6) - var(--ql-space-8)); }
+.ql-card .ql-business-nav { margin-block: var(--ql-space-4) var(--ql-space-6); }
+
+/* Rows of related actions/links inside cards. */
+.ql-actions-row, .ql-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ql-space-3); }
+.ql-actions-row { margin-top: var(--ql-space-4); }
+.ql-link-row { column-gap: var(--ql-space-6); }
+
+/* Members list. */
+.ql-members-section { margin-top: var(--ql-space-8); padding-top: var(--ql-space-6); border-top: 1px solid var(--ql-border); }
+.ql-members-section h3 { margin: 0; }
+.ql-member-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--ql-border); border-radius: var(--ql-radius-control); overflow: hidden; }
+.ql-member-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--ql-space-3); padding: var(--ql-space-3) var(--ql-space-4); border-bottom: 1px solid var(--ql-border); overflow-wrap: anywhere; }
+.ql-member-list li:last-child { border-bottom: 0; }
+.ql-success-note { margin: 0; padding: var(--ql-space-3) var(--ql-space-4); border-radius: var(--ql-radius-control); background: var(--ql-soft-mint); color: var(--ql-action); font-size: var(--ql-small); font-weight: 600; }
+
+/* Counter management cards: heading + status, facts, then the edit form separated by a rule. */
+.ql-counter-editor { display: flex; flex-direction: column; }
+.ql-counter-editor .ql-counter-card-heading h2 { margin: 0 0 var(--ql-space-4); overflow-wrap: anywhere; }
+.ql-counter-facts { margin-bottom: var(--ql-space-6); }
+.ql-counter-facts p { margin: 0 0 var(--ql-space-2); }
+.ql-counter-facts p:last-child { margin-bottom: 0; }
+.ql-counter-editor form { padding-top: var(--ql-space-6); border-top: 1px solid var(--ql-border); }
+
+/* Compact empty state: one slim row instead of a tall card (used where the page has more important content below). */
+.ql-empty-compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ql-space-4) var(--ql-space-6); padding-block: var(--ql-space-4); }
+.ql-empty-compact > div { flex: 1 1 18rem; min-width: 0; }
+.ql-empty-compact h3, .ql-empty-compact p { margin: 0; }
+.ql-empty-compact p { margin-top: var(--ql-space-1); }
+
+.ql-toolbar-end { display: flex; justify-content: flex-end; margin-bottom: var(--ql-space-6); }
+
+@media (max-width: 640px) {
+  .ql-button { white-space: normal; }
+  .ql-stack:not(form) > .ql-button { justify-self: stretch; }
+  .ql-business-nav { flex-wrap: nowrap; }
+  .ql-actions-row > *, .ql-actions-row .ql-button, .ql-empty-compact .ql-button, .ql-toolbar-end .ql-button { width: 100%; }
+  .ql-link-row { flex-direction: column; align-items: flex-start; gap: var(--ql-space-2); }
+}
+
+/* Account menu (header): one avatar trigger that reveals account links; inline list inside the phone menu. */
+.ql-account > .ql-account-menu { position: relative; }
+.ql-account-trigger { display: inline-flex; align-items: center; gap: var(--ql-space-2); min-height: 2.75rem; padding: var(--ql-space-1) var(--ql-space-2) var(--ql-space-1) var(--ql-space-1); border: 1px solid var(--ql-border); border-radius: var(--ql-radius-pill); background: var(--ql-surface); color: var(--ql-text); font: inherit; font-size: var(--ql-small); cursor: pointer; transition: background-color .15s ease; }
+.ql-account-trigger:hover, .ql-account-trigger[aria-expanded='true'] { background: var(--ql-soft-mint); }
+.ql-account-trigger .ql-avatar { width: 2rem; height: 2rem; }
+.ql-account-trigger .ql-username { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ql-account-chevron { width: 1rem; height: 1rem; color: var(--ql-text-secondary); transition: transform .15s ease; }
+.ql-account-trigger[aria-expanded='true'] .ql-account-chevron { transform: rotate(180deg); }
+.ql-account-panel { display: none; position: absolute; z-index: 40; top: calc(100% + var(--ql-space-2)); right: 0; min-width: 15rem; padding: var(--ql-space-2); border: 1px solid var(--ql-border); border-radius: var(--ql-radius-card); background: var(--ql-surface); box-shadow: var(--ql-shadow-raised); }
+.ql-account-panel.is-open { display: grid; gap: var(--ql-space-1); }
+.ql-account-panel-name { margin: 0; padding: var(--ql-space-2) var(--ql-space-3) var(--ql-space-3); border-bottom: 1px solid var(--ql-border); color: var(--ql-text-secondary); font-size: var(--ql-meta); overflow-wrap: anywhere; }
+.ql-account-panel-name strong { display: block; color: var(--ql-text); font-size: var(--ql-small); }
+.ql-account-panel > a { padding: var(--ql-space-3); border-radius: var(--ql-radius-control); color: var(--ql-text); text-decoration: none; }
+.ql-account-panel > a:hover { background: var(--ql-soft-mint); color: var(--ql-action); }
+.ql-account-panel .ql-account-signout { justify-content: flex-start; width: 100%; margin-top: var(--ql-space-1); padding-inline: var(--ql-space-3); border-color: transparent; font-weight: 400; }
+.ql-account-signout svg { width: 1rem; height: 1rem; }
+
+@media (max-width: 640px) {
+  .ql-account-trigger { display: none; }
+  .ql-customer-nav { order: 1; }
+  .ql-account { order: 2; }
+  .ql-account > .ql-account-menu { position: static; }
+  .ql-account-panel, .ql-account-panel.is-open { display: grid; position: static; min-width: 0; padding: 0; border: 0; box-shadow: none; background: transparent; }
+  .ql-account-panel-name { padding-inline: var(--ql-space-2); }
+  .ql-account-panel > a { padding: var(--ql-space-2); }
+  .ql-account-panel .ql-account-signout { border-color: var(--ql-border); justify-content: center; }
+}
+
+/* Page width rules (one per page type):
+   wide   = default .ql-page (72rem): lists, dashboards, business tools, workspaces
+   narrow = .ql-account-page (46rem): single-column forms (Profile, Create business, Business settings)
+   ticket = .ql-ticket-page (38rem): customer queue flow
+   Pages inside the same tab bar (business tools) must share one width so switching tabs never changes the layout. */
+.ql-selector-bar { max-width: 28rem; }
+.ql-manage-card .ql-section-heading { align-items: flex-start; }
+.ql-manage-card .ql-section-heading h2 { margin-bottom: var(--ql-space-1); }
+.ql-manage-card .ql-actions-row { margin-bottom: var(--ql-space-6); }
+.ql-share-card > p { max-width: 46rem; }
+.ql-share-note { max-width: 46rem; }
+
+/* Customer ticket: the screen people look at while waiting, so the two moments that matter are loud. */
+.ql-position-summary { display: grid; gap: var(--ql-space-1); padding: var(--ql-space-6) var(--ql-space-4); border: 1px solid var(--ql-border); background: var(--ql-surface); }
+.ql-position-summary p { margin: 0; }
+.ql-position-summary > p:first-child strong { display: block; color: var(--ql-action); font-size: clamp(1.5rem, 5vw, 2rem); font-weight: 700; line-height: 1.2; letter-spacing: -.02em; }
+.ql-position-summary > p:nth-child(3) { margin-top: var(--ql-space-3); padding-top: var(--ql-space-3); border-top: 1px solid var(--ql-border); }
+.ql-ticket-called { border-width: 2px; box-shadow: 0 0 0 4px rgb(105 197 170 / 25%); }
+.ql-ticket-called .ql-badge-called { display: inline-flex; align-items: center; gap: var(--ql-space-2); padding: var(--ql-space-2) var(--ql-space-4); background: var(--ql-action); color: var(--ql-surface); font-size: var(--ql-small); }
+.ql-ticket-called .ql-badge-called::before { content: ''; width: .5rem; height: .5rem; border-radius: 50%; background: var(--ql-mint); animation: ql-pulse 1.4s ease-in-out infinite; }
+.ql-ticket-callout { margin: var(--ql-space-6) 0; padding: var(--ql-space-4); border-radius: var(--ql-radius-control); background: var(--ql-surface); border: 1px solid var(--ql-action); }
+.ql-ticket-callout strong { display: block; font-size: var(--ql-section); }
+@keyframes ql-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .ql-ticket-called .ql-badge-called::before { animation: none; } }
+
+/* Plan comparison: table on wider screens, one stacked card per plan on phones. */
+.ql-plan-cards { display: none; }
+.ql-plan-card h3 { margin: 0; }
+.ql-plan-price { margin: var(--ql-space-1) 0 var(--ql-space-4); color: var(--ql-action); font-size: var(--ql-section); font-weight: 700; }
+.ql-plan-card dl { display: grid; margin: 0; }
+.ql-plan-card dl > div { display: flex; justify-content: space-between; gap: var(--ql-space-4); padding-block: var(--ql-space-3); border-top: 1px solid var(--ql-border); }
+.ql-plan-card dt { color: var(--ql-text-secondary); }
+.ql-plan-card dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .ql-plan-table-wrap { display: none; }
+  .ql-plan-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ql-space-4); }
 }

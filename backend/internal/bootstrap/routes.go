@@ -40,6 +40,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	queueRepo := queueoutbound.NewQueueRepo(db)
 	businessRepo := businessoutbound.NewBusinessRepo(db)
+	businessMembershipRepo := businessoutbound.NewBusinessMembershipRepo(db)
 	counterRepo := counteroutbound.NewCounterRepo(db)
 	go queueapp.RunDatabaseWorkerStream(ctx, rdb, queueRepo)
 	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb, businessRepo, userRepo, counterRepo)
@@ -49,10 +50,10 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	counterHandler := counterhttp.NewCounterHandler(counterService)
 	operationsHandler := operations.New(businessRepo, counterRepo, queueRepo, rdb)
 
-	businessService := businessapp.NewBusinessService(businessRepo, subscriptionService, counterService)
+	businessService := businessapp.NewBusinessService(businessRepo, businessMembershipRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
 
-	telebotService := telebotapp.NewTelebotService()
+	telebotService := telebotapp.NewTelebotService(userRepo)
 	telebotHandler := telebothttp.NewTelebotHandler(telebotService)
 
 	router.Route("/users", func(r chi.Router) {
@@ -140,7 +141,8 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	router.Route("/telebot", func(r chi.Router) {
 		r.Get("/updatestatus", telebotHandler.UpdateStatus)
-		r.Get("/msg", telebotHandler.NotifyUser)
+		// r.Get("/msg", telebotHandler.NotifyUser)
+		// r.Get("/phone", telebotHandler.RequestPhonenumer)
 	})
 
 	return router

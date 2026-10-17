@@ -64,7 +64,7 @@ func TestRegisterBusinessCreatesBackendDefaultsAndSurfacesCounterFailure(t *test
 		if fail {
 			counters.failure = errors.New("counter failure")
 		}
-		service := NewBusinessService(repo, subscriptionapp.NewSubscriptionService(subscriptions), counterapp.NewCounterService(counters, nil, nil, nil))
+		service := NewBusinessService(repo, nil, subscriptionapp.NewSubscriptionService(subscriptions), counterapp.NewCounterService(counters, nil, nil, nil))
 		open, _ := time.Parse("15:04", "09:00")
 		close, _ := time.Parse("15:04", "21:00")
 		owner := uuid.New()

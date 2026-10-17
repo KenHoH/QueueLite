@@ -1,12 +1,14 @@
 package outbound
 
 import (
-	"QueueLite/internal/adapter/postgres/model"
-	"QueueLite/internal/user/app"
-	"QueueLite/internal/user/domain"
 	"context"
 	"errors"
 	"fmt"
+
+	"QueueLite/internal/adapter/postgres/model"
+	queueapp "QueueLite/internal/queue/app"
+	"QueueLite/internal/user/app"
+	"QueueLite/internal/user/domain"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -20,6 +22,32 @@ func NewUserRepo(db *gorm.DB) *UserRepoImpl {
 	return &UserRepoImpl{
 		db: db,
 	}
+}
+
+func (u *UserRepoImpl) InsertChatIDByPhoneNumber(ctx context.Context, chatID string, phoneNumber string) error {
+	phoneNormalized, err := queueapp.NormalizeIndonesiaPhone(phoneNumber)
+	if err != nil {
+		return err
+	}
+
+	updates := map[string]any{
+		"chat_id": chatID,
+	}
+	result := u.db.
+		WithContext(ctx).
+		Model(&model.User{}).
+		Where("phone_number = ?", phoneNormalized).
+		Updates(updates)
+
+	if result.Error != nil {
+		return fmt.Errorf("update user: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("%w: %s", app.ErrUserNotFound, phoneNormalized)
+	}
+
+	return nil
 }
 
 func (u *UserRepoImpl) CreateUser(ctx context.Context, user *domain.User) (*domain.User, error) {

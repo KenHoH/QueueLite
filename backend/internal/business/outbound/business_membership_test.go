@@ -35,6 +35,24 @@ func TestMemberListingSelectsOnlyOperationalFieldsForBusiness(t *testing.T) {
 	}
 }
 
+func TestUpsertUserBusinessRelationUsesMembershipCompositeKey(t *testing.T) {
+	db, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=localhost user=test dbname=test sslmode=disable"}), &gorm.Config{DisableAutomaticPing: true, DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool, _ := db.DB()
+	defer pool.Close()
+
+	user, business := uuid.New(), uuid.New()
+	relation := model.UserBusinessRelation{BusinessID: business, UserID: user, Role: model.BusinessRole("admin")}
+	sql := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return upsertUserBusinessRelation(tx, &relation)
+	})
+	if !strings.Contains(sql, `ON CONFLICT ("user_id","business_id") DO UPDATE SET "role"="excluded"."role","updated_at"="excluded"."updated_at"`) {
+		t.Fatalf("unexpected membership upsert SQL: %s", sql)
+	}
+}
+
 func TestMembershipQueriesExcludeOtherAccounts(t *testing.T) {
 	db, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=localhost user=test dbname=test sslmode=disable"}), &gorm.Config{DisableAutomaticPing: true, DryRun: true})
 	if err != nil {

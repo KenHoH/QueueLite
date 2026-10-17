@@ -10,4 +10,5 @@ type User struct {
 	Username    string
 	PhoneNumber string
 	Email       *string
+	ChatID      *string
 }

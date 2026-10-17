@@ -87,7 +87,7 @@ const routes = [
  ['workspace',`/counter/${counter.id}`], ['settings',`/business/${business.id}/settings`], ['business-plans',`/business/${business.id}/plans`],
 ];
 async function ready(page, guest=false) {
-  await visible(page.getByRole(guest ? 'link' : 'button', { name: guest ? 'Create account' : 'Logout', exact: true }));
+  await visible(guest ? page.getByRole('link', { name: 'Create account', exact: true }) : page.getByRole('button', { name: /^Account menu for/ }));
   await page.locator('.ql-skeleton').first().waitFor({ state:'hidden' });
   await visible(page.locator('main'));
 }
@@ -153,14 +153,14 @@ for(const width of [375,390,768,1024,1280,1440,1920]) test(`all major pages fit 
 test('successful logout, history and direct protected reload clear account data',async t=>{
  let loggedIn=true;
  const {page,requests}=await scenario(t,{respond:path=>path==='/api/users/me'?{status:loggedIn?200:401,json:loggedIn?user:{}}:path==='/api/users/logout'?(loggedIn=false,{json:{message:'ok'}}):undefined});
- await page.goto(origin+'/profile'); await ready(page); await page.getByRole('button',{name:'Logout'}).click(); await ready(page,true);
+ await page.goto(origin+'/profile'); await ready(page); await page.getByRole('button',{name:/^Account menu for/}).click(); await page.getByRole('button',{name:'Logout'}).click(); await ready(page,true);
  await page.goBack(); await visible(page.getByRole('heading',{name:'Sign in to continue.'}));
  const before=requests.length; await page.goto(origin+'/profile'); await ready(page,true); assert.ok(requests.slice(before).every(r=>r.path==='/api/users/me'));
  assert.deepEqual(await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage}})),{local:{},session:{}});
 });
 test('failed logout preserves authenticated state and shows retryable error',async t=>{
  const {page}=await scenario(t,{respond:path=>path==='/api/users/logout'?{status:500,json:{}}:undefined}); await page.goto(origin+'/profile'); await ready(page);
- await page.getByRole('button',{name:'Logout'}).click(); await visible(page.getByText('We could not sign you out. Please try again.')); assert.equal(await page.getByLabel('Username').inputValue(),user.username);
+ await page.getByRole('button',{name:/^Account menu for/}).click(); await page.getByRole('button',{name:'Logout'}).click(); await visible(page.getByText('We could not sign you out. Please try again.')); assert.equal(await page.getByLabel('Username').inputValue(),user.username);
 });
 test('separate guest and account contexts never share account state',async t=>{
  const account=await scenario(t),guest=await scenario(t,{guest:true}); await account.page.goto(origin+'/profile');await ready(account.page);await guest.page.goto(origin+'/profile');await ready(guest.page,true);

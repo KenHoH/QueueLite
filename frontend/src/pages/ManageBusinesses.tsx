@@ -3,7 +3,7 @@ import { AccountAccess } from '../components/AccountAccess';
 import { Button, Card, InlineError, LoadingSkeleton, PageContainer, PageHeader } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { canManage } from './accountForms';
-import { BusinessNavigation } from '../components/BusinessNavigation';
+import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
@@ -20,5 +20,15 @@ export default function ManageBusinesses() {
   const { businesses, businessesStatus, selectedBusinessId, setSelectedBusinessId } = useAppState();
   const managers = businesses;
   const selected = managers.find(item => item.id === selectedBusinessId) ?? managers[0];
-  return <PageContainer className="ql-account-page"><PageHeader title="Your businesses" description="Choose a business to operate or manage." action={<Button asChild><Link to="/business/create">Create business</Link></Button>} /><AccountAccess><div className="ql-stack"><BusinessSelector includeStaff />{businessesStatus === 'ready' && selected && <Card><h2>{selected.name}</h2><p className="ql-muted">{selected.location}</p><p>Your role: {selected.role}</p><BusinessNavigation businessId={selected.id} manager={canManage(selected)} />{canManage(selected) && <><p><Link to={`/business/${selected.id}/settings`} onClick={() => setSelectedBusinessId(selected.id)}>Business settings →</Link></p><Link to={`/business/${selected.id}/plans`} onClick={() => setSelectedBusinessId(selected.id)}>View subscription</Link></>}</Card>}</div></AccountAccess></PageContainer>;
+  const manager = selected ? canManage(selected) : false;
+  const base = selected ? `/business/${selected.id}` : '';
+  return <PageContainer><PageHeader title="Your businesses" description="Choose a business to operate or manage." action={<Button asChild><Link to="/business/create">Create business</Link></Button>} /><AccountAccess><div className="ql-stack">
+    <div className="ql-selector-bar"><BusinessSelector includeStaff /></div>
+    {businessesStatus === 'ready' && selected && <Card className="ql-manage-card">
+      <div className="ql-section-heading"><div><h2>{selected.name}</h2><p className="ql-muted">{selected.location}</p></div><Badge variant="default">Your role: {selected.role}</Badge></div>
+      {/* Three primary shortcuts; every other business tool is one click away from the dashboard tabs. */}
+      <div className="ql-actions-row"><Button asChild><Link to={`${base}/dashboard`}>Open dashboard</Link></Button><Button asChild variant="secondary"><Link to={`${base}/counters`}>Counters</Link></Button>{manager && <Button asChild variant="secondary"><Link to={`${base}/share`}>Share queue</Link></Button>}</div>
+      {manager && <div className="ql-link-row"><Link to={`${base}/settings`} onClick={() => setSelectedBusinessId(selected.id)}>Business settings →</Link><Link to={`${base}/plans`} onClick={() => setSelectedBusinessId(selected.id)}>View subscription</Link></div>}
+    </Card>}
+  </div></AccountAccess></PageContainer>;
 }

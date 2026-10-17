@@ -74,11 +74,11 @@ export function MemberManagement({ business, members, ready, refresh }: { busine
     <form className="ql-stack" noValidate onSubmit={event => { void submit(event); }}>
       <Input label="Username or email" name="memberIdentifier" autoComplete="off" value={identifier} disabled={busy || uncertain || !ready} onChange={event => setIdentifier(event.target.value)} />
       <div className="ql-field"><Label htmlFor="member-role">Business role</Label><Select value={role} disabled={busy || uncertain || !ready} onValueChange={value => setRole(value as 'admin' | 'counter')}><SelectTrigger id="member-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="counter">Counter</SelectItem>{business.role === 'owner' && <SelectItem value="admin">Admin</SelectItem>}</SelectContent></Select></div>
-      {error && <InlineError>{error}</InlineError>}{message && <p role="status">{message}</p>}
+      {error && <InlineError>{error}</InlineError>}{message && <p role="status" className="ql-success-note">{message}</p>}
       <Button type="submit" loading={busy} disabled={uncertain || !ready}>Add or update member</Button>
       {uncertain && <Button variant="secondary" onClick={reload}>Refresh members</Button>}
     </form>
-    {ready && <div className="ql-stack"><h3>Current members</h3>{members.length ? <ul>{members.map(member => <li key={member.userId}>{member.username} <Badge variant="secondary">{member.role}</Badge></li>)}</ul> : <p className="ql-muted">No members are available.</p>}</div>}
+    {ready && <div className="ql-stack ql-members-section"><h3>Current members</h3>{members.length ? <ul className="ql-member-list">{members.map(member => <li key={member.userId}><span>{member.username}</span> <Badge variant="secondary">{member.role}</Badge></li>)}</ul> : <p className="ql-muted">No members are available.</p>}</div>}
   </Card>;
 }
 function CounterEditor({ counter, queues, members, manager, refresh }: { counter: Counter; queues: Queue[]; members: BusinessMember[]; manager: boolean; refresh: () => void }) {
@@ -91,8 +91,9 @@ function CounterEditor({ counter, queues, members, manager, refresh }: { counter
     catch (failure) { setError(operationsError(failure)); setUncertain(true); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <Card><h2>{counter.name}</h2><p>{counterStatus(counter, queues)}</p><p>Assigned employee: {assigned?.username ?? (counter.currentEmployeeId ? 'Assigned member (details unavailable)' : 'Unassigned')}</p>{queue && <p>Current queue: <strong>{queue.name}</strong></p>}
-    <p><Link to={`/counter/${counter.id}`}>Open workspace →</Link></p>
+  return <Card className="ql-counter-editor"><div className="ql-counter-card-heading"><h2>{counter.name}</h2><Badge variant={queue ? 'outline' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
+    <div className="ql-counter-facts"><p>Assigned employee: {assigned?.username ?? (counter.currentEmployeeId ? 'Assigned member (details unavailable)' : 'Unassigned')}</p>{queue && <p>Current queue: <strong>{queue.name}</strong></p>}
+    <p><Link to={`/counter/${counter.id}`}>Open workspace →</Link></p></div>
     {manager && <form className="ql-stack" onSubmit={event => { event.preventDefault(); if (!name.trim()) { setError('Enter a counter name.'); return; } void mutate(() => updateCounter(counter.id, { name: name.trim(), currentEmployeeId: employee })); }}>
       <Input label={`Name for ${counter.name}`} value={name} disabled={busy || uncertain} onChange={event => setName(event.target.value)} maxLength={120} />
       <div className="ql-field"><Label htmlFor={`employee-${counter.id}`}>Employee for {counter.name}</Label><Select value={employee || 'unassigned'} disabled={busy || uncertain} onValueChange={value => setEmployee(value === 'unassigned' ? '' : value)}><SelectTrigger id={`employee-${counter.id}`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="unassigned">Unassigned</SelectItem>{counter.currentEmployeeId && !assigned && <SelectItem value={counter.currentEmployeeId}>Current assignment unavailable</SelectItem>}{members.map(member => <SelectItem key={member.userId} value={member.userId}>{member.username} ({member.role})</SelectItem>)}</SelectContent></Select></div>

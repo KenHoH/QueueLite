@@ -82,7 +82,7 @@ test('logged-in Home greets the real username and preserves account controls', a
   const { page } = await scenario(t, { user });
   await page.goto(origin);
   await visible(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Ayu\./ }));
-  await visible(page.getByRole('button', { name: 'Logout' }));
+  await visible(page.getByRole('button', { name: /^Account menu for Ayu/ }));
   await absent(page.getByRole('link', { name: 'Sign in', exact: true }));
 });
 test('search debounces, calls backend, shows results and clearing restores listing', async t => {
