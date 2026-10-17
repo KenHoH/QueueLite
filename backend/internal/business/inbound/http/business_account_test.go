@@ -91,7 +91,7 @@ func accountBusinessRouter(t *testing.T, repo *accountBusinessRepo) (*chi.Mux, s
 	t.Setenv("DATABASE_URL", "test")
 	t.Setenv("SECRET", "test-secret")
 	t.Setenv("REDIS_HOST", "test")
-	handler := NewBusinessHandler(app.NewBusinessService(repo, nil))
+	handler := NewBusinessHandler(app.NewBusinessService(repo, repo, nil))
 	router := chi.NewRouter()
 	router.Use(middleware.AuthMiddleware(repo))
 	router.Get("/businesses/mine", handler.GetMyBusinesses)

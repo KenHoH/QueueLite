@@ -1,13 +1,14 @@
 package app
 
 import (
-	"QueueLite/internal/business/domain"
 	"context"
+
+	"QueueLite/internal/business/domain"
 
 	"github.com/google/uuid"
 )
 
-type MembershipAdminRepo interface {
+type BusinessMembershipRepo interface {
 	FindMembershipUser(ctx context.Context, identifier string, byEmail bool) (*domain.MembershipUser, error)
 	UpsertUserBusinessRelation(ctx context.Context, businessID, userID uuid.UUID, role string) error
 }
