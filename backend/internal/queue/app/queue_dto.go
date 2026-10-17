@@ -29,3 +29,10 @@ type CustomerQueueStatusData struct {
 	queues   []domain.Queue
 	waiting  []QueueSnapshotItem
 }
+
+type QueueCustomer struct {
+	OwnerID     uuid.UUID
+	GuestID     *uuid.UUID
+	Username    string
+	PhoneNumber string
+}

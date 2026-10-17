@@ -47,7 +47,8 @@ export function validateAPIResponse(path: string, method: string, value: unknown
   else if (/^\/businesses\/[^/]+\/members$/.test(path) && method === 'PUT') schema = member;
   else if (/^\/businesses\/[^/]+\/queues$/.test(path)) schema = array(queue);
   else if (/^\/businesses\/[^/]+$/.test(path) && method === 'GET' || path === '/businesses/' && method === 'POST') schema = business;
-  else if (path === '/queues/me' || /^\/queues\/business\/[^/]+$/.test(path)) schema = array(queue);
+  else if (path === '/queues/me' || path === '/queues/guest/me' || /^\/queues\/business\/[^/]+$/.test(path)) schema = array(queue);
+  else if (path === '/queues/guest/active' && method === 'GET') schema = customerStatus;
   else if (/^\/queues\/[^/]+\/state$/.test(path) && method === 'GET') schema = v => record(v) && state(v.state);
   else if (/^\/queues\/[^/]+\/customer-status$/.test(path) && method === 'GET') schema = customerStatus;
   else if (/^\/queues\/qr\/[^/]+\/resolve$/.test(path)) schema = v => record(v) && nonempty(v.businessId) && typeof v.authenticated === 'boolean' && typeof v.requiresGuestForm === 'boolean';

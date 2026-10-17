@@ -40,7 +40,7 @@ func NewQueueFixture(t *testing.T) *QueueFixture {
 	rdb := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	f := &QueueFixture{Business: businessdomain.Business{ID: uuid.New(), Operational: true}, User: userdomain.User{ID: uuid.New(), Username: "Stored name", PhoneNumber: "081234567890"}, Queues: make(map[uuid.UUID]queuedomain.Queue), Capacity: 100, Redis: rdb, Server: server}
-	f.Service = queueapp.NewQueueService(f, f, rdb, f)
+	f.Service = queueapp.NewQueueService(f, f, rdb, f, f, f)
 	return f
 }
 

@@ -57,6 +57,10 @@ export const getQueuesByBusiness = (
 ) => api<Queue[]>(`/queues/business/${pathID(businessId)}`, options);
 export const getMyQueues = (options?: RequestOptions) =>
 	api<Queue[]>("/queues/me", options);
+export const getGuestQueues = (options?: RequestOptions) =>
+	api<Queue[]>("/queues/guest/me", options);
+export const getGuestActiveQueue = (options?: RequestOptions) =>
+	api<CustomerQueueStatus>("/queues/guest/active", options);
 export const updateQueue = (
 	queueId: string,
 	body: UpdateQueueRequest,
