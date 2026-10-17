@@ -21,9 +21,12 @@ func queueRouter(t *testing.T, f *testutil.QueueFixture) http.Handler {
 	t.Setenv("DATABASE_URL", "test")
 	t.Setenv("SECRET", "queue-test-secret")
 	t.Setenv("REDIS_HOST", "test")
+	t.Setenv("TELEBOT_API_KEY", "test")
 	h := queuehttp.NewQueueHandler(f.Service)
 	r := chi.NewRouter()
 	r.Use(middleware.PublicMiddleware(f))
+	r.Get("/queues/guest/me", h.GetGuestQueues)
+	r.Get("/queues/guest/active", h.GetGuestActiveQueue)
 	r.Post("/queues/business/{businessID}/join", h.JoinBusinessQueue)
 	r.Post("/queues/qr/{businessID}", h.RegisterQueueByQr)
 	r.Get("/queues/qr/{businessID}/resolve", h.ResolveQueueQR)
@@ -251,3 +254,79 @@ func TestLegacyGuestMappingAndOwnershipCacheFailure(t *testing.T) {
 		t.Fatal("legacy terminal phone retained")
 	}
 }
+
+func TestGuestActiveQueueAndResolutionFromCookies(t *testing.T) {
+	f := testutil.NewQueueFixture(t)
+	router := queueRouter(t, f)
+
+	// Before joining: no cookies -> empty list / 404 / requiresGuestForm: true
+	w := request(router, "GET", "/queues/guest/me", "")
+	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Fatalf("expected empty guest queues, got %d: %s", w.Code, w.Body)
+	}
+
+	w = request(router, "GET", "/queues/guest/active", "")
+	if w.Code != 404 {
+		t.Fatalf("expected 404 for active guest queue without cookies, got %d", w.Code)
+	}
+
+	w = request(router, "GET", "/queues/qr/"+f.Business.ID.String()+"/resolve", "")
+	var resolveResp queuehttp.QueueQRResolveResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resolveResp); err != nil {
+		t.Fatal(err)
+	}
+	if !resolveResp.RequiresGuestForm || resolveResp.ActiveQueueID != nil {
+		t.Fatalf("expected guest form required without cookies, got %+v", resolveResp)
+	}
+
+	// Guest joins the queue
+	w = request(router, "POST", "/queues/qr/"+f.Business.ID.String(), `{"username":"Jane Doe","phoneNumber":"081234567890"}`)
+	if w.Code != 201 {
+		t.Fatalf("join failed: %d %s", w.Code, w.Body)
+	}
+	id := ticketID(t, w)
+	cookies := w.Result().Cookies()
+
+	// With cookies: guest queues endpoint returns the joined queue
+	w = request(router, "GET", "/queues/guest/me", "", cookies...)
+	if w.Code != 200 {
+		t.Fatalf("get guest queues failed: %d %s", w.Code, w.Body)
+	}
+	var guestQueues []queuehttp.QueueResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &guestQueues); err != nil {
+		t.Fatal(err)
+	}
+	if len(guestQueues) != 1 || guestQueues[0].ID != id {
+		t.Fatalf("expected 1 guest queue with id %s, got %+v", id, guestQueues)
+	}
+
+	// With cookies: active guest queue endpoint returns 200
+	w = request(router, "GET", "/queues/guest/active", "", cookies...)
+	if w.Code != 200 {
+		t.Fatalf("get active guest queue failed: %d %s", w.Code, w.Body)
+	}
+	var statusResp queuehttp.CustomerQueueStatusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &statusResp); err != nil {
+		t.Fatal(err)
+	}
+	if statusResp.Queue.ID != id {
+		t.Fatalf("expected status queue id %s, got %s", id, statusResp.Queue.ID)
+	}
+
+	// With cookies: QR resolve endpoint recognises the existing active queue
+	w = request(router, "GET", "/queues/qr/"+f.Business.ID.String()+"/resolve", "", cookies...)
+	if w.Code != 200 {
+		t.Fatalf("resolve with cookies failed: %d %s", w.Code, w.Body)
+	}
+	var resolvedWithCookies queuehttp.QueueQRResolveResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resolvedWithCookies); err != nil {
+		t.Fatal(err)
+	}
+	if resolvedWithCookies.RequiresGuestForm {
+		t.Fatalf("expected requiresGuestForm false, got %+v", resolvedWithCookies)
+	}
+	if resolvedWithCookies.ActiveQueueID == nil || *resolvedWithCookies.ActiveQueueID != id {
+		t.Fatalf("expected activeQueueId %s, got %v", id, resolvedWithCookies.ActiveQueueID)
+	}
+}
+

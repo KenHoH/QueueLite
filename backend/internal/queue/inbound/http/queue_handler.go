@@ -146,7 +146,7 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	_, authenticated := middleware.OptionalUserIdFromContext(r.Context())
+	userID, authenticated := middleware.OptionalUserIdFromContext(r.Context())
 	response := QueueQRResolveResponse{
 		BusinessID:        businessID.String(),
 		Authenticated:     authenticated,
@@ -154,9 +154,118 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 	}
 	if !authenticated {
 		response.RequiredFields = []string{"username", "phoneNumber"}
+		queues, err := h.resolveGuestQueuesFromRequest(r)
+		if err == nil {
+			for _, q := range queues {
+				if q.BusinessID == businessID && !q.IsTerminal() {
+					response.RequiresGuestForm = false
+					response.RequiredFields = nil
+					qIDStr := q.ID.String()
+					response.ActiveQueueID = &qIDStr
+					qResp := NewQueueResponse(&q)
+					response.ActiveQueue = &qResp
+					break
+				}
+			}
+		}
+	} else if parsedUser, err := uuid.Parse(userID); err == nil {
+		active, err := h.s.GetActiveQueueByUserAndBusiness(r.Context(), parsedUser, businessID)
+		if err == nil && active != nil && !active.IsTerminal() {
+			qIDStr := active.ID.String()
+			response.ActiveQueueID = &qIDStr
+			qResp := NewQueueResponse(active)
+			response.ActiveQueue = &qResp
+		}
 	}
 
 	httpadapter.WriteJSON(w, http.StatusOK, response)
+}
+
+type guestTokenData struct {
+	guestID     string
+	businessID  string
+	phoneNumber string
+}
+
+func (h *QueueHandlerImpl) resolveGuestQueuesFromRequest(r *http.Request) ([]domain.Queue, error) {
+	var guestTokens []guestTokenData
+	var queueTokenIDs []string
+
+	for _, cookie := range r.Cookies() {
+		if cookie.Name == "guestToken" || strings.HasPrefix(cookie.Name, "guestToken_") {
+			guestID, bID, phone, err := middleware.ValidateGuestToken(cookie.Value)
+			if err == nil && guestID != "" && bID != "" {
+				guestTokens = append(guestTokens, guestTokenData{
+					guestID:     guestID,
+					businessID:  bID,
+					phoneNumber: phone,
+				})
+			}
+		}
+
+		if cookie.Name == "queueToken" || strings.HasPrefix(cookie.Name, "queueToken_") {
+			qID, err := middleware.ValidateQueueToken(cookie.Value)
+			if err == nil && qID != "" {
+				queueTokenIDs = append(queueTokenIDs, qID)
+			}
+		}
+	}
+
+	seen := make(map[uuid.UUID]bool)
+	var activeQueues []domain.Queue
+
+	// 1. Check queues identified by queueTokens
+	for _, qIDStr := range queueTokenIDs {
+		qUUID, err := uuid.Parse(qIDStr)
+		if err != nil || seen[qUUID] {
+			continue
+		}
+		queue, err := h.s.GetQueue(r.Context(), qUUID)
+		if err != nil || queue == nil || queue.IsTerminal() {
+			continue
+		}
+		owned := false
+		for _, gt := range guestTokens {
+			if gt.businessID != queue.BusinessID.String() {
+				continue
+			}
+			guestOwns, accessErr := h.s.GuestOwnsQueue(r.Context(), queue, gt.guestID, gt.businessID, gt.phoneNumber)
+			if accessErr == nil && guestOwns {
+				owned = true
+				break
+			}
+		}
+		if owned {
+			seen[queue.ID] = true
+			activeQueues = append(activeQueues, *queue)
+		}
+	}
+
+	// 2. Also check businesses identified by guestTokens in case queueToken was scoped or absent
+	for _, gt := range guestTokens {
+		bUUID, err := uuid.Parse(gt.businessID)
+		if err != nil {
+			continue
+		}
+		alreadyHasBusinessQueue := false
+		for _, aq := range activeQueues {
+			if aq.BusinessID == bUUID {
+				alreadyHasBusinessQueue = true
+				break
+			}
+		}
+		if alreadyHasBusinessQueue {
+			continue
+		}
+
+		queue, err := h.s.GetActiveGuestQueue(r.Context(), gt.guestID, gt.businessID, gt.phoneNumber)
+		if err == nil && queue != nil && !queue.IsTerminal() && !seen[queue.ID] {
+			seen[queue.ID] = true
+			activeQueues = append(activeQueues, *queue)
+		}
+	}
+
+	return activeQueues, nil
 }
 
 func (h *QueueHandlerImpl) JoinBusinessQueue(w http.ResponseWriter, r *http.Request) {
@@ -323,6 +432,33 @@ func (h *QueueHandlerImpl) GetMyQueues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
+}
+
+func (h *QueueHandlerImpl) GetGuestQueues(w http.ResponseWriter, r *http.Request) {
+	queues, err := h.resolveGuestQueuesFromRequest(r)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponses(queues))
+}
+
+func (h *QueueHandlerImpl) GetGuestActiveQueue(w http.ResponseWriter, r *http.Request) {
+	queues, err := h.resolveGuestQueuesFromRequest(r)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	if len(queues) == 0 {
+		httpadapter.WriteError(w, apperror.New(apperror.KindNotFound, "ACTIVE_QUEUE_NOT_FOUND", "no active queue found for guest"))
+		return
+	}
+	status, err := h.s.GetCustomerQueueStatus(r.Context(), queues[0].ID)
+	if err != nil {
+		httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponse(&queues[0]))
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, NewCustomerQueueStatusResponse(status))
 }
 
 func (h *QueueHandlerImpl) UpdateQueue(w http.ResponseWriter, r *http.Request) {

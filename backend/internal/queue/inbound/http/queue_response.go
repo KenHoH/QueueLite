@@ -28,10 +28,12 @@ type QueueStateResponse struct {
 }
 
 type QueueQRResolveResponse struct {
-	BusinessID        string   `json:"businessId"`
-	Authenticated     bool     `json:"authenticated"`
-	RequiresGuestForm bool     `json:"requiresGuestForm"`
-	RequiredFields    []string `json:"requiredFields,omitempty"`
+	BusinessID        string         `json:"businessId"`
+	Authenticated     bool           `json:"authenticated"`
+	RequiresGuestForm bool           `json:"requiresGuestForm"`
+	RequiredFields    []string       `json:"requiredFields,omitempty"`
+	ActiveQueueID     *string        `json:"activeQueueId,omitempty"`
+	ActiveQueue       *QueueResponse `json:"activeQueue,omitempty"`
 }
 
 type PublicQueueSummaryResponse struct {

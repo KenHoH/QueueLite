@@ -96,6 +96,8 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 		r.With(middleware.AuthMiddleware(userRepo)).Get("/me", queueHandler.GetMyQueues)
 		r.Group(func(public chi.Router) {
 			public.Use(middleware.PublicMiddleware(userRepo))
+			public.Get("/guest/me", queueHandler.GetGuestQueues)
+			public.Get("/guest/active", queueHandler.GetGuestActiveQueue)
 			public.Get("/qr/{businessID}/resolve", queueHandler.ResolveQueueQR)
 			public.Post("/qr/{businessID}", queueHandler.RegisterQueueByQr)
 			public.Get("/qr/generate/{businessID}", queueHandler.GenerateQRCodeImage)

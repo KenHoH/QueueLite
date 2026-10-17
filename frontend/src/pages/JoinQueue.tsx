@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getBusiness } from '../api/businesses';
 import { APIError } from '../api/errors';
-import { joinBusinessQueue } from '../api/queues';
+import { joinBusinessQueue, getGuestQueues } from '../api/queues';
 import type { Business, GuestQueueRequest, Queue } from '../api/types';
 import { Button, Card, EmptyState, InlineError, Input, LoadingSkeleton, PageContainer, StatusBadge } from '../components/foundation';
 import { useAppState } from '../state/AppState';
@@ -34,8 +34,22 @@ function JoinBusiness({ businessId }: { businessId: string }) {
     if (!isBusinessId(businessId)) { setLoad('not-found'); return; }
     const controller = new AbortController();
     setLoad('loading');
-    void getBusiness(businessId, { signal: controller.signal }).then(value => {
-      if (!controller.signal.aborted) { setBusiness(value); setLoad('ready'); }
+    void getBusiness(businessId, { signal: controller.signal }).then(async value => {
+      if (controller.signal.aborted) return;
+      setBusiness(value);
+      setLoad('ready');
+      if (auth.status !== 'authenticated') {
+        try {
+          const guestQueues = await getGuestQueues({ signal: controller.signal });
+          const existing = guestQueues.find(q => q.businessId === businessId && !['done', 'cancelled', 'skipped'].includes(q.state));
+          if (existing && !controller.signal.aborted) {
+            setTicket(existing);
+            setActiveTicket({ queue: existing, joinedAs: 'guest' });
+          }
+        } catch {
+          // best-effort active ticket detection
+        }
+      }
     }).catch(failure => {
       if (!controller.signal.aborted) setLoad(failure instanceof APIError && failure.status === 404 ? 'not-found' : 'error');
     });

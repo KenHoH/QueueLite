@@ -65,6 +65,8 @@ export interface UserSubscriptionInfo { subscription: Subscription; userPlan: Us
 export interface QueueQRResolution {
   businessId: UUID; authenticated: boolean; requiresGuestForm: boolean;
   requiredFields?: Array<'username' | 'phoneNumber'>;
+  activeQueueId?: UUID;
+  activeQueue?: Queue;
 }
 export interface Cursor { createdAt: DateTime; id: UUID }
 export interface CursorPage<T> { data: T[]; nextCursor: Cursor | null }
