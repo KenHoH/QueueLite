@@ -1,16 +1,16 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BusinessNavigation } from '../components/BusinessNavigation';
-import { EmptyState, LoadingSkeleton } from '../components/foundation';
-import { getBusinessSubscription, getUserSubscription } from '../api/subscriptions';
-import type { Subscription } from '../api/types';
+import { EmptyState, InlineError, LoadingSkeleton } from '../components/foundation';
+import { getBusinessSubscription, getUserSubscription, updateUserSubscriptionType } from '../api/subscriptions';
+import type { Subscription, UserSubscriptionInfo } from '../api/types';
 import type { PlanComparison } from './subscriptionPlans';
 import { businessPlanComparison, canShowBusinessPlans, userPlanComparison } from './subscriptionPlans';
 import { AccountAccess } from '../components/AccountAccess';
 import { Button, Card, PageContainer, PageHeader } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { BusinessSelector } from './ManageBusinesses';
-import { canManage } from './accountForms';
+import { accountError, canManage } from './accountForms';
 import { ResourceFeedback, useAccountResource } from './useAccountResource';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
@@ -29,9 +29,16 @@ function PlanComparisonTable({ id, title, comparison }: { id: string; title: str
     {/* Phones get one stacked card per plan instead of a sideways-scrolling table (CSS swaps them at 640px). */}
     <div className="ql-plan-cards">{comparison.plans.map((plan, index) => <Card key={plan} className="ql-plan-card"><h3>{plan}</h3><p className="ql-plan-price">{comparison.features.find(feature => feature.name === 'Price')?.values[index]}</p><dl>{comparison.features.filter(feature => feature.name !== 'Price').map(feature => <div key={feature.name}><dt>{feature.name}</dt><dd><PlanValue value={feature.values[index]} /></dd></div>)}</dl></Card>)}</div></section>;
 }
-export function UserSubscriptionSummary({ userId }: { userId: string }) {
+export function UserSubscriptionSummary({ userId, onLoaded }: { userId: string; onLoaded?: (info: UserSubscriptionInfo) => void }) {
   const load = useCallback((signal: AbortSignal) => getUserSubscription(userId, { signal }), [userId]);
   const resource = useAccountResource(load);
+
+  useEffect(() => {
+    if (resource.data && onLoaded) {
+      onLoaded(resource.data);
+    }
+  }, [resource.data, onLoaded]);
+
   return <Card><h2>Customer subscription</h2><ResourceFeedback {...resource} />{resource.data && <><h3>{planName(resource.data.userPlan.userPlanType)}</h3><p className="ql-muted">{resource.data.userPlan.description}</p><p>Priority slots remaining: {resource.data.userPlan.slots}</p><SubscriptionDates subscription={resource.data.subscription} /></>}</Card>;
 }
 function BusinessSubscriptionSummary({ businessId }: { businessId: string }) {
@@ -47,15 +54,51 @@ export default function Plans() {
 function PlansContent({ userId }: { userId: string }) {
   const { businessId } = useParams();
   const { businesses, businessesStatus, refreshBusinesses, selectedBusinessId } = useAppState();
+  const [currentPlan, setCurrentPlan] = useState<string>('standard');
+  const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
   const managers = businesses.filter(canManage);
   const showBusinessPlans = canShowBusinessPlans(businesses);
   const selected = businessId ? managers.find(item => item.id === businessId) : managers.find(item => item.id === selectedBusinessId) ?? managers[0];
   if (businessId && businessesStatus === 'loading') return <LoadingSkeleton label="Checking business access" />;
   if (businessId && businessesStatus === 'error') return <Card><p>We couldn’t check business access.</p><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>;
   if (businessId && !selected) return <EmptyState title="Permission required" description="Owner or admin access is required to view business plans." />;
-  return <div className="ql-stack"><UserSubscriptionSummary userId={userId} />
+
+  const handleUpgrade = async () => {
+    setBusy(true);
+    setError('');
+    setSuccess('');
+    try {
+      await updateUserSubscriptionType(userId, 'premium');
+      setSuccess('Your subscription has been successfully upgraded to Premium with priority slots.');
+      setVersion(v => v + 1);
+    } catch (failure) {
+      setError(accountError(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isPremium = currentPlan === 'premium';
+
+  return <div className="ql-stack"><UserSubscriptionSummary key={`${userId}-${version}`} userId={userId} onLoaded={(info) => setCurrentPlan(info.userPlan.userPlanType)} />
     <PlanComparisonTable id="user-plans" title="Customer plans" comparison={userPlanComparison} />
-    <Card><p className="ql-muted">This comparison describes the planned catalog. Plan changes, payments, integrations, and extra priority-pass purchases are currently unavailable.</p><Button disabled>Upgrade — coming later</Button></Card>
+    <Card>
+      <p className="ql-muted">
+        Upgrade to the Premium customer plan to receive 4 monthly priority slots for express queueing.
+      </p>
+      {error && <InlineError>{error}</InlineError>}
+      {success && <p role="status" className="ql-success-note">{success}</p>}
+      <Button
+        disabled={busy || isPremium}
+        onClick={() => void handleUpgrade()}
+      >
+        {busy ? 'Upgrading…' : isPremium ? 'Current plan: Premium' : 'Upgrade to Premium'}
+      </Button>
+    </Card>
     {businessesStatus === 'loading' ? <Card><LoadingSkeleton label="Checking managed businesses" /></Card>
       : businessesStatus === 'error' ? <Card><p>We couldn’t check your managed businesses.</p><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>
       : showBusinessPlans && <>{businessId ? <BusinessNavigation businessId={businessId} /> : <BusinessSelector />}{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}

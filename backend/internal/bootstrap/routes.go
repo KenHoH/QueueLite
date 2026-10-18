@@ -138,7 +138,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 		r.Group(func(private chi.Router) {
 			private.Use(middleware.AuthMiddleware(userRepo))
 			subscriptionhttp.RegisterAccountRoutes(private, subscriptionHandler, businessHandler.RequireManagement, businessRepo)
-			r.Patch("/updateSubscription/{userID}", subscriptionHandler.UpdateUserSubscriptionType)
+			private.With(middleware.RequireSelfUser).Patch("/updateSubscription/{userID}", subscriptionHandler.UpdateUserSubscriptionType)
 		})
 	})
 

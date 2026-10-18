@@ -1,7 +1,6 @@
 package inbound
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,19 +42,23 @@ func (h *SubscriptionHandlerImpl) UpdateUserSubscriptionType(w http.ResponseWrit
 	}
 	var req UpdateUserPlanRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteInvalid(w, "INVALID_FORMAT", "format is invalid")
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httputil.WriteInvalid(w, "INVALID_USER_PLAN_TYPE", err.Error())
 		return
 	}
 
 	req.UserPlanType = UserPlanType(strings.TrimSpace(string(req.UserPlanType)))
 	err := h.s.UpdateUserSubscriptionPlanType(r.Context(), userID, domain.UserPlanType(req.UserPlanType))
-	httpadapter.WriteError(w, err)
+	if err != nil {
+		httpadapter.WriteError(w, err)
+		return
+	}
+	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "user subscription plan updated"})
 }
 
 func (h *SubscriptionHandlerImpl) GetSubscription(w http.ResponseWriter, r *http.Request) {

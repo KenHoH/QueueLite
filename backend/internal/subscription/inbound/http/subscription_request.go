@@ -1,6 +1,7 @@
 package inbound
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 )
@@ -29,7 +30,24 @@ const (
 )
 
 type UpdateUserPlanRequest struct {
-	UserPlanType UserPlanType `json:"user_plan_type"`
+	UserPlanType UserPlanType `json:"userPlanType"`
+}
+
+func (r *UpdateUserPlanRequest) UnmarshalJSON(data []byte) error {
+	type Alias UpdateUserPlanRequest
+	aux := struct {
+		SnakeUserPlanType UserPlanType `json:"user_plan_type"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if r.UserPlanType == "" && aux.SnakeUserPlanType != "" {
+		r.UserPlanType = aux.SnakeUserPlanType
+	}
+	return nil
 }
 
 func (r *UpdateUserPlanRequest) Validate() error {

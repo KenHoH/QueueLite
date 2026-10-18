@@ -5,6 +5,7 @@ export const getSubscription = (subscriptionId: string, options?: RequestOptions
 export const getBusinessSubscription = (businessId: string, options?: RequestOptions) => api<BusinessSubscriptionInfo>(`/subscriptions/businesses/${pathID(businessId)}`, options);
 export const getUserSubscription = (userId: string, options?: RequestOptions) => api<UserSubscriptionInfo>(`/subscriptions/users/${pathID(userId)}`, options);
 export const useUserSubscription = (userId: string, businessId: string, options?: RequestOptions) => api<UseSubscriptionResponse>(`/subscriptions/users/${pathID(userId)}/use`, { ...options, method: 'POST', body: { businessId } });
+export const updateUserSubscriptionType = (userId: string, userPlanType: string, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/updateSubscription/${pathID(userId)}`, { ...options, method: 'PATCH', body: { userPlanType } });
 export const addUserSlots = (userId: string, amount: number, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/users/${pathID(userId)}/slots`, { ...options, method: 'PATCH', body: { amount } });
 export const decreaseBusinessCapacity = (businessId: string, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/businesses/${pathID(businessId)}/capacity/decrease`, { ...options, method: 'PATCH' });
 export const updateSubscription = (subscriptionId: string, body: UpdateSubscriptionRequest, options?: RequestOptions) => api<MessageResponse>(`/subscriptions/${pathID(subscriptionId)}`, { ...options, method: 'PUT', body });

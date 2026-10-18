@@ -55,7 +55,11 @@ func (r *SubscriptionRepoImpl) UpdateUserSubscriptionPlanType(ctx context.Contex
 		}
 
 		record.UserPlan.UserPlanType = model.UserPlanType(userPlan.UserPlanType)
+		record.UserPlan.Name = userPlan.Name
+		record.UserPlan.Description = userPlan.Description
+		record.UserPlan.Price = userPlan.Price
 		record.UserPlan.Slots = userPlan.Slots
+		record.UserPlan.LastSlotsResetAt = userPlan.LastSlotsResetAt
 		if err := tx.Save(record.UserPlan).Error; err != nil {
 			return fmt.Errorf("update user plan: %w", err)
 		}
