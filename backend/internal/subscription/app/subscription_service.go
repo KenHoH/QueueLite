@@ -1,11 +1,12 @@
 package app
 
 import (
-	"QueueLite/internal/apperror"
-	"QueueLite/internal/subscription/domain"
 	"context"
 	"errors"
 	"time"
+
+	"QueueLite/internal/apperror"
+	"QueueLite/internal/subscription/domain"
 
 	"github.com/google/uuid"
 )
@@ -33,7 +34,6 @@ func (s *SubscriptionService) GetAllSubscription(ctx context.Context, cursor *do
 }
 
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, subscription domain.Subscription, businessPlanType domain.BusinessPlanType, userPlanType domain.UserPlanType) (*domain.Subscription, error) {
-
 	if subscription.Type == "" {
 		return nil, apperror.New(apperror.KindInvalid, "SUBSCRIPTION_TYPE_REQUIRED", "subscription type is required")
 	}
@@ -88,20 +88,24 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, subscripti
 }
 
 func (s *SubscriptionService) CreateDefaultUserSubscriptionPlan(ctx context.Context, userID uuid.UUID) (*domain.Subscription, error) {
-	return s.CreateSubscription(ctx, domain.Subscription{
-		UserID: &userID,
-		Type:   domain.SubscriptionTypeUser,
-		Status: domain.SubscriptionStatusActive},
+	return s.CreateSubscription(
+		ctx, domain.Subscription{
+			UserID: &userID,
+			Type:   domain.SubscriptionTypeUser,
+			Status: domain.SubscriptionStatusActive,
+		},
 		domain.BusinessPlanTypeFree,
 		domain.UserPlanTypeStandard,
 	)
 }
 
 func (s *SubscriptionService) CreateDefaultBusinessSubscriptionPlan(ctx context.Context, businessID uuid.UUID) (*domain.Subscription, error) {
-	return s.CreateSubscription(ctx, domain.Subscription{
-		BusinessID: &businessID,
-		Type:       domain.SubscriptionTypeBusiness,
-		Status:     domain.SubscriptionStatusActive},
+	return s.CreateSubscription(
+		ctx, domain.Subscription{
+			BusinessID: &businessID,
+			Type:       domain.SubscriptionTypeBusiness,
+			Status:     domain.SubscriptionStatusActive,
+		},
 		domain.BusinessPlanTypeFree,
 		domain.UserPlanTypeStandard,
 	)
@@ -217,6 +221,26 @@ func (s *SubscriptionService) UseUserSubscription(ctx context.Context, userID uu
 		return nil, apperror.Wrap(apperror.KindInternal, "USE_USER_SUBSCRIPTION_ERROR", "failed to use user subscription", err)
 	}
 	return result, nil
+}
+
+func (s *SubscriptionService) UpdateUserSubscriptionPlanType(ctx context.Context, userID uuid.UUID, userPlan domain.UserPlanType) error {
+	if userID == uuid.Nil {
+		return apperror.New(apperror.KindInvalid, "USER_ID_REQUIRED", "user id is required")
+	}
+
+	now := time.Now()
+	plan := DefaultUserPlan(userPlan, now)
+
+	if err := s.repo.UpdateUserSubscriptionPlanType(ctx, userID, plan); err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "SUBSCRIPTION_NOT_FOUND", "user subscription not found", err)
+		}
+		if errors.Is(err, ErrUserPlanNotFound) {
+			return apperror.Wrap(apperror.KindNotFound, "USER_PLAN_NOT_FOUND", "user plan not found", err)
+		}
+		return apperror.Wrap(apperror.KindInternal, "ADD_USER_SLOT_ERROR", "failed to add user slot", err)
+	}
+	return nil
 }
 
 func (s *SubscriptionService) AddUserSlot(ctx context.Context, userID uuid.UUID, amount int) error {

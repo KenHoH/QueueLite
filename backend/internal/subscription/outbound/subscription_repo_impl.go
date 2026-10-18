@@ -1,13 +1,14 @@
 package outbound
 
 import (
-	"QueueLite/internal/adapter/postgres/model"
-	"QueueLite/internal/subscription/app"
-	"QueueLite/internal/subscription/domain"
 	"context"
 	"errors"
 	"fmt"
 	"time"
+
+	"QueueLite/internal/adapter/postgres/model"
+	"QueueLite/internal/subscription/app"
+	"QueueLite/internal/subscription/domain"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -38,6 +39,28 @@ func (r *SubscriptionRepoImpl) GetAllSubscription(ctx context.Context, cursor *d
 		nextCursor = &domain.SubscriptionCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	}
 	return toDomainSubscriptions(records), nextCursor, nil
+}
+
+func (r *SubscriptionRepoImpl) UpdateUserSubscriptionPlanType(ctx context.Context, userID uuid.UUID, userPlan domain.UserPlan) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var record model.Subscription
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("UserPlan").Where("user_id = ? AND type = ?", userID, model.SubscriptionTypeUser).Take(&record).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, userID)
+			}
+			return fmt.Errorf("get user subscription: %w", err)
+		}
+		if record.UserPlan == nil {
+			return fmt.Errorf("%w: %s", app.ErrUserPlanNotFound, userID)
+		}
+
+		record.UserPlan.UserPlanType = model.UserPlanType(userPlan.UserPlanType)
+		record.UserPlan.Slots = userPlan.Slots
+		if err := tx.Save(record.UserPlan).Error; err != nil {
+			return fmt.Errorf("update user plan: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *SubscriptionRepoImpl) CreateSubscription(ctx context.Context, subscription *domain.Subscription, businessPlan *domain.BusinessPlan, userPlan *domain.UserPlan) (*domain.Subscription, error) {

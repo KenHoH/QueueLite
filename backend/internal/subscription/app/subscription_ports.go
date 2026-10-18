@@ -1,9 +1,10 @@
 package app
 
 import (
-	"QueueLite/internal/subscription/domain"
 	"context"
 	"time"
+
+	"QueueLite/internal/subscription/domain"
 
 	"github.com/google/uuid"
 )
@@ -18,6 +19,7 @@ type SubscriptionRepo interface {
 	DeactivateUserSubscription(ctx context.Context, id uuid.UUID) error
 	DeleteSubscription(ctx context.Context, id uuid.UUID) error
 
+	UpdateUserSubscriptionPlanType(ctx context.Context, userID uuid.UUID, userPlan domain.UserPlan) error
 	GetBusinessSubscriptionInfo(ctx context.Context, businessID uuid.UUID) (*domain.BusinessSubscriptionInfo, error)
 	GetUserSubscriptionInfo(ctx context.Context, userID uuid.UUID) (*domain.UserSubscriptionInfo, error)
 	UseUserSubscription(ctx context.Context, userID uuid.UUID, businessID uuid.UUID) (*domain.UseUserSubscriptionResult, error)

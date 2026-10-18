@@ -1,5 +1,10 @@
 package inbound
 
+import (
+	"errors"
+	"strings"
+)
+
 type CreateSubscriptionRequest struct {
 	BusinessID       string  `json:"businessId"`
 	UserID           string  `json:"userId"`
@@ -14,6 +19,32 @@ type CreateSubscriptionRequest struct {
 type UpdateSubscriptionRequest struct {
 	BusinessPlanID string `json:"businessPlanId"`
 	UserPlanID     string `json:"userPlanId"`
+}
+
+type UserPlanType string
+
+const (
+	UserPlanTypeStandard UserPlanType = "standard"
+	UserPlanTypePremium  UserPlanType = "premium"
+)
+
+type UpdateUserPlanRequest struct {
+	UserPlanType UserPlanType `json:"user_plan_type"`
+}
+
+func (r *UpdateUserPlanRequest) Validate() error {
+	trimmed := strings.TrimSpace(string(r.UserPlanType))
+
+	if trimmed == "" {
+		return errors.New("user plan type is required")
+	}
+
+	switch UserPlanType(trimmed) {
+	case UserPlanTypeStandard, UserPlanTypePremium:
+		return nil // Value is valid!
+	default:
+		return errors.New("invalid user plan type: must be 'standard' or 'premium'")
+	}
 }
 
 type UpdateSubscriptionTimeRequest struct {
