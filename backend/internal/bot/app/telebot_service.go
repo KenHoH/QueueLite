@@ -14,6 +14,8 @@ import (
 
 	"QueueLite/internal/config"
 	userapp "QueueLite/internal/user/app"
+
+	"github.com/google/uuid"
 )
 
 type TelebotService struct {
@@ -103,7 +105,13 @@ func (s *TelebotService) requestPhonenumber(chatID string) error {
 	return nil
 }
 
-func (s *TelebotService) SendMessageToUser(chatID string, text string) error {
+func (s *TelebotService) SendMessageToUser(ctx context.Context, userID uuid.UUID, text string) error {
+	user, err := s.userRepo.GetUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	chatID := user.ChatID
+
 	apiKey, err := loadTelebotAPIKey()
 	if err != nil {
 		return err
@@ -115,7 +123,7 @@ func (s *TelebotService) SendMessageToUser(chatID string, text string) error {
 	}
 
 	telebotMSGRequestData := TelebotMSGRequest{
-		ChatID: chatID,
+		ChatID: *chatID,
 		Text:   text,
 	}
 

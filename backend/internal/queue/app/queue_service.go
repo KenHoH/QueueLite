@@ -361,6 +361,10 @@ func (s *QueueService) CancelWaitingQueue(ctx context.Context, queueID uuid.UUID
 	return nil
 }
 
+func (s *QueueService) UpdateQueueIfState(ctx context.Context, queue *domain.Queue, expected domain.QueueState) error {
+	return s.repo.UpdateQueueIfState(ctx, queue, domain.QueueStateWaiting)
+}
+
 func (s *QueueService) MarkAsSkipped(ctx context.Context, queueID uuid.UUID) error {
 	return s.UpdateState(ctx, queueID, domain.QueueStateSkipped)
 }
