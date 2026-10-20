@@ -3,13 +3,11 @@ package app
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 	"time"
 
 	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
-	telebotapp "QueueLite/internal/bot/app"
 	"QueueLite/internal/counter/domain"
 	queueapp "QueueLite/internal/queue/app"
 	queuedomain "QueueLite/internal/queue/domain"
@@ -21,15 +19,15 @@ import (
 
 type CounterService struct {
 	repo                CounterRepo
-	queueService        *queueapp.QueueService
-	telebotService      *telebotapp.TelebotService
+	queueRepo           CounterQueueRepo
 	subscriptionService *subscriptionapp.SubscriptionService
 	rdt                 *redis.Client
 }
 
-func NewCounterService(repo CounterRepo, queueService CounterQueueRepo, subscriptionService *subscriptionapp.SubscriptionService, redis *redis.Client) *CounterService {
+func NewCounterService(repo CounterRepo, queueRepo CounterQueueRepo, subscriptionService *subscriptionapp.SubscriptionService, redis *redis.Client) *CounterService {
 	service := &CounterService{
 		repo:                repo,
+		queueRepo:           queueRepo,
 		subscriptionService: subscriptionService,
 		rdt:                 redis,
 	}
@@ -114,7 +112,7 @@ func (s *CounterService) UpdateCounterCustomer(ctx context.Context, counterID uu
 		return err
 	}
 
-	queue, err := s.queueService.GetQueue(ctx, queueID)
+	queue, err := s.queueRepo.GetQueue(ctx, queueID)
 	if err != nil {
 		if errors.Is(err, queueapp.ErrQueueNotFound) {
 			return apperror.Wrap(apperror.KindNotFound, "QUEUE_NOT_FOUND", "queue not found", err)
@@ -132,7 +130,7 @@ func (s *CounterService) UpdateCounterCustomer(ctx context.Context, counterID uu
 		queue.CalledByCounterID = &counterID
 	}
 
-	if err := s.queueService.UpdateQueue(ctx, *queue); err != nil {
+	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return apperror.Wrap(apperror.KindInternal, "UPDATE_COUNTER_CUSTOMER_QUEUE_ERROR", "failed to assign queue to counter", err)
 	}
 
@@ -165,7 +163,7 @@ func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID u
 		return err
 	}
 
-	queue, err := s.queueService.GetQueue(ctx, queueID)
+	queue, err := s.queueRepo.GetQueue(ctx, queueID)
 	if err != nil {
 		if errors.Is(err, queueapp.ErrQueueNotFound) {
 			return apperror.Wrap(apperror.KindNotFound, "QUEUE_NOT_FOUND", "queue not found", err)
@@ -180,7 +178,7 @@ func (s *CounterService) RemoveQueueFromCounter(ctx context.Context, counterID u
 	queue.CalledByCounterID = nil
 	queue.State = queuedomain.QueueStateCompleted
 	queue.DoneAt = nowPtr()
-	if err := s.queueService.UpdateQueue(ctx, *queue); err != nil {
+	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return apperror.Wrap(apperror.KindInternal, "REMOVE_QUEUE_COUNTER_ERROR", "failed to remove queue from counter", err)
 	}
 	if err := cache.SyncCustomerQueue(ctx, s.rdt, *queue); err != nil {
@@ -204,11 +202,11 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 		return nil, apperror.New(apperror.KindInvalid, "COUNTER_BUSINESS_MISMATCH", "counter does not belong to business")
 	}
 	if counter.CurrentQueueID != nil {
-		current, err := s.queueService.GetQueue(ctx, *counter.CurrentQueueID)
+		current, err := s.queueRepo.GetQueue(ctx, *counter.CurrentQueueID)
 		if err == nil {
 			current.State = queuedomain.QueueStateCompleted
 			current.DoneAt = nowPtr()
-			if err := s.queueService.UpdateQueue(ctx, *current); err != nil {
+			if err := s.queueRepo.UpdateQueue(ctx, current); err != nil {
 				return nil, err
 			}
 			if err := cache.SyncCustomerQueue(ctx, s.rdt, *current); err != nil {
@@ -251,7 +249,7 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 	next.State = queuedomain.QueueStateCalled
 	next.CalledByCounterID = &counterID
 	next.CalledAt = nowPtr()
-	if err := s.queueService.UpdateQueueIfState(ctx, next, queuedomain.QueueStateWaiting); err != nil {
+	if err := s.queueRepo.UpdateQueueIfState(ctx, next, queuedomain.QueueStateWaiting); err != nil {
 		var appErr *apperror.Error
 		if errors.As(err, &appErr) && appErr.Code == "QUEUE_STATE_CHANGED" {
 			return nil, err
@@ -262,39 +260,10 @@ func (s *CounterService) CallNextQueue(ctx context.Context, counterID uuid.UUID,
 		// Restore the waiting state before making this item selectable again.
 		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if rollbackErr := s.queueService.UpdateQueueIfState(recoveryCtx, &previous, queuedomain.QueueStateCalled); rollbackErr != nil {
+		if rollbackErr := s.queueRepo.UpdateQueueIfState(recoveryCtx, &previous, queuedomain.QueueStateCalled); rollbackErr != nil {
 			return nil, errors.Join(err, rollbackErr)
 		}
 		return nil, s.restoreWaitingQueueAfterFailure(recoveryCtx, *queueItem, err)
-	}
-
-	// TODO: adding next queue notification
-	queueSnapshotItem, err := s.GetWaitingQueueSnapshot(ctx, next.BusinessID)
-	if err != nil {
-		log.Print(err)
-	}
-	if len(queueSnapshotItem) == 0 {
-		// The slice is empty
-		log.Print("There's no queue left")
-	}
-	nextQueue := queueSnapshotItem[0]
-	queueID, err = uuid.Parse(nextQueue.QueueID)
-	if err != nil {
-		// Handle invalid UUID string format
-		log.Print(err)
-	}
-	queue, err := s.queueService.GetQueue(ctx, queueID)
-	if err != nil {
-		log.Print(err)
-	}
-	err = s.telebotService.SendMessageToUser(ctx, *queue.UserID, telebotapp.NextQueueNotificationMessage)
-	if err != nil {
-		log.Print(err)
-	}
-	// TODO: queue called notification
-	err = s.telebotService.SendMessageToUser(ctx, *queue.UserID, telebotapp.CurrentQueueNotificationMessage)
-	if err != nil {
-		log.Print(err)
 	}
 	s.publishQueueUpdate(ctx, next.BusinessID)
 	s.scheduleCalledQueueTimeout(next.ID, counterID)
@@ -312,7 +281,7 @@ func (s *CounterService) restoreWaitingQueueAfterFailure(ctx context.Context, it
 }
 
 func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) (*queuedomain.Queue, error) {
-	queue, err := s.queueService.GetQueue(ctx, queueID)
+	queue, err := s.queueRepo.GetQueue(ctx, queueID)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +293,7 @@ func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.
 	}
 	queue.State = queuedomain.QueueStateProcessing
 	queue.ProcessingAt = nowPtr()
-	if err := s.queueService.UpdateQueue(ctx, *queue); err != nil {
+	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return nil, err
 	}
 	if s.subscriptionService != nil && queue.Priority && queue.UserID != nil {
@@ -340,7 +309,7 @@ func (s *CounterService) ProcessCalledQueue(ctx context.Context, counterID uuid.
 }
 
 func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, queueID uuid.UUID) (*queuedomain.Queue, error) {
-	queue, err := s.queueService.GetQueue(ctx, queueID)
+	queue, err := s.queueRepo.GetQueue(ctx, queueID)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +320,7 @@ func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, que
 		return nil, apperror.New(apperror.KindInvalid, "QUEUE_INVALID_STATE", "queue cannot be skipped")
 	}
 	queue.State = queuedomain.QueueStateSkipped
-	if err := s.queueService.UpdateQueue(ctx, *queue); err != nil {
+	if err := s.queueRepo.UpdateQueue(ctx, queue); err != nil {
 		return nil, err
 	}
 	if err := cache.SyncCustomerQueue(ctx, s.rdt, *queue); err != nil {
@@ -375,7 +344,7 @@ func (s *CounterService) SkipQueue(ctx context.Context, counterID uuid.UUID, que
 func (s *CounterService) getQueueWithRetry(ctx context.Context, queueID uuid.UUID) (*queuedomain.Queue, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		queue, err := s.queueService.GetQueue(ctx, queueID)
+		queue, err := s.queueRepo.GetQueue(ctx, queueID)
 		if err == nil {
 			return queue, nil
 		}
@@ -397,10 +366,10 @@ func (s *CounterService) getQueueWithRetry(ctx context.Context, queueID uuid.UUI
 func (s *CounterService) scheduleCalledQueueTimeout(queueID uuid.UUID, counterID uuid.UUID) {
 	time.AfterFunc(5*time.Minute, func() {
 		ctx := context.Background()
-		if s.queueService == nil {
+		if s.queueRepo == nil {
 			return
 		}
-		queue, err := s.queueService.GetQueue(ctx, queueID)
+		queue, err := s.queueRepo.GetQueue(ctx, queueID)
 		if err != nil || queue.State != queuedomain.QueueStateCalled {
 			return
 		}
