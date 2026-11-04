@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowRight, Ticket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getBusiness } from '../api/businesses';
 import { APIError } from '../api/errors';
@@ -6,37 +7,27 @@ import { getMyQueues, getGuestQueues } from '../api/queues';
 import type { Queue } from '../api/types';
 import { Button, Card, EmptyState, InlineError, LoadingSkeleton, StatusBadge } from './foundation';
 import { useAppState } from '../state/AppState';
+import { isActiveQueue } from '../pages/queueDisplay';
 
-type PreviewState = 'idle' | 'loading' | 'ready' | 'error' | 'unauthorized';
-
+type PreviewState = 'loading' | 'ready' | 'error' | 'unauthorized';
 export function JoinedQueuesPreview() {
-  const { auth, activeTicket, setActiveTicket, refreshUser } = useAppState();
+  const { auth, refreshUser } = useAppState();
   const [queues, setQueues] = useState<Queue[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<PreviewState>('idle');
+  const [status, setStatus] = useState<PreviewState>('loading');
   const [attempt, setAttempt] = useState(0);
-
   useEffect(() => {
+    if (auth.status !== 'authenticated' && auth.status !== 'guest') return;
     const controller = new AbortController();
     setStatus('loading');
-    const fetchQueues = auth.status === 'authenticated'
-      ? getMyQueues({ signal: controller.signal })
-      : getGuestQueues({ signal: controller.signal });
-
-    void fetchQueues.then(async list => {
-      if (controller.signal.aborted) return;
-      const entries = await Promise.all([...new Set(list.map(queue => queue.businessId))].map(async id => {
+    const fetchQueues = auth.status === 'authenticated' ? getMyQueues : getGuestQueues;
+    void fetchQueues({ signal: controller.signal }).then(async list => {
+      const active = list.filter(queue => isActiveQueue(queue.state));
+      const entries = await Promise.all([...new Set(active.map(queue => queue.businessId))].map(async id => {
         try { const business = await getBusiness(id, { signal: controller.signal }); return [id, business.name] as const; }
         catch { return [id, 'Business details unavailable'] as const; }
       }));
-      if (!controller.signal.aborted) {
-        setQueues(list);
-        setNames(Object.fromEntries(entries));
-        setStatus('ready');
-        if (auth.status !== 'authenticated' && list.length > 0 && !activeTicket) {
-          setActiveTicket({ queue: list[0], joinedAs: 'guest' });
-        }
-      }
+      if (!controller.signal.aborted) { setQueues(active); setNames(Object.fromEntries(entries)); setStatus('ready'); }
     }).catch(error => {
       if (controller.signal.aborted) return;
       const unauthorized = error instanceof APIError && error.status === 401;
@@ -44,34 +35,16 @@ export function JoinedQueuesPreview() {
       if (unauthorized && auth.status === 'authenticated') void refreshUser(true).catch(() => {});
     });
     return () => controller.abort();
-  }, [auth.status, auth.status === 'authenticated' ? auth.user.id : '', attempt, refreshUser, activeTicket, setActiveTicket]);
-
-  if (auth.status === 'loading') return <section className="ql-joined-queues" aria-labelledby="joined-queues-heading"><Card><LoadingSkeleton label="Checking your queues" lines={2} /></Card></section>;
-
-  if (auth.status !== 'authenticated') {
-    return <section className="ql-joined-queues" aria-labelledby="joined-queues-heading">
-      <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues</h2><p className="ql-muted">Queues you have joined appear here.</p></div>
-        {status === 'ready' && <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Refresh queues</Button>}
-      </div>
-      {status === 'loading' ? <Card><LoadingSkeleton label="Loading joined queues" lines={4} /></Card>
-        : queues.length > 0 ? <div className="ql-business-grid">{queues.map(queue => <QueueCard key={queue.id} queue={queue} businessName={names[queue.businessId] ?? 'Your guest queue'} />)}</div>
-        : activeTicket ? <div className="ql-business-grid"><QueueCard queue={activeTicket.queue} businessName="Your guest queue" /></div>
-        : <EmptyState compact title="No joined queues yet." description="Sign in to view your queues across devices, or join a business as a guest from this browser." action={<Button asChild><Link to="/login?returnTo=%2F">Sign in</Link></Button>} />}
-    </section>;
-  }
-
+  }, [auth.status, auth.status === 'authenticated' ? auth.user.id : '', attempt, refreshUser]);
+  const guest = auth.status === 'guest';
+  const displayed = queues;
   return <section className="ql-joined-queues" aria-labelledby="joined-queues-heading">
-    <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues</h2><p className="ql-muted">Businesses or services where you have an active visit.</p></div>
-      {status === 'ready' && <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Refresh queues</Button>}
-    </div>
-    {status === 'loading' ? <Card><LoadingSkeleton label="Loading joined queues" lines={4} /></Card>
-      : status === 'unauthorized' ? <Card><InlineError>Your session has ended. Please sign in to view your queues.</InlineError><Link to="/login?returnTo=%2F">Sign in</Link></Card>
+    <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues {status === 'ready' && <span className="ql-count">{displayed.length}</span>}</h2><p className="ql-muted">A little freedom while you wait.</p></div>{status === 'ready' && <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Refresh queues</Button>}</div>
+    {auth.status === 'loading' || status === 'loading' && auth.status !== 'error' ? <Card><LoadingSkeleton label="Loading joined queues" lines={2} /></Card>
+      : auth.status === 'error' ? <Card><InlineError>Please retry the session check above to view your queues.</InlineError></Card>
+      : status === 'unauthorized' && !guest ? <Card><InlineError>Your session has ended. Please sign in to view your queues.</InlineError><Link to="/login?returnTo=%2F">Sign in</Link></Card>
       : status === 'error' ? <Card><InlineError>We couldn’t load your queues.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>
-      : queues.length === 0 ? <EmptyState compact title="You don’t have any active queues." description="Find a business and save your place. Recently joined queues may take a moment to appear here." />
-      : <div className="ql-business-grid">{queues.map(queue => <QueueCard key={queue.id} queue={queue} businessName={names[queue.businessId] ?? 'Business details unavailable'} />)}</div>}
+      : !displayed.length ? <EmptyState compact title={guest ? 'No joined queues yet.' : 'You don’t have any active queues.'} description="Find a business and save your place. Recently joined queues may take a moment to appear here." />
+      : <div className="ql-active-queue-list">{displayed.map(queue => <Card asChild className="ql-active-queue" key={queue.id}><Link to={`/queue/${queue.id}`}><span className="ql-business-icon" aria-hidden="true"><Ticket size={24} /></span><div className="ql-active-business"><StatusBadge state={queue.state} /><h3>{names[queue.businessId] ?? 'Your queue'}</h3><p className="ql-meta">Your place, on your time.</p></div><div className="ql-active-number"><span className="ql-eyebrow">Your number</span><strong>{queue.name}</strong></div><span className="ql-active-link">View queue <ArrowRight size={17} aria-hidden="true" /></span></Link></Card>)}</div>}
   </section>;
-}
-
-function QueueCard({ queue, businessName }: { queue: Queue; businessName: string }) {
-  return <Card asChild className="ql-queue-card"><Link to={`/queue/${queue.id}`}><h3>{businessName}</h3><p className="ql-queue-number">{queue.name}</p><StatusBadge state={queue.state} /><span className="ql-meta">View queue →</span></Link></Card>;
 }

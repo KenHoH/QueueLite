@@ -1,3 +1,4 @@
+import { Clock3, Info, Ticket as TicketIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { updateQueueState } from '../api/queues';
@@ -46,31 +47,30 @@ function Ticket({ queueId }: { queueId: string }) {
   const state = cancelled ? 'cancelled' : queue?.state;
   const myCounter = queue ? data?.counters.find(counter => counter.currentQueueId === queue.id) : undefined;
   const back = auth.status === 'authenticated' ? '/my-queues' : '/#businesses';
-  return <PageContainer className="ql-ticket-page">
+  return <PageContainer className="ql-ticket-page ql-status-page">
     <Link className="ql-back-link" to={back}>{auth.status === 'authenticated' ? 'Back to My Queues' : 'Back to businesses'}</Link>
     {persistencePending && !data ? <Card><p className="ql-eyebrow">TICKET CONFIRMATION</p><h1>Saving your ticket</h1><p>Your place was accepted and is still being confirmed. Keep this page open—we’ll retry automatically.</p><LoadingSkeleton label="Confirming your ticket" lines={2} /><Button variant="secondary" onClick={refresh}>Check now</Button></Card>
       : !data && !error ? <Card><LoadingSkeleton label="Loading your queue" lines={8} /></Card> : <>
       {persistencePending && data && <Card role="status"><p>Your latest queue update is still being confirmed. Showing the last known ticket state.</p></Card>}
       {data && queue && state && <>
-        <Card className={`ql-ticket-card ${state === 'called' ? 'ql-ticket-called' : ''}`}>
+        <div className="ql-status-heading"><div><p className="ql-eyebrow">A little time for yourself</p><h1>{queueHeadings[state]}</h1><p className="ql-muted">{data.business.name}</p></div><div role="status" aria-live="polite"><StatusBadge state={state} /></div></div>
+        <div className="ql-status-layout"><Card className={`ql-ticket-card ${state === 'called' ? 'ql-ticket-called' : ''}`}>
+          <span className="ql-ticket-icon" aria-hidden="true"><TicketIcon size={25} /></span>
           <p className="ql-eyebrow">YOUR QUEUE</p>
-          <div role="status" aria-live="polite"><h1>{queueHeadings[state]}</h1><StatusBadge state={state} /></div>
-          <p>{data.business.name}</p>
           <p className="ql-queue-number">{queue.name}</p>
           {state === 'waiting' && data.customerPosition && <div className="ql-position-summary">
             <p><strong>{data.customerPosition.ahead === 0 ? 'You are next.' : `${data.customerPosition.ahead} ${data.customerPosition.ahead === 1 ? 'queue' : 'queues'} ahead of you.`}</strong></p>
             <p className="ql-muted">Position {data.customerPosition.position} of {data.totalWaiting} waiting</p>
-            {data.estimatedWaitMinutes !== undefined && <p>Estimated wait: <strong>{data.estimatedWaitMinutes} minutes</strong></p>}
+            {data.estimatedWaitMinutes !== undefined && <p className="ql-wait-estimate"><Clock3 size={19} aria-hidden="true" /><span>Estimated waiting time<strong>{data.estimatedWaitMinutes} minutes</strong></span></p>}
           </div>}
           {state === 'called' && <p className="ql-ticket-callout"><strong>{myCounter ? `Please go to ${myCounter.name}.` : 'Head to your assigned counter.'}</strong> The team is ready for you.</p>}
           {state === 'processing' && <p>You are currently being served.</p>}
           {state === 'skipped' && <p className="ql-muted">Please ask the team about the next step.</p>}
-          <Link to={`/business/${queue.businessId}`}>View business details</Link>
-          {cancelError && <InlineError>{cancelError}</InlineError>}
-          {state === 'waiting' && !error && <div className="ql-ticket-actions"><AlertDialog open={confirm} onOpenChange={open => { setConfirm(open); if (!open) setCancelError(''); }}><AlertDialogTrigger asChild><Button variant="secondary">Leave queue</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Leave this queue?</AlertDialogTitle><AlertDialogDescription>Your place will be released. You can join again later.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>Keep my place</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void cancel(); }}>{busy ? 'Leaving…' : 'Confirm leave'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>}
+          {cancelError && !confirm && <InlineError>{cancelError}</InlineError>}
+          {state === 'waiting' && !error && <div className="ql-ticket-actions"><AlertDialog open={confirm} onOpenChange={open => { setConfirm(open); if (!open) setCancelError(''); }}><AlertDialogTrigger asChild><Button variant="secondary">Leave queue</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Leave this queue?</AlertDialogTitle><AlertDialogDescription>Your place will be released. You can join again later.</AlertDialogDescription></AlertDialogHeader>{cancelError && <InlineError>{cancelError}</InlineError>}<AlertDialogFooter><AlertDialogCancel disabled={busy}>Keep my place</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void cancel(); }}>{busy ? 'Leaving…' : 'Confirm leave'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>}
         </Card>
 
-        <section aria-labelledby="counter-board-heading">
+        <div className="ql-status-board"><section aria-labelledby="counter-board-heading">
           <div className="ql-section-heading"><div><h2 id="counter-board-heading">Service counters</h2><p className="ql-muted">{data.activeCounters} active of {data.totalCounters} total counters</p></div></div>
           <CounterBoard counters={data.counters} />
         </section>
@@ -79,7 +79,7 @@ function Ticket({ queueId }: { queueId: string }) {
           <p className="ql-eyebrow">NEXT CUSTOMER</p>
           <h2>{data.nextQueue?.queueName ?? 'No waiting customer'}</h2>
           <p className="ql-muted">{data.totalWaiting} {data.totalWaiting === 1 ? 'customer' : 'customers'} waiting</p>
-        </Card>
+        </Card><p className="ql-soft-note"><Info size={18} aria-hidden="true" />Queue position and estimated waiting time may change based on service conditions. Priority customers may be called sooner.</p><div className="ql-wait-copy"><h3>Make the wait your own.</h3><p className="ql-muted">Take a short break and keep this ticket handy. Head back when your turn is close.</p><Link to={`/business/${queue.businessId}`}>View business details →</Link></div></div></div>
       </>}
       {error && <Card><InlineError>{ticketErrorMessage(error)}</InlineError><Button variant="secondary" onClick={refresh}>Refresh ticket</Button></Card>}
     </>}

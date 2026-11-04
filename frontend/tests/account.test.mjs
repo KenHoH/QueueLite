@@ -44,7 +44,7 @@ test('date-like form controls stay behind the shadcn input layer', () => {
   assert.doesNotMatch(sources.join('\n'), /<input\b[^>]*type=["'](?:date|datetime-local|month|week|time)["']/);
   const businessSetup = readFileSync(new URL('../src/pages/BusinessSetup.tsx', import.meta.url), 'utf8');
   assert.match(businessSetup, /<Input label="Open time" type="time"/);
-  assert.match(businessSetup, /<Input label="Close time" type="time"/);
+  assert.match(businessSetup, /<Input\s+label="Close time"\s+type="time"/);
   const foundation = readFileSync(new URL('../src/components/foundation.tsx', import.meta.url), 'utf8');
   assert.match(foundation, /<ShadcnInput/);
 });

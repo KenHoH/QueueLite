@@ -24,7 +24,9 @@ test('actual Vite config starts, serves deep links and forwards paths/cookies', 
     for (const route of ['/', '/login', '/register', '/profile', '/plans', '/business/manage', '/business/11111111-1111-4111-8111-111111111111', '/business/11111111-1111-4111-8111-111111111111/join', '/business/create', '/business/11111111-1111-4111-8111-111111111111/settings', '/queue/example', '/counter/example']) {
       const response = await fetch(`${origin}${route}`);
       assert.equal(response.status, 200);
-      assert.match(await response.text(), /src\/main.tsx/);
+      const html = await response.text();
+      assert.match(html, /src\/main.tsx/);
+      assert.doesNotMatch(html, /__ui-preview/);
     }
     const module = await fetch(`${origin}/src/main.tsx`);
     assert.equal(module.status, 200);

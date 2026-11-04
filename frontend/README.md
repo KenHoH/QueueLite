@@ -2,6 +2,21 @@
 
 React 19, TypeScript and Vite 7 power the customer and business interfaces. All application pages use the backend API.
 
+## Visual preview without a backend
+
+For reviewing page layouts only, use Node.js 22.12 or later and run:
+
+On Windows, double-click `START-PREVIEW.cmd` to install dependencies on the first run and open the preview automatically. Keep its terminal window open while reviewing. The equivalent manual commands are:
+
+```powershell
+npm.cmd ci
+npm.cmd run preview:ui
+```
+
+Open `http://127.0.0.1:5173`. The **UI preview · sample data** menu at the bottom right switches between pages, ticket states and sample roles. No account, database, Docker, Go, environment file or Git setup is required. Sample changes last only for the current preview server session; Reset restores the starting data. Use sample details in forms.
+
+This mode checks appearance and sample navigation, not backend integration. Its in-memory API and toolbar live in `dev/uiPreview.ts` and run only with `preview:ui`. Normal `dev`, `build` and `preview` retain the real API contract and do not enable sample responses. Stop the server with Ctrl+C.
+
 ## Development
 
 Use Node.js 22.12 or later. From this directory:
@@ -27,6 +42,7 @@ Never place secrets in `VITE_*` variables; they are included in browser code. AP
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the development server |
+| `npm run preview:ui` | Review pages with local sample data and no backend |
 | `npm run typecheck` | Check TypeScript without emitting files |
 | `npm test` | Run API, form, response-validation and Vite proxy tests |
 | `npm run test:browser` | Run Playwright browser tests |
@@ -40,7 +56,7 @@ $env:PLAYWRIGHT_CHANNEL = 'msedge'
 npm run test:browser
 ```
 
-Browser tests intercept API responses to cover customer tickets, discovery, account access, business operations, failed requests, navigation and responsive layouts. The proxy test uses a local HTTP fixture to verify path and cookie forwarding. These tests do not verify live backend integration. Screenshots are written to ignored `output/playwright/`.
+Browser test files run serially so their Vite servers do not race over the shared dependency optimization cache. Browser tests intercept API responses to cover customer tickets, discovery, account access, business operations, failed requests, navigation and responsive layouts. The proxy test uses a local HTTP fixture to verify path and cookie forwarding. These tests do not verify live backend integration. Screenshots are written to ignored `output/playwright/`.
 
 ## Structure
 

@@ -74,3 +74,12 @@ test('does not turn subscription business rejection into success or an HTTP erro
 
 
 
+
+test('binary QR downloads preserve API errors instead of saving an error response as an image', async () => {
+  const request = createAPIClient('/api', async () => Response.json({ error: { code: 'BUSINESS_ACCESS_DENIED', message: 'Access denied' } }, { status: 403 }));
+  await assert.rejects(request('/queues/qr/generate/business', { responseType: 'blob' }), error => error.status === 403 && error.code === 'BUSINESS_ACCESS_DENIED');
+  const image = createAPIClient('/api', async () => new Response('png-bytes', { headers: { 'Content-Type': 'image/png' } }));
+  const result = await image('/queues/qr/generate/business', { responseType: 'blob' });
+  assert.equal(result.type, 'image/png');
+  assert.equal(await result.text(), 'png-bytes');
+});

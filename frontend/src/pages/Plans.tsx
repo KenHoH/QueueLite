@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BusinessNavigation } from '../components/BusinessNavigation';
 import { EmptyState, InlineError, LoadingSkeleton } from '../components/foundation';
 import { getBusinessSubscription, getUserSubscription, updateUserSubscriptionType } from '../api/subscriptions';
 import type { Subscription, UserSubscriptionInfo } from '../api/types';
@@ -101,7 +100,7 @@ function PlansContent({ userId }: { userId: string }) {
     </Card>
     {businessesStatus === 'loading' ? <Card><LoadingSkeleton label="Checking managed businesses" /></Card>
       : businessesStatus === 'error' ? <Card><p>We couldn’t check your managed businesses.</p><Button onClick={() => refreshBusinesses()}>Try again</Button></Card>
-      : showBusinessPlans && <>{businessId ? <BusinessNavigation businessId={businessId} /> : <BusinessSelector />}{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}
+      : showBusinessPlans && <>{!businessId && <BusinessSelector />}{selected && <BusinessSubscriptionSummary key={selected.id} businessId={selected.id} />}
         <PlanComparisonTable id="business-plans" title="Business plans" comparison={businessPlanComparison} />
         <Card><p className="ql-muted">Business plan comparisons are informational. Listed integrations, analytics, insights, billing, and plan changes may not yet be available.</p><Button disabled>Change plan — coming later</Button></Card></>}
     <Link to="/profile">Back to profile</Link>

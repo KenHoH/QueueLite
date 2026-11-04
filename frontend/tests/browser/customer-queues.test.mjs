@@ -8,6 +8,13 @@ const business = { id: '11111111-1111-4111-8111-111111111111', name: 'Northside 
 const user = { id: '22222222-2222-4222-8222-222222222222', username: 'Ayu', phonenumber: '081234567890' };
 const counter = { id: '33333333-3333-4333-8333-333333333333', businessId: business.id, name: 'Front desk' };
 const ticket = { id: '44444444-4444-4444-8444-444444444444', businessId: business.id, userId: user.id, name: 'A024', state: 'waiting', priority: false };
+const customerStatus = (queue = ticket) => ({
+  queue, business: { id: business.id, name: business.name, operational: business.operational },
+  counters: [{ id: counter.id, name: counter.name, state: ['called', 'processing'].includes(queue.state) ? queue.state : 'idle', ...(['called', 'processing'].includes(queue.state) ? { currentQueueId: queue.id, currentQueueName: queue.name } : {}) }],
+  currentlyServing: [], totalCounters: 1, activeCounters: ['called', 'processing'].includes(queue.state) ? 1 : 0,
+  totalWaiting: queue.state === 'waiting' ? 1 : 0, totalActiveQueues: 1,
+  ...(queue.state === 'waiting' ? { customerPosition: { position: 1, ahead: 0, queueName: queue.name }, estimatedWaitMinutes: 0 } : {}), updatedAt: new Date().toISOString(),
+});
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const visible = locator => locator.waitFor({ state: 'visible' });
 const absent = locator => locator.waitFor({ state: 'hidden' });
@@ -36,14 +43,17 @@ async function scenario(t, options = {}) {
     if (!response) {
       if (path === '/api/users/me') response = options.user ? { json: options.user } : { status: 401, json: {} };
       else if (path === '/api/businesses/mine') response = { json: [] };
+      else if (path === '/api/queues/guest/me') response = { json: [] };
+      else if (path.endsWith('/customer-status')) response = { json: customerStatus({ ...ticket, state: options.state ?? 'waiting' }) };
       else if (path === '/api/queues/me') response = { json: options.queues ?? [ticket] };
       else if (path.endsWith('/join')) response = { status: 201, json: ticket, headers: { 'set-cookie': 'queueToken_test=ticket-cookie; Path=/; HttpOnly; SameSite=Lax' } };
       else if (path.startsWith('/api/businesses/')) response = { json: business };
       else if (path.startsWith('/api/counters/')) response = { json: counter };
-      else if (path.endsWith('/state')) response = { json: { state: options.state ?? 'waiting' } };
+      else if (path.endsWith('/customer-status')) response = { json: { state: options.state ?? 'waiting' } };
       else if (path.startsWith('/api/queues/')) response = { json: { ...ticket, ...(options.state ? { state: options.state } : {}), ...(options.called ? { calledByCounterId: counter.id } : {}) } };
       else throw new Error(`Unexpected fixture request ${request.method()} ${path}`);
     }
+    if (path.endsWith('/customer-status') && response.json?.state && !response.json.queue && !response.status) response = { ...response, json: customerStatus({ ...ticket, ...response.json }) };
     try { await route.fulfill(response); }
     catch (error) { if (!/closed|cancel|abort|Invalid Interception/i.test(error.message)) throw error; }
   });
@@ -79,7 +89,7 @@ test('guest validation, trimmed identity-only body, success and immediate cookie
   assert.deepEqual(JSON.parse(requests.find(r => r.method === 'POST').body), { username: 'Guest', phoneNumber: '0812 3456 7890' });
   await page.getByRole('link', { name: 'View my queue' }).click();
   await visible(page.getByRole('heading', { name: 'You’re in the queue.' }));
-  const read = requests.find(r => r.path === `/api/queues/${ticket.id}`);
+  const read = requests.find(r => r.path === `/api/queues/${ticket.id}/customer-status`);
   assert.match(read.headers.cookie, /queueToken_test=ticket-cookie/);
   assert.equal(requests.filter(r => r.path === '/api/queues/me').length, 0);
 });
@@ -116,28 +126,29 @@ for (const [state, heading] of Object.entries(states)) {
     const { page, requests } = await scenario(t, { state, called: state === 'called' || state === 'processing' });
     await page.clock.install(); await page.goto(`${origin}/queue/${ticket.id}`);
     await visible(page.getByRole('heading', { name: heading })); await visible(page.getByText(business.name, { exact: true }));
-    if (state === 'called' || state === 'processing') await visible(page.getByText('Counter: Front desk', { exact: true }));
-    const before = requests.filter(r => r.path.endsWith('/state')).length;
-    const nextPoll = ['done', 'skipped', 'cancelled'].includes(state) ? null : page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/state'));
+    if (state === 'called') await visible(page.getByText('Please go to Front desk.', { exact: true }));
+    if (state === 'processing') await visible(page.getByText('You are currently being served.', { exact: true }));
+    const before = requests.filter(r => r.path.endsWith('/customer-status')).length;
+    const nextPoll = ['done', 'skipped', 'cancelled'].includes(state) ? null : page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/customer-status'));
     await page.clock.runFor(5500);
     if (['done', 'skipped', 'cancelled'].includes(state)) {
-      assert.equal(requests.filter(r => r.path.endsWith('/state')).length, before);
+      assert.equal(requests.filter(r => r.path.endsWith('/customer-status')).length, before);
       await absent(page.getByRole('button', { name: 'Leave queue' }));
-    } else { await nextPoll; assert.ok(requests.filter(r => r.path.endsWith('/state')).length > before); }
+    } else { await nextPoll; assert.ok(requests.filter(r => r.path.endsWith('/customer-status')).length > before); }
     if (state === 'called') await page.screenshot({ path: 'output/playwright/customer-called-desktop.png', fullPage: true });
   });
 }
 test('poll discovers terminal transition and unmount cancels future requests', async t => {
   let state = 'waiting';
-  const { page, requests } = await scenario(t, { respond: path => path.endsWith('/state') ? { json: { state } } : undefined });
+  const { page, requests } = await scenario(t, { respond: path => path.endsWith('/customer-status') ? { json: { state } } : undefined });
   await page.clock.install(); await page.goto(`${origin}/queue/${ticket.id}`); await visible(page.getByRole('heading', { name: states.waiting }));
   state = 'done'; await page.clock.runFor(5500); await visible(page.getByRole('heading', { name: states.done }));
-  const count = requests.filter(r => r.path.endsWith('/state')).length;
-  await page.clock.runFor(11000); assert.equal(requests.filter(r => r.path.endsWith('/state')).length, count);
+  const count = requests.filter(r => r.path.endsWith('/customer-status')).length;
+  await page.clock.runFor(11000); assert.equal(requests.filter(r => r.path.endsWith('/customer-status')).length, count);
   state = 'waiting'; await page.reload(); await visible(page.getByRole('heading', { name: states.waiting }));
   await page.getByRole('link', { name: 'View business details' }).click(); await visible(page.getByRole('heading', { name: 'Business information' }));
-  const left = requests.filter(r => r.path.endsWith('/state')).length;
-  await page.clock.runFor(11000); assert.equal(requests.filter(r => r.path.endsWith('/state')).length, left);
+  const left = requests.filter(r => r.path.endsWith('/customer-status')).length;
+  await page.clock.runFor(11000); assert.equal(requests.filter(r => r.path.endsWith('/customer-status')).length, left);
 });
 for (const status of [401, 403, 404]) test(`ticket handles ownership/missing error ${status} and does not poll`, async t => {
   const { page, requests } = await scenario(t, { respond: path => path.startsWith('/api/queues/') ? { status, json: { error: { code: status === 404 ? 'QUEUE_NOT_FOUND' : 'QUEUE_ACCESS_DENIED', message: 'raw' } } } : undefined });
@@ -155,7 +166,7 @@ test('cancellation requires confirmation, preserves ticket and handles persisten
   await page.getByRole('button', { name: 'Keep my place' }).click(); await page.getByRole('button', { name: 'Leave queue' }).click();
   await page.getByRole('button', { name: 'Confirm leave' }).click(); await visible(page.getByText(/Your ticket is still being saved/));
   await page.clock.runFor(11000); assert.equal(requests.filter(r => r.method === 'PATCH').length, 1);
-  await visible(page.getByRole('heading', { name: states.waiting }));
+  assert.equal(await page.locator('main h1').innerText(), states.waiting);
   pending = false; await page.getByRole('button', { name: 'Confirm leave' }).click(); await visible(page.getByRole('heading', { name: states.cancelled }));
   const mutations = requests.filter(r => r.method === 'PATCH');
   assert.ok(mutations.every(r => r.path.endsWith('/state') && r.body === '{"state":"cancelled"}'));
@@ -167,7 +178,7 @@ test('My Queues lists account tickets, deduplicates business reads and navigates
   const { page, requests } = await scenario(t, { user, queues: [ticket, another] });
   await page.goto(`${origin}/my-queues`); await visible(page.getByText('A025', { exact: true }));
   assert.equal(requests.filter(r => r.path === `/api/businesses/${business.id}`).length, 1);
-  assert.equal(await page.getByRole('link', { name: 'My Queues', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await page.getByRole('link', { name: 'My queues', exact: true }).getAttribute('aria-current'), 'page');
   await page.screenshot({ path: 'output/playwright/customer-my-queues-desktop.png', fullPage: true });
   await page.locator('.ql-queue-card').first().click(); await visible(page.getByRole('heading', { name: states.waiting }));
   assert.equal(new URL(page.url()).pathname, `/queue/${ticket.id}`);
@@ -183,7 +194,7 @@ test('guest My Queues offers sign-in without a list request or account navigatio
   const { page, requests } = await scenario(t);
   await page.goto(`${origin}/my-queues`); await visible(page.getByRole('heading', { name: 'Sign in to view your queues.' }));
   assert.equal(requests.filter(r => r.path === '/api/queues/me').length, 0);
-  await absent(page.getByRole('link', { name: 'My Queues', exact: true }));
+  await absent(page.getByRole('link', { name: 'My queues', exact: true }));
   await visible(page.getByRole('link', { name: 'Businesses', exact: true }));
 });
 test('customer pages stay within mobile viewport and use the existing design system', async t => {
@@ -236,9 +247,9 @@ test('ticket reads pause in hidden tabs and resume on visibility', async t => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.testHidden });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  const before = requests.filter(r => r.path.endsWith('/state')).length;
-  await page.clock.runFor(11000); assert.equal(requests.filter(r => r.path.endsWith('/state')).length, before);
-  const resumed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/state'));
+  const before = requests.filter(r => r.path.endsWith('/customer-status')).length;
+  await page.clock.runFor(11000); assert.equal(requests.filter(r => r.path.endsWith('/customer-status')).length, before);
+  const resumed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/customer-status'));
   await page.evaluate(() => { window.testHidden = false; document.dispatchEvent(new Event('visibilitychange')); });
-  await resumed; assert.ok(requests.filter(r => r.path.endsWith('/state')).length > before);
+  await resumed; assert.ok(requests.filter(r => r.path.endsWith('/customer-status')).length > before);
 });

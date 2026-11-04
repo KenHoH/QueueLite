@@ -1,3 +1,5 @@
+import { CheckCheck, CircleX, Clock3, SkipForward } from 'lucide-react';
+import { greeting } from './businessDisplay';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Business, BusinessMembership, Counter, Queue, QueueState } from '../api/types';
@@ -31,14 +33,13 @@ export function PriorityBadge({ queue }: { queue: Queue }) {
 }
 
 function ServicesDashboardHeader({ business, refresh }: { business: Business; refresh: () => void }) {
-  return <Card className="ql-services-header">
+  return <div className="ql-services-header">
     <div>
-      <p className="ql-eyebrow">Services overview</p>
       <h2>{business.name}</h2>
-      <p className="ql-muted">{business.operational ? 'Operational' : 'Not operational'} · Updates every 10 seconds while this tab is visible.</p>
+      <p className="ql-muted">Here’s how things are moving at your business.</p>
     </div>
     <Button variant="secondary" onClick={refresh}>Refresh</Button>
-  </Card>;
+  </div>;
 }
 
 function QueueFilterTabs({ value, queues, onChange }: { value: QueueFilter; queues: Queue[]; onChange: (value: QueueFilter) => void }) {
@@ -52,11 +53,11 @@ function CurrentQueueList({ queues, counters }: { queues: Queue[]; counters: Cou
   if (!queues.length) return <EmptyState title="No queues in this view" description="No waiting queues. Choose another status or wait for a customer to join." />;
   return <div className="ql-queue-table-wrap">
     <Table className="ql-queue-table">
-      <TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Status</TableHead><TableHead>Counter</TableHead><TableHead>Queue type</TableHead></TableRow></TableHeader>
+      <TableHeader><TableRow><TableHead>Queue number</TableHead><TableHead>Status</TableHead><TableHead>Counter</TableHead><TableHead>Queue type</TableHead></TableRow></TableHeader>
       <TableBody>{queues.map(queue => {
         const counter = counters.find(item => item.currentQueueId === queue.id || item.id === queue.calledByCounterId);
         return <TableRow key={queue.id} className={queue.priority ? 'ql-priority-row' : undefined}>
-          <TableHead scope="row" data-label="Customer">{queue.name}</TableHead>
+          <TableHead scope="row" data-label="Queue number">{queue.name}</TableHead>
           <TableCell data-label="Status"><StatusBadge state={queue.state} /></TableCell>
           <TableCell data-label="Counter">{counter?.name ?? '—'}</TableCell>
           <TableCell data-label="Queue type"><PriorityBadge queue={queue} />{!queue.priority && <span className="ql-muted">Standard</span>}</TableCell>
@@ -78,7 +79,7 @@ function QueueBoard({ queues, counters }: { queues: Queue[]; counters: Counter[]
   function changeFilter(next: QueueFilter) { setFilter(next); setPage(1); }
   function changePageSize(next: number) { setPageSize(next as (typeof pageSizes)[number]); setPage(1); }
   return <section className="ql-stack" aria-labelledby="current-queue-heading">
-    <div className="ql-section-heading"><div><h2 id="current-queue-heading">Customer queues</h2><p className="ql-muted">Priority customers are highlighted.</p></div></div>
+    <div className="ql-section-heading"><div><h2 id="current-queue-heading">Queue overview</h2><p className="ql-muted">Priority customers are highlighted.</p></div></div>
     <QueueFilterTabs value={filter} queues={queues} onChange={changeFilter} />
     <div className="ql-queue-toolbar">
       <div className="flex items-center gap-2"><Label htmlFor="queue-page-size">Rows per page</Label><Select value={String(pageSize)} onValueChange={value => changePageSize(Number(value))}><SelectTrigger id="queue-page-size" className="w-20"><SelectValue /></SelectTrigger><SelectContent>{pageSizes.map(size => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectContent></Select></div>
@@ -99,9 +100,9 @@ export function CounterOverview({ counters, queues }: { counters: Counter[]; que
     const queue = currentQueue(counter, queues);
     return <Card key={counter.id} className="ql-counter-service-card">
       <div className="ql-counter-card-heading"><h3>{counter.name}</h3><Badge variant={queue ? 'secondary' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
-      <p className="ql-meta">Customer being handled</p>
-      {queue ? <p className="ql-counter-customer"><strong>{queue.name}</strong> <PriorityBadge queue={queue} /></p> : <p className="ql-muted">No active customer</p>}
-      <Link to={`/counter/${counter.id}`}>Open workspace →</Link>
+
+      {queue ? <p className="ql-counter-customer"><strong>{queue.name}</strong> <PriorityBadge queue={queue} /></p> : <p className="ql-counter-customer">Available</p>}
+      <p className="ql-meta">{queue ? 'Currently serving' : 'Ready for the next customer'}</p><Link to={`/counter/${counter.id}`}>Open workspace →</Link>
     </Card>;
   })}</div>;
 }
@@ -109,16 +110,16 @@ export function CounterOverview({ counters, queues }: { counters: Counter[]; que
 function QueueMetricsSummary({ queues }: { queues: Queue[] }) {
   const count = (state: QueueState) => queues.filter(queue => queue.state === state).length;
   const average = averageServiceSeconds(queues);
-  return <section aria-labelledby="queue-metrics-heading"><h2 id="queue-metrics-heading">Queue totals</h2><div className="ql-metrics-grid">
-    <Card><span className="ql-meta">Skipped</span><strong>{count('skipped')}</strong><span>customers</span></Card>
-    <Card><span className="ql-meta">Cancelled</span><strong>{count('cancelled')}</strong><span>customers</span></Card>
-    <Card><span className="ql-meta">Finished</span><strong>{count('done')}</strong><span>customers</span></Card>
-    <Card className={average === null ? 'ql-metric-unavailable' : ''}><span className="ql-meta">Average service time</span><strong>{average === null ? '—' : formatDuration(average)}</strong><span>{average === null ? 'No completed timing data' : 'processing to completion'}</span></Card>
+  return <section aria-labelledby="queue-metrics-heading"><h2 id="queue-metrics-heading" className="ql-sr-only">Queue totals</h2><div className="ql-metrics-grid">
+    <Card><span className="ql-metric-label">Customers served <CheckCheck size={18} aria-hidden="true" /></span><strong>{count('done')}</strong><span>Recorded completed visits</span></Card>
+    <Card><span className="ql-metric-label">Skipped <SkipForward size={18} aria-hidden="true" /></span><strong>{count('skipped')}</strong><span>Customers not present</span></Card>
+    <Card><span className="ql-metric-label">Cancelled <CircleX size={18} aria-hidden="true" /></span><strong>{count('cancelled')}</strong><span>Recorded cancelled visits</span></Card>
+    <Card><span className="ql-metric-label">Average service time <Clock3 size={18} aria-hidden="true" /></span><strong>{average === null ? '—' : formatDuration(average)}</strong><span>{average === null ? 'No completed timing data' : 'From recorded completed visits'}</span></Card>
   </div></section>;
 }
 
 export default function Dashboard() {
-  return <BusinessOperationsPage title="Business dashboard">{business => <DashboardContent business={business} />}</BusinessOperationsPage>;
+  return <BusinessOperationsPage title={greeting()} eyebrow="Your business, at a glance">{business => <DashboardContent business={business} />}</BusinessOperationsPage>;
 }
 
 function Capacity({ businessId }: { businessId: string }) {
@@ -131,9 +132,9 @@ function DashboardContent({ business }: { business: BusinessMembership }) {
   const resource = useBusinessOperations(business);
   return <><OperationsFeedback {...resource} />{resource.data && <>
     <ServicesDashboardHeader business={resource.data.business} refresh={resource.retry} />
-    <QueueBoard queues={resource.data.queues} counters={resource.data.counters} />
-    <section aria-label="Counters"><div className="ql-section-heading"><div><h2>Service counters · {resource.data.counters.length}</h2><p className="ql-muted">Current customer at every available counter.</p></div></div><CounterOverview counters={resource.data.counters} queues={resource.data.queues} /></section>
     <QueueMetricsSummary queues={resource.data.queues} />
+    <section aria-label="Counters"><div className="ql-section-heading"><div><h2>Service counters · {resource.data.counters.length}</h2><p className="ql-muted">Current customer at every available counter.</p></div></div><CounterOverview counters={resource.data.counters} queues={resource.data.queues} /></section>
+    <QueueBoard queues={resource.data.queues} counters={resource.data.counters} />
     {canManage(business) && <Capacity businessId={business.id} />}
   </>}</>;
 }

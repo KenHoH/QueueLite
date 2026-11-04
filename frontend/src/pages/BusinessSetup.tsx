@@ -8,7 +8,6 @@ import {
 } from "../api/businesses";
 import { APIError } from "../api/errors";
 import { AccountAccess } from "../components/AccountAccess";
-import { BusinessNavigation } from "../components/BusinessNavigation";
 import {
 	Button,
 	Card,
@@ -101,7 +100,7 @@ function SettingsAccess({ businessId }: { businessId: string }) {
 		);
 	return (
 		<div className="ql-stack">
-			<BusinessNavigation businessId={businessId} />
+
 			<SettingsContent businessId={businessId} />
 		</div>
 	);

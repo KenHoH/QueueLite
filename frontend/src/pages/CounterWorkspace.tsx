@@ -1,3 +1,5 @@
+import { Check, Monitor, SkipForward, Users } from 'lucide-react';
+import { useWorkspaceBusiness } from '../components/ApplicationShell';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -76,6 +78,7 @@ function Workspace({ counterId }: { counterId: string }) {
 	const lock = useRef(false);
 	const data = resource.data,
 		queue = data && currentQueue(data.counter, data.queues);
+  useWorkspaceBusiness(data?.counter.businessId);
 
 	async function act(action: "call" | "process" | "complete" | "skip") {
 		if (lock.current || !data || uncertain) return;
@@ -99,11 +102,9 @@ function Workspace({ counterId }: { counterId: string }) {
 					);
 				}
 			}
-			resource.retry();
 		} catch (failure) {
 			setError(operationsError(failure));
 			setUncertain(true);
-			resource.retry();
 		} finally {
 			lock.current = false;
 			setBusy(false);
@@ -158,7 +159,7 @@ function Workspace({ counterId }: { counterId: string }) {
 							className="ql-workspace-current"
 							aria-labelledby="current-customer-heading"
 						>
-							<h2 id="current-customer-heading">Customer being handled</h2>
+							<h2 id="current-customer-heading">Currently serving</h2><Monitor className="ql-workspace-icon" size={26} aria-hidden="true" />
 							{active ? (
 								<>
 									<div className="ql-workspace-badges">
@@ -191,7 +192,7 @@ function Workspace({ counterId }: { counterId: string }) {
 												disabled={uncertain}
 												onClick={() => void act("complete")}
 											>
-												Complete
+                        <Check size={17} aria-hidden="true" /> Complete
 											</Button>
 										)}
 										<Button
@@ -199,7 +200,7 @@ function Workspace({ counterId }: { counterId: string }) {
 											disabled={busy || uncertain}
 											onClick={() => void act("skip")}
 										>
-											Skip
+                      <SkipForward size={17} aria-hidden="true" /> Skip
 										</Button>
 									</div>
 								</>
@@ -229,14 +230,11 @@ function Workspace({ counterId }: { counterId: string }) {
 							aria-labelledby="next-customer-heading"
 						>
 							<h2 id="next-customer-heading">Next customer</h2>
-							<p className="ql-workspace-next-value">Selected by scheduler</p>
+              <Users className="ql-workspace-icon" size={27} aria-hidden="true" /><p className="ql-workspace-next-value">{waiting} {waiting === 1 ? 'customer' : 'customers'} waiting</p>
 							<p className="ql-muted">
-								The next ticket is selected securely when you call or skip,
-								including priority and fairness rules.
+								Call the next customer when this counter is ready.
 							</p>
-							<p className="ql-meta">
-								{waiting} {waiting === 1 ? "customer" : "customers"} waiting
-							</p>
+              <p className="ql-meta">Complete finishes this visit. Skip also calls the next waiting customer.</p>
 						</Card>
 					</div>
 				</>

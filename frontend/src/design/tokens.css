@@ -1,11 +1,11 @@
 :root {
   color-scheme: light;
-  --ql-background: #F8F9F6;
+  --ql-background: #FAFAF8;
   --ql-surface: #FFFFFF;
   --ql-text: #202825;
   --ql-text-secondary: #65706A;
   --ql-mint: #69C5AA;
-  --ql-action: #29473E;
+  --ql-action: #293E36;
   --ql-soft-mint: #EDF5EF;
   --ql-border: #E3E7E2;
   --ql-error: #B75D57;
@@ -23,7 +23,7 @@
   --ql-display: 2.25rem;
   --ql-title: 2rem;
   --ql-section: 1.25rem;
-  --ql-body: 1rem;
+  --ql-body: .9375rem;
   --ql-small: .875rem;
   --ql-meta: .8125rem;
   --ql-space-1: .25rem;
@@ -38,9 +38,22 @@
   --ql-radius-control: .5rem;
   --ql-radius-card: .75rem;
   --ql-radius-pill: 999px;
-  --ql-content-width: 72rem;
+  --ql-content-width: 68rem;
   /* Matches the real height of inputs, selects and buttons (min-h-11 = 44px). */
   --ql-control-height: 2.75rem;
+
+  --ql-sidebar-width: 14rem;
+  --ql-flow-width: 50rem;
+  --ql-ticket-display: clamp(3rem, 6vw, 4.5rem);
+  --ql-hero-surface: #EDF0E4;
+  --ql-hero-decoration: #D4DDC7;
+  --ql-icon-surface: #EFF2E8;
+  --ql-count-size: 1.5rem;
+  --ql-banner-height: 10rem;
+  --ql-icon-size: 3rem;
+  --ql-icon-size-large: 4rem;
+  --ql-header-height: 5rem;
+  --ql-border-accent: #86B29B;
 
   /* shadcn/Tailwind semantic aliases backed by QueueLite product tokens. */
   --background: var(--ql-background);

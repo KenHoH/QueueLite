@@ -28,11 +28,11 @@ All colours are CSS custom properties defined in `frontend/src/design/tokens.css
 
 | Token | HEX | Use |
 | --- | --- | --- |
-| `--ql-background` | `#F8F9F6` | Page background |
+| `--ql-background` | `#FAFAF8` | Page background |
 | `--ql-surface` | `#FFFFFF` | Cards, header, inputs, popovers |
 | `--ql-text` | `#202825` | Body text and headings |
 | `--ql-text-secondary` | `#65706A` | Descriptions, helper text, inactive nav (`.ql-muted`) |
-| `--ql-action` | `#29473E` | Primary buttons, links, focus ring, active nav, wordmark "Queue" |
+| `--ql-action` | `#293E36` | Primary buttons, links, focus ring, active nav, wordmark "Queue" |
 | `--ql-mint` | `#69C5AA` | Brand accent (wordmark "Lite"); decorative only |
 | `--ql-soft-mint` | `#EDF5EF` | Secondary button and badge fill, highlighted panels, avatar |
 | `--ql-border` | `#E3E7E2` | Card, input and divider borders |
@@ -61,7 +61,7 @@ Font: **Inter Variable**, bundled with the app through `@fontsource-variable/int
 | `--ql-display` | 2.25rem (36 px) | Queue numbers, hero headings |
 | `--ql-title` | 2rem (32 px; 28 px on phones) | Page `h1` |
 | `--ql-section` | 1.25rem (20 px) | Section and card `h2` |
-| `--ql-body` | 1rem (16 px) | Body text |
+| `--ql-body` | 0.9375rem (15 px) | Body text |
 | `--ql-small` | 0.875rem (14 px) | Labels, nav, buttons, helper text |
 | `--ql-meta` | 0.8125rem (13 px) | Eyebrows, badges, fine print |
 
@@ -74,7 +74,7 @@ Font: **Inter Variable**, bundled with the app through `@fontsource-variable/int
 
 ## 4. Layout and spacing
 
-- Page wrapper: `PageContainer` (`.ql-page`). Content max width `--ql-content-width` (72rem), centred, horizontal gutter, vertical padding that shrinks on phones.
+- Page wrapper: `PageContainer` (`.ql-page`). Content max width `--ql-content-width` (68rem), centred, horizontal gutter, vertical padding that shrinks on phones.
 - Narrow, form-like pages add a modifier class (`.ql-account-page`, `.ql-narrow-section`, `.ql-ticket-page`) so text lines stay readable.
 - Spacing scale (use only these): `--ql-space-1` 4 px, `-2` 8, `-3` 12, `-4` 16, `-6` 24, `-8` 32, `-10` 40, `-12` 48, `-16` 64.
   - Within a card: `space-3`/`space-4` between related items, `space-6` between groups.
@@ -87,9 +87,11 @@ Font: **Inter Variable**, bundled with the app through `@fontsource-variable/int
 
 | Type | Class | Max width | Pages |
 | --- | --- | --- | --- |
-| Wide (default) | `.ql-page` only | 72rem | Home, My Queues, Manage businesses, My service counters, Plans, every business tool tab (Overview, Counters, Members, Subscription, Share queue), Counter workspace |
+| Wide (default) | `.ql-page` only | 68rem | Home, My Queues, Manage businesses, My service counters, Plans, every business tool tab (Overview, Counters, Members, Subscription, Share queue), Counter workspace |
 | Narrow | `.ql-account-page` | 46rem, centred | Single-column forms: Profile, Create business, Business settings |
-| Ticket | `.ql-ticket-page` | 38rem, centred | Customer flow: join, QR landing, ticket status |
+| Ticket | `.ql-ticket-page` | 38rem, centred | QR landing |
+| Join | `.ql-join-page` | 68rem outer, 50rem content | Join form and confirmation |
+| Status | `.ql-status-page` | 68rem | Ticket + counter board; stacked below 900px |
 
 Pages that sit under the same tab bar (business tools) must share one width, so switching tabs never changes the layout. Inside a wide page, cap line length of long paragraphs (about 46rem) instead of narrowing the whole card.
 
@@ -99,9 +101,9 @@ The CSS uses `max-width` media queries at these four widths. Reuse them; do not 
 
 | Width | What changes |
 | --- | --- |
-| `<= 1050px` | Dense operations layouts (counter workspace) collapse columns |
-| `<= 960px` | Business grid 3 -> 2 columns; customer nav loses its left offset |
-| `<= 900px` | Counter and metric grids 3/4 -> 2 columns |
+| `<= 1050px` | Staff sidebar becomes an expandable workspace menu; customer header collapses into a menu |
+| `<= 960px` | Business grid 4 -> 2 columns |
+| `<= 900px` | Counter and metric grids 3/4 -> 2 columns; ticket and counter board stack |
 | `<= 640px` | Phone layout: single column, smaller `h1`, header collapses into a menu, buttons in stacks stretch, button labels may wrap, action rows stack |
 
 ### Grid rule that prevents phone overflow
@@ -126,8 +128,9 @@ Use the shared component before writing a new one. Wrappers live in `frontend/sr
 | `LoadingSkeleton`, `Spinner` | `foundation.tsx` | Skeleton for page/section loading, spinner inside buttons. |
 | `EmptyState` | `foundation.tsx` | `title`, `description`, optional `action`. `compact` renders a slim single-row version for secondary sections (for example "Joined queues" on Home). |
 | `InlineError` | `foundation.tsx` | `role="alert"` message, always with a retry action when the request can be retried. |
+| `ApplicationShell` | `components/ApplicationShell.tsx` | Customer header/footer or staff sidebar/top bar, selected by the existing route. Counter reads publish their business ID through context; the shell makes no extra API requests. |
 | `AccountMenu` | `components/AccountMenu.tsx` | Header avatar button that reveals Account, Create Business and Logout. Disclosure pattern (`aria-expanded`), closes on Escape (focus returns to the button), outside click and navigation. Inside the phone menu the same list is shown inline. Day-to-day work links (My queues, My Counters, Manage Business) stay in the primary nav, not in this menu. |
-| `BusinessNavigation` | `components/BusinessNavigation.tsx` | Tab-style business section nav. Its first link ("Public page") uses `end` so it is not highlighted on every route under the business. |
+| `BusinessNavigation` | `components/BusinessNavigation.tsx` | Sidebar navigation in `ApplicationShell`. Public page uses `end`. Manager links are absent for counter staff; on small screens the workspace menu can be expanded without a modal. |
 | `Tabs`, `Table`, `Select`, `AlertDialog`, `Label` | `ui/*` | Standard shadcn components. Tables go inside a `*-table-wrap`. Destructive actions use `AlertDialog`. |
 
 Page-level patterns (CSS classes in `foundation.css`):
@@ -204,13 +207,13 @@ Stack: React 19, TypeScript, Vite, Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/
 | `minmax(0, 1fr)` on stacks and `position: relative` on table wrappers | Fixes real phone overflow on Dashboard, Plans and Business plans caused by implicit grid columns and absolutely positioned screen-reader text. |
 | `end` on the "Public page" tab | Without it the first tab was active on every business page. |
 | Buttons do not wrap on desktop but may wrap on phones | Keeps one-line buttons tidy while preventing clipped labels at 360 px. |
-| `PageHeader` on every top-level page | One header pattern (title, description, action, divider) instead of per-page variations. |
+| `PageHeader` on top-level pages | Shared heading rhythm without an extra divider. Ticket pages use their state heading. |
 | Compact `EmptyState` for secondary sections | A full empty card for "Joined queues" pushed the main content down for new users. |
 | Counter cards show status as a badge, not text | Faster scanning of busy/idle counters; matches the badge pattern used elsewhere. |
 | Disabled "Upgrade — coming later" and explanatory text on Plans | Payments and plan changes are not implemented; the UI must not suggest otherwise. |
 | `--ql-control-height` set to 2.75rem | The token said 46 px while real controls were 44 px; the token now matches reality. |
 | Account links in an avatar menu, work links stay in the nav | Six or seven inline links crowded the header. Rarely used account actions collapse into one menu; My Counters and Manage Business are daily tools and stay visible. No new dependency: the menu is a small disclosure component. |
-| Three width types | Pages in one tab bar used three different widths and Share left a large empty area. See [Page widths](#page-widths-one-rule-per-page-type). |
+| Explicit widths by task | Customer discovery/status and staff tools use 68rem. Join content uses 50rem; account forms remain 46rem and QR entry remains 38rem. |
 | Manage card uses shortcut buttons, not the tab bar | The tab bar was duplicated inside the card and wrapped on one line. Three buttons cover the common jobs; everything else is on the dashboard tabs. |
 | Ticket called/waiting states are emphasised | The ticket is the screen customers (and reviewers) look at most. "Called" and "N ahead" are the two facts that matter. |
 | Plan cards on phones | A 44rem table cannot fit 390px without cutting off a plan column; cards show every plan without sideways scrolling. |
@@ -262,3 +265,39 @@ Stack: React 19, TypeScript, Vite, Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/
 - Derived from: the repository at the time of the frontend refresh (`tokens.css`, `foundation.css`, `foundation.tsx`, `components/ui/*`, pages under `src/pages`), plus screenshots of every route at phone, tablet and desktop widths rendered against intercepted API responses.
 - The Notion design references named in the task were not available: the connected Notion workspace contained no QueueLite pages. Nothing was read from, or written to, Notion. If the team has a Notion design page or export, compare it with sections 2-5 and reconcile differences here.
 - The root `README.md` links to a `docs/` suite (`docs/README.md`, `docs/AI_WORKFLOW_RULES.md`) that does not exist in the repository, and this file is currently the only file in `docs/`. If those documents exist elsewhere, add this file to their index.
+
+
+## 13. Reference mockup refresh
+
+The owner’s eight supplied QueueLite screenshots guide this refresh: warm off-white surfaces, quiet green accents, a large ticket on the left with counter information on the right, two-column join forms, a centered confirmation, and a persistent business sidebar on desktop. Form labels, focus targets, and body copy remain readable at phone sizes. Desktop business cards use four columns, two at 960px, and one at 640px.
+
+Additional tokens in `tokens.css`:
+
+| Token | Value | Purpose |
+| --- | --- | --- |
+| `--ql-sidebar-width` | 14rem | Desktop workspace sidebar |
+| `--ql-flow-width` | 50rem | Join-flow content |
+| `--ql-ticket-display` | clamp(3rem, 6vw, 4.5rem) | Ticket number hierarchy |
+| `--ql-hero-surface` | #EDF0E4 | Business banner |
+| `--ql-hero-decoration` | #D4DDC7 | Decorative banner lettering, never essential text |
+| `--ql-icon-surface` | #EFF2E8 | Icon and note backgrounds |
+| `--ql-count-size` | 1.5rem | Queue count chip |
+| `--ql-banner-height` | 10rem | Banner/metric layout |
+| `--ql-icon-size` | 3rem | Shared icon tiles |
+| `--ql-icon-size-large` | 4rem | Business/success icons |
+| `--ql-header-height` | 5rem | Staff top bar |
+| `--ql-border-accent` | #86B29B | Decorative emphasis borders, never small text |
+
+Backend boundaries for this implementation:
+
+- Public business pages and cards do not call staff-only queue or counter listing endpoints. No public queue statistics are fabricated.
+- Categories, service selection, customer names in staff tables, business-specific ticket prefixes, notification preferences, and staff cancellation buttons are omitted because the current API does not provide those flows/fields.
+- Ticket numbers are displayed exactly as returned by the server (for example A020); no new numbering scheme is generated by the browser.
+- Customer position, next ticket, counter state, and estimated wait come from the owned `/queues/:id/customer-status` response. The estimate is one server-provided value, not an invented range. The standard waiting/called/processing/terminal states and confirmation before leaving remain intact.
+- Availability means the server's `operational` flag. It is not presented as a timezone-aware “Open now” calculation.
+- Metrics summarize recorded visits across the returned dataset. They do not claim to be today's totals; average timing only uses completed records with both processing and completion timestamps.
+- Complete finishes the current visit. Start service is required after Call next. Skip also calls the next ticket according to the backend. A combined Complete & call next or independent staff Cancel action is not added.
+- Guest tickets remain browser-bound. Account and membership checks, mutation locks, uncertain-result handling, and polling cleanup remain in use.
+- Development accepts both `/api` and the existing `/queuelite/api` proxy paths. Production still needs the documented same-origin reverse proxy and history fallback.
+
+Automated application checks use intercepted API responses. For local visual review, `npm run preview:ui` additionally enables a Vite-only in-memory API and page picker in `frontend/dev/uiPreview.ts`. This module is outside the browser application and is enabled only for Vite serve in `ui-preview` mode. It never proxies preview requests to the backend. Normal development and production builds retain the real API behavior; no demo businesses, identities, queue values, toolbar or prototype persistence are bundled in the production application.

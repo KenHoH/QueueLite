@@ -1,5 +1,5 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { CustomerHeader } from "./components/CustomerHeader";
+import { ApplicationShell } from "./components/ApplicationShell";
 import { Button, Card, PageContainer } from "./components/foundation";
 import { AccountRoute, BusinessRoute } from "./components/RouteAccess";
 import { RouteEffects } from "./components/RouteEffects";
@@ -25,7 +25,7 @@ export default function App() {
 	return (
 		<>
 			<RouteEffects />
-			<CustomerHeader />
+			<ApplicationShell>
 			<Routes>
 				<Route path="/" element={<Home />} />
 				<Route path="/business/:businessId" element={<BusinessDetail />} />
@@ -171,6 +171,7 @@ export default function App() {
 					}
 				/>
 			</Routes>
+			</ApplicationShell>
 		</>
 	);
 }

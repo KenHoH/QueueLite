@@ -8,6 +8,7 @@ const business = { id: '11111111-1111-4111-8111-111111111111', name: 'Klinik Ayu
 const user = { id: '22222222-2222-4222-8222-222222222222', username: 'Ayu', phonenumber: '081234567890' };
 const counter = { id: '33333333-3333-4333-8333-333333333333', businessId: business.id, name: 'Meja Ayu', currentEmployeeId: user.id };
 const queue = { id: '44444444-4444-4444-8444-444444444444', businessId: business.id, name: 'A001', state: 'waiting', priority: false };
+const customerStatus = () => ({ queue, business: { id: business.id, name: business.name, operational: true }, counters: [{ id: counter.id, name: counter.name, state: 'idle' }], currentlyServing: [], totalCounters: 1, activeCounters: 0, totalWaiting: 1, totalActiveQueues: 1, customerPosition: { position: 1, ahead: 0, queueName: queue.name }, estimatedWaitMinutes: 0, updatedAt: new Date().toISOString() });
 let vite, browser, origin;
 const visible = locator => locator.waitFor({ state: 'visible' });
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -47,6 +48,8 @@ async function scenario(t, options = {}) {
       else if (path.startsWith('/api/businesses/')) response = { json: business };
       else if (path.startsWith('/api/counters/')) response = { json: counter };
       else if (path.endsWith('/state') && method === 'GET') response = { json: { state: queue.state } };
+      else if (path.endsWith('/customer-status')) response = { json: customerStatus() };
+      else if (path === '/api/queues/guest/me') response = { json: [] };
       else if (path.startsWith('/api/queues/')) response = { json: queue };
       else response = { json: { message: 'ok' } };
     }
@@ -57,7 +60,7 @@ async function scenario(t, options = {}) {
 
 test('malformed current-user object remains a recoverable session error', async t => {
   const { page } = await scenario(t, { respond: path => path === '/api/users/me' ? { json: { id: user.id } } : undefined });
-  await page.goto(origin + '/profile'); await visible(page.getByRole('button', { name: /Retry session/ }));
+  await page.goto(origin + '/profile'); await visible(page.getByRole('button', { name: /Retry session/ }).first());
   assert.equal(await page.getByLabel('Phone number', { exact: true }).count(), 0);
 });
 test('malformed plans remain a recoverable read error', async t => {
@@ -73,7 +76,7 @@ test('malformed join success never claims a ticket was accepted', async t => {
 test('duplicate discovery IDs within and across pages never produce duplicate cards', async t => {
   let reads = 0;
   const { page } = await scenario(t, { respond: path => path === '/api/businesses/' ? { json: { data: [business, business], nextCursor: ++reads === 1 ? { createdAt: '2026-10-01T00:00:00Z', id: business.id } : null } } : undefined });
-  await page.goto(origin); await visible(page.getByRole('heading', { name: business.name }));
+  await page.goto(origin); await visible(page.locator('.ql-business-card').getByRole('heading', { name: business.name }));
   assert.equal(await page.locator('.ql-business-card').count(), 1);
   await page.getByRole('button', { name: 'Load more' }).click(); await page.getByRole('button', { name: 'Load more' }).waitFor({ state: 'hidden' });
   assert.equal(await page.locator('.ql-business-card').count(), 1);
@@ -87,7 +90,7 @@ const routes = [
  ['workspace',`/counter/${counter.id}`], ['settings',`/business/${business.id}/settings`], ['business-plans',`/business/${business.id}/plans`],
 ];
 async function ready(page, guest=false) {
-  await visible(guest ? page.getByRole('link', { name: 'Create account', exact: true }) : page.getByRole('button', { name: /^Account menu for/ }));
+  await (guest ? page.getByRole('link', { name: 'Create account', exact: true, includeHidden: true }) : page.getByRole('button', { name: /^Account menu for/, includeHidden: true })).waitFor({ state: 'attached' });
   await page.locator('.ql-skeleton').first().waitFor({ state:'hidden' });
   await visible(page.locator('main'));
 }
@@ -95,8 +98,8 @@ for (const [name,path,guest] of routes) test(`fresh context, refresh, back and f
  const {page}=await scenario(t,{guest}); await page.goto(origin+path); await ready(page,guest);
  const before=await page.locator('main').innerText(); assert.ok(before.trim().length>15); assert.doesNotMatch(before,/undefined|\[object Object\]|TypeError|stack trace/);
  await page.reload(); await ready(page,guest); assert.equal(new URL(page.url()).pathname,path);
- if(path==='/') await page.getByRole('link',{name:'My Queues',exact:true}).click();
- else await page.getByRole('link',{name:'QueueLite',exact:true}).click(); await ready(page,guest);
+ if(path==='/') await page.getByRole('link',{name:'My queues',exact:true}).click();
+ else await page.getByRole('link',{name:/^QueueLite(?: home)?$/}).click(); await ready(page,guest);
  await page.goBack(); await ready(page,guest); assert.equal(new URL(page.url()).pathname,path);
  await page.goForward(); await ready(page,guest); assert.equal(new URL(page.url()).pathname,path==='/'?'/my-queues':'/');
 });
@@ -117,7 +120,7 @@ test('invalid and nonexistent resource URLs fail without stale data',async t=>{
 const reads = [
  ['home','/','/api/businesses/'],['detail',`/business/${business.id}`,`/api/businesses/${business.id}`],
  ['join',`/business/${business.id}/join`,`/api/businesses/${business.id}`], ['my-queues','/my-queues','/api/queues/me'],
- ['plans','/plans',`/api/subscriptions/users/${user.id}`],['ticket',`/queue/${queue.id}`,`/api/queues/${queue.id}`],
+ ['plans','/plans',`/api/subscriptions/users/${user.id}`],['ticket',`/queue/${queue.id}`,`/api/queues/${queue.id}/customer-status`],
  ['dashboard',`/business/${business.id}/dashboard`,`/api/businesses/${business.id}/queues`],
  ['counters',`/business/${business.id}/counters`,`/api/businesses/${business.id}/members`],['workspace',`/counter/${counter.id}`,`/api/counters/${counter.id}`],
 ];
@@ -129,7 +132,7 @@ for(const [name,path,endpoint] of reads) for(const failure of [400,401,403,404,4
  const count=requests.filter(r=>r.path===endpoint).length; await pause(70); assert.equal(requests.filter(r=>r.path===endpoint).length,count);
  fail=false;
  const retry=page.getByRole('button',{name:/Try again|Refresh ticket|Refresh state/}).first();
- if(await retry.count()) { await retry.click(); await ready(page); assert.ok(requests.filter(r=>r.path===endpoint).length>count); }
+ if(await retry.count()) { const recovered = page.waitForRequest(request => new URL(request.url()).pathname === endpoint); await retry.click(); await recovered; await ready(page); assert.ok(requests.filter(r=>r.path===endpoint).length>count); }
  else { await page.reload(); await ready(page); }
 });
 
@@ -140,7 +143,8 @@ for(const width of [375,390,768,1024,1280,1440,1920]) test(`all major pages fit 
   const issues=await page.evaluate(()=>{
    const errors=[]; if(document.documentElement.scrollWidth>innerWidth+1) errors.push('document overflow');
    for(const element of document.querySelectorAll('main button,main input,main select,main textarea')){
-    const rect=element.getBoundingClientRect(); if(rect.width && (rect.left< -1 || rect.right>innerWidth+1)) errors.push('clipped '+element.outerHTML.slice(0,130));
+    if(element.closest('[aria-hidden="true"]')) continue;
+   const rect=element.getBoundingClientRect(); if(rect.width && (rect.left< -1 || rect.right>innerWidth+1)) errors.push('clipped '+element.outerHTML.slice(0,130));
     if(element.matches('input,select,textarea') && !element.labels?.length && !element.getAttribute('aria-label') && !element.getAttribute('aria-labelledby')) errors.push('unlabelled '+element.tagName);
    } return errors;
   }); assert.deepEqual(issues,[],`${name} at ${width}px`);
@@ -211,7 +215,7 @@ for(const [name,path,endpoint,button,guest] of forms)test(`${name} validates bla
  const blank=name==='profile'?'Phone number':name==='settings'?'Business name':name==='counter-update'?`Name for ${counter.name}`:undefined;
  if(blank)await page.getByLabel(blank,{exact:true}).fill('   ');
  await target.click();await visible(page.getByRole('alert').first());assert.equal(requests.filter(r=>r.method!=='GET').length,0);
- await fillForm(page,name);const enclosing=page.locator('form').nth(name==='password'||name==='counter-update'?1:0);
+ await fillForm(page,name);const formIndex=await target.evaluate(button=>Array.from(document.forms).indexOf(button.form)); const enclosing=page.locator('form').nth(formIndex);
  await enclosing.evaluate(form=>{form.requestSubmit();form.requestSubmit();form.requestSubmit();});await pause(80);
  assert.equal(requests.filter(r=>r.path===endpoint && r.method!=='GET').length,1);assert.equal(await enclosing.locator('button[type=submit]').isDisabled(),true);release();await visible(page.getByRole('alert').first());
 });
@@ -245,5 +249,5 @@ test('keyboard focus, error association and leave confirmation are usable',async
 });
 test('slow auth has understandable loading and times out with manual recovery',async t=>{
  const {page}=await scenario(t,{respond:async path=>{if(path==='/api/users/me'){await pause(21000);return {json:user};}}});
- await page.clock.install();await page.goto(origin+'/profile');await visible(page.getByText('Checking your account',{exact:true}));await page.clock.fastForward(20001);await visible(page.getByRole('button',{name:'Retry session check'}));
+ await page.clock.install();await page.goto(origin+'/profile');await visible(page.getByText('Checking your account',{exact:true}));await page.clock.fastForward(20001);await visible(page.getByRole('button',{name:'Retry session check'}).first());
 });
