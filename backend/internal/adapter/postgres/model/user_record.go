@@ -13,6 +13,7 @@ type User struct {
 	PhoneNumber string    `gorm:"size:30;not null;uniqueIndex" json:"phoneNumber"`
 	Password    *string   `gorm:"size:255;" json:"password"`
 	Email       *string   `gorm:"size:255;uniqueIndex" json:"email,omitempty"`
+	ChatID      *string   `gorm:"size:100;index" json:"chatId,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
