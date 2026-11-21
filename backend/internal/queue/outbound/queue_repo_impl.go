@@ -104,6 +104,18 @@ func (r *QueueRepoImpl) GetAllQueueByBusiness(ctx context.Context, businessID uu
 	return toDomainQueues(records), nil
 }
 
+// GetActiveQueuesByBusiness fetches only currently served queues (called/processing) for status snapshots.
+func (r *QueueRepoImpl) GetActiveQueuesByBusiness(ctx context.Context, businessID uuid.UUID) ([]domain.Queue, error) {
+	var records []model.Queue
+	if err := r.db.WithContext(ctx).
+		Where("business_id = ? AND state IN ?", businessID, []model.QueueState{model.QueueStateCalled, model.QueueStateProcessing}).
+		Order("created_at ASC").
+		Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("get active business queues: %w", err)
+	}
+	return toDomainQueues(records), nil
+}
+
 func (r *QueueRepoImpl) DeleteQueue(ctx context.Context, id uuid.UUID) error {
 	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Queue{})
 	if result.Error != nil {

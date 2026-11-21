@@ -1,6 +1,9 @@
 package bootstrap
 
 import (
+	"context"
+	"sync"
+
 	businessapp "QueueLite/internal/business/app"
 	businesshttp "QueueLite/internal/business/inbound/http"
 	businessoutbound "QueueLite/internal/business/outbound"
@@ -27,7 +30,16 @@ import (
 	"gorm.io/gorm"
 )
 
+type RouterOptions struct {
+	WorkerCount int
+	Workers     *sync.WaitGroup
+}
+
 func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
+	return NewRouterWithOptions(context.Background(), db, rdb, RouterOptions{})
+}
+
+func NewRouterWithOptions(appCtx context.Context, db *gorm.DB, rdb *redis.Client, opts RouterOptions) *chi.Mux {
 	router := chi.NewRouter()
 
 	subscriptionRepo := subscriptionoutbound.NewSubscriptionRepo(db)
@@ -42,19 +54,33 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	businessRepo := businessoutbound.NewBusinessRepo(db)
 	businessMembershipRepo := businessoutbound.NewBusinessMembershipRepo(db)
 	counterRepo := counteroutbound.NewCounterRepo(db)
-	go queueapp.RunDatabaseWorkerStream(ctx, rdb, queueRepo)
+
+	workerOpts := queueapp.DefaultDatabaseWorkerOptions()
+	if opts.WorkerCount > 0 {
+		workerOpts.WorkerCount = opts.WorkerCount
+	}
+	workerOpts.CapacitySyncer = subscriptionService
+	startWorker(opts.Workers, func() {
+		queueapp.RunDatabaseWorkerPool(appCtx, rdb, queueRepo, workerOpts)
+	})
+
 	queueService := queueapp.NewQueueService(queueRepo, subscriptionService, rdb, businessRepo, userRepo, counterRepo)
 	queueHandler := queuehttp.NewQueueHandler(queueService)
 
+	telebotService := telebotapp.NewTelebotService(userRepo, rdb)
+	startWorker(opts.Workers, func() {
+		telebotService.RunNotificationWorker(appCtx, rdb)
+	})
+	telebotHandler := telebothttp.NewTelebotHandler(telebotService)
+
 	counterService := counterapp.NewCounterService(counterRepo, queueRepo, subscriptionService, rdb)
+	counterService.SetNotifier(telebotService)
+	counterService.SetTxManager(&gormCounterTxManager{db: db})
 	counterHandler := counterhttp.NewCounterHandler(counterService)
 	operationsHandler := operations.New(businessRepo, counterRepo, queueRepo, rdb)
 
 	businessService := businessapp.NewBusinessService(businessRepo, businessMembershipRepo, subscriptionService, counterService)
 	businessHandler := businesshttp.NewBusinessHandler(businessService)
-
-	telebotService := telebotapp.NewTelebotService(userRepo)
-	telebotHandler := telebothttp.NewTelebotHandler(telebotService)
 
 	router.Route("/users", func(r chi.Router) {
 		r.Post("/logout", userHandler.LogoutUser)
@@ -86,6 +112,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 			private.Get("/{businessID}/members", operationsHandler.ListMembers)
 			private.With(businessHandler.RequireManagement).Put("/{businessID}/members", businessHandler.UpsertBusinessMember)
 			private.With(operationsHandler.RequireBusiness).Get("/{businessID}/queues", queueHandler.GetAllQueueByBusiness)
+			private.With(operationsHandler.RequireBusiness).Get("/{businessID}/events", queueHandler.BusinessQueueSSEHandler)
 			private.With(businessHandler.RequireManagement).Put("/{businessID}", businessHandler.UpdateBusiness)
 			private.With(businessHandler.RequireManagement).Delete("/{businessID}", businessHandler.DeleteBusiness)
 		})
@@ -93,6 +120,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 
 	router.Route("/queues", func(r chi.Router) {
 		r.With(middleware.AuthMiddleware(userRepo), operationsHandler.RequireBusiness).Get("/business/{businessID}", queueHandler.GetAllQueueByBusiness)
+		r.With(middleware.AuthMiddleware(userRepo), operationsHandler.RequireBusiness).Get("/business/{businessID}/events", queueHandler.SSEHandler)
 		r.With(middleware.AuthMiddleware(userRepo)).Get("/me", queueHandler.GetMyQueues)
 		r.Group(func(public chi.Router) {
 			public.Use(middleware.PublicMiddleware(userRepo))
@@ -110,6 +138,7 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 			protected.Get("/{queueID}", queueHandler.GetQueue)
 			protected.Get("/{queueID}/state", queueHandler.GetQueueState)
 			protected.Get("/{queueID}/customer-status", queueHandler.GetCustomerQueueStatus)
+			protected.Get("/{queueID}/events", queueHandler.CustomerQueueSSEHandler)
 			protected.Delete("/{queueID}", queueHandler.DeleteQueue)
 			protected.Put("/{queueID}", queueHandler.UpdateQueue)
 			protected.Patch("/{queueID}/state", queueHandler.UpdateState)
@@ -149,4 +178,29 @@ func NewRouter(db *gorm.DB, rdb *redis.Client) *chi.Mux {
 	})
 
 	return router
+}
+
+func startWorker(wg *sync.WaitGroup, fn func()) {
+	if wg == nil {
+		go fn()
+		return
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fn()
+	}()
+}
+
+type gormCounterTxManager struct {
+	db *gorm.DB
+}
+
+func (m *gormCounterTxManager) WithTransaction(ctx context.Context, fn func(counterRepo counterapp.CounterRepo, queueRepo counterapp.CounterQueueRepo) error) error {
+	if m == nil || m.db == nil {
+		return nil
+	}
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return fn(counteroutbound.NewCounterRepo(tx), queueoutbound.NewQueueRepo(tx))
+	})
 }

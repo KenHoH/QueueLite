@@ -3,12 +3,12 @@ package validation
 import "testing"
 
 func TestContactFormats(t *testing.T) {
-	for _, phone := range []string{"081234567890", "+62 812-3456-7890", "6281234567890", "(021) 1234-5678"} {
+	for _, phone := range []string{"081234567890", "+62 812-3456-7890", "6281234567890", "(0812) 3456.7890"} {
 		if !Phone(phone) {
 			t.Errorf("valid phone %q", phone)
 		}
 	}
-	for _, phone := range []string{"", "   ", "abc", "08", "1234567890123456", "+62<script>"} {
+	for _, phone := range []string{"", "   ", "abc", "08", "(021) 1234-5678", "+15551234567", "1234567890123456", "+62<script>"} {
 		if Phone(phone) {
 			t.Errorf("invalid phone %q", phone)
 		}

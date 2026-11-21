@@ -24,7 +24,10 @@ func (s *QueueService) GuestOwnsQueue(ctx context.Context, queue *domain.Queue, 
 		// Retain access for QR tickets created before the customer mapping existed.
 		legacy, legacyErr := cache.GetGuestQueueUser(ctx, s.rdt, guestID)
 		if errors.Is(legacyErr, redis.Nil) {
-			return false, nil
+			// Redis cache may have been evicted or restarted. The guestToken JWT is
+			// server-signed and ProtectedMiddleware already verified queueToken for queue.ID,
+			// so matching guestID & businessID against the persisted queue preserves access.
+			return queue.UserID.String() == guestID && queue.BusinessID.String() == businessID, nil
 		}
 		if legacyErr != nil {
 			return false, apperror.Wrap(apperror.KindInternal, "VERIFY_QUEUE_OWNERSHIP_ERROR", "failed to verify queue ownership", legacyErr)

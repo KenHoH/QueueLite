@@ -23,12 +23,16 @@ func NewBusinessMembershipRepo(db *gorm.DB) *BusinessMembershipRepoImpl {
 	}
 }
 
-func (r *BusinessMembershipRepoImpl) UpsertUserBusinessRelation(ctx context.Context, businessID, userID uuid.UUID, role string) error {
-	relation := model.UserBusinessRelation{BusinessID: businessID, UserID: userID, Role: model.BusinessRole(role)}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+func upsertUserBusinessRelation(tx *gorm.DB, relation *model.UserBusinessRelation) *gorm.DB {
+	return tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "business_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"role", "updated_at"}),
-	}).Create(&relation).Error; err != nil {
+	}).Create(relation)
+}
+
+func (r *BusinessMembershipRepoImpl) UpsertUserBusinessRelation(ctx context.Context, businessID, userID uuid.UUID, role string) error {
+	relation := model.UserBusinessRelation{BusinessID: businessID, UserID: userID, Role: model.BusinessRole(role)}
+	if err := upsertUserBusinessRelation(r.db.WithContext(ctx), &relation).Error; err != nil {
 		return fmt.Errorf("upsert user business relation: %w", err)
 	}
 	return nil

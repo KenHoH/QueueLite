@@ -18,27 +18,13 @@ func (s *CounterService) GetQueueCache(ctx context.Context, businessID string) (
 }
 
 func (s *CounterService) GetWaitingQueueSnapshot(ctx context.Context, businessID uuid.UUID) ([]QueueSnapshotItem, error) {
-	tasks, err := s.GetQueueCache(ctx, businessID.String())
+	entries, err := cache.GetWaitingQueueSnapshot(ctx, s.rdt, businessID.String())
 	if err != nil {
 		return nil, err
 	}
-
-	response := make([]QueueSnapshotItem, 0, len(tasks))
-	for _, data := range tasks {
-		queueID, ok := data.Member.(string)
-		if !ok {
-			continue
-		}
-
-		queueName, err := s.GetQueueNameCache(ctx, queueID)
-		if err != nil {
-			continue
-		}
-
-		response = append(response, QueueSnapshotItem{
-			QueueID:   queueID,
-			QueueName: queueName,
-		})
+	response := make([]QueueSnapshotItem, len(entries))
+	for i, entry := range entries {
+		response[i] = QueueSnapshotItem{QueueID: entry.QueueID, QueueName: entry.QueueName}
 	}
 	return response, nil
 }

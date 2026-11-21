@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"sync"
 	"testing"
+	"time"
 )
 
 func assertCode(t *testing.T, err error, code string) {
@@ -114,7 +115,7 @@ func TestGuestPhoneLifecycle(t *testing.T) {
 			ctx := context.Background()
 			f := testutil.NewQueueFixture(t)
 			input := guestInput(f)
-			result, err := f.Service.RegisterQueueByQR(ctx, input)
+			result, err := f.Service.RegisterCustomerQueue(ctx, input)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -200,9 +201,10 @@ func TestWaitingSnapshotIncludesSplitAndLegacyQueues(t *testing.T) {
 func TestCustomerQueueStatusAggregatesPositionAndCounters(t *testing.T) {
 	f := testutil.NewQueueFixture(t)
 	ctx := context.Background()
-	called := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A001", State: domain.QueueStateCalled}
-	first := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A002", State: domain.QueueStateWaiting}
-	customer := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A003", State: domain.QueueStateWaiting}
+	now := time.Now().UTC()
+	called := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A001", State: domain.QueueStateCalled, CreatedAt: now}
+	first := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A002", State: domain.QueueStateWaiting, CreatedAt: now.Add(time.Second)}
+	customer := domain.Queue{ID: uuid.New(), BusinessID: f.Business.ID, Name: "A003", State: domain.QueueStateWaiting, CreatedAt: now.Add(2 * time.Second)}
 	f.Persist(called)
 	f.Persist(first)
 	f.Persist(customer)

@@ -3,6 +3,7 @@ package operations
 
 import (
 	httpadapter "QueueLite/internal/adapter/http"
+	cache "QueueLite/internal/adapter/redis"
 	"QueueLite/internal/apperror"
 	businessdomain "QueueLite/internal/business/domain"
 	counterapp "QueueLite/internal/counter/app"
@@ -159,8 +160,7 @@ func (h *Handler) RequireCounter(next http.Handler) http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 			r = r.WithContext(ctx)
-			key, token := "counter:operation:"+id.String(), uuid.NewString()
-			locked, e := h.redis.SetNX(r.Context(), key, token, 30*time.Second).Result()
+			release, locked, e := cache.AcquireCounterLock(r.Context(), h.redis, id.String(), cache.DefaultCounterLockTTL)
 			if e != nil {
 				httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "COUNTER_LOCK_ERROR", "counter operation unavailable", e))
 				return
@@ -169,11 +169,7 @@ func (h *Handler) RequireCounter(next http.Handler) http.Handler {
 				httpadapter.WriteError(w, stale())
 				return
 			}
-			defer func() {
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				defer cancel()
-				h.redis.Eval(ctx, `if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0`, []string{key}, token)
-			}()
+			defer release()
 			counter, err = h.counters.GetCounter(r.Context(), id)
 			if err != nil {
 				httpadapter.WriteError(w, counterReadError(err))

@@ -23,3 +23,11 @@ type CounterQueueRepo interface {
 	UpdateQueueIfState(ctx context.Context, queue *queuedomain.Queue, expected queuedomain.QueueState) error
 	GetTopQueueByBusinessPrivateForUpdate(ctx context.Context, businessID uuid.UUID) (*queuedomain.Queue, error)
 }
+
+type CounterTxManager interface {
+	WithTransaction(ctx context.Context, fn func(counterRepo CounterRepo, queueRepo CounterQueueRepo) error) error
+}
+
+type CounterNotifier interface {
+	EnqueueUserNotification(ctx context.Context, userID uuid.UUID, text string) error
+}

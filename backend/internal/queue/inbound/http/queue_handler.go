@@ -2,6 +2,7 @@ package inbound
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -29,10 +30,11 @@ func NewQueueHandler(s *app.QueueService) *QueueHandlerImpl {
 	}
 }
 
-func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Request) {
+func resolvePublicBaseURL(r *http.Request) string {
+	if configured := config.PublicBaseURL(); configured != "" {
+		return configured
+	}
 	scheme := r.Header.Get("X-Forwarded-Proto")
-	host := r.Header.Get("X-Forwarded-Host")
-
 	if scheme == "" {
 		if r.TLS != nil {
 			scheme = "https"
@@ -40,17 +42,19 @@ func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Re
 			scheme = "http"
 		}
 	}
-
+	host := r.Header.Get("X-Forwarded-Host")
 	if host == "" {
 		host = r.Host
 	}
+	return fmt.Sprintf("%s://%s", scheme, host)
+}
 
-	url := fmt.Sprintf("%s://%s", scheme, host)
+func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Request) {
 	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
 	if !ok {
 		return
 	}
-	fileBytes, err := h.s.GenerateQRImage(url, businessID.String())
+	fileBytes, err := h.s.GenerateQRImage(resolvePublicBaseURL(r), businessID.String())
 	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
@@ -58,80 +62,14 @@ func (h *QueueHandlerImpl) GenerateQRCodeImage(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Content-Disposition", `attachment; filename="qrcode.png"`)
-
-	// Convert []byte to an io.ReadSeeker
-	content := bytes.NewReader(fileBytes)
-
-	// http.ServeContent automatically determines the Content-Type from the filename extension
-	http.ServeContent(w, r, "qrcode.png", time.Now(), content)
+	http.ServeContent(w, r, "qrcode.png", time.Now(), bytes.NewReader(fileBytes))
 }
 
-func (h *QueueHandlerImpl) SSEHandler(w http.ResponseWriter, r *http.Request) {
-	businessID, ok := parseUUIDParam(w, r, "businessID", "INVALID_BUSINESS_ID", "invalid business id")
-	if !ok {
-		return
-	}
-
-	// sse header
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok { // this to check if w is also Flusher as well, or can be changed to Flusher
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	pubsub := h.s.SubscribeQueueChannel(r.Context(), businessID.String())
-	// Always close the PubSub client to prevent connection leaks
-	defer pubsub.Close()
-	ch := pubsub.Channel()
-
-	sendSnapshot := func() bool {
-		response, err := h.s.GetWaitingQueueSnapshot(r.Context(), businessID)
-		if err != nil {
-			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-			flusher.Flush()
-			return false
-		}
-
-		payload, err := json.Marshal(NewQueueSnapshotResponses(response))
-		if err != nil {
-			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-			flusher.Flush()
-			return false
-		}
-
-		if _, err := fmt.Fprintf(w, "event: queue.update\ndata: %s\n\n", payload); err != nil {
-			return false
-		}
-		flusher.Flush()
-		return true
-	}
-
-	if !sendSnapshot() {
-		return
-	}
-
-	for {
-		select {
-		case <-r.Context().Done():
-			// Client disconnected
-			return
-
-		// every msg from sub channel
-		case _, ok := <-ch:
-			if !ok {
-				return
-			}
-			if !sendSnapshot() {
-				return
-			}
-		}
-	}
+func attachActiveQueue(response *QueueQRResolveResponse, q *domain.Queue) {
+	qIDStr := q.ID.String()
+	qResp := NewQueueResponse(q)
+	response.ActiveQueueID = &qIDStr
+	response.ActiveQueue = &qResp
 }
 
 func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +78,6 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// check if the business exist or not
 	if err := h.s.ValidateBusinessExists(r.Context(), businessID); err != nil {
 		httpadapter.WriteError(w, err)
 		return
@@ -154,16 +91,12 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 	}
 	if !authenticated {
 		response.RequiredFields = []string{"username", "phoneNumber"}
-		queues, err := h.resolveGuestQueuesFromRequest(r)
-		if err == nil {
-			for _, q := range queues {
-				if q.BusinessID == businessID && !q.IsTerminal() {
+		if queues, err := h.resolveGuestQueuesFromRequest(r); err == nil {
+			for i := range queues {
+				if queues[i].BusinessID == businessID && !queues[i].IsTerminal() {
 					response.RequiresGuestForm = false
 					response.RequiredFields = nil
-					qIDStr := q.ID.String()
-					response.ActiveQueueID = &qIDStr
-					qResp := NewQueueResponse(&q)
-					response.ActiveQueue = &qResp
+					attachActiveQueue(&response, &queues[i])
 					break
 				}
 			}
@@ -171,10 +104,7 @@ func (h *QueueHandlerImpl) ResolveQueueQR(w http.ResponseWriter, r *http.Request
 	} else if parsedUser, err := uuid.Parse(userID); err == nil {
 		active, err := h.s.GetActiveQueueByUserAndBusiness(r.Context(), parsedUser, businessID)
 		if err == nil && active != nil && !active.IsTerminal() {
-			qIDStr := active.ID.String()
-			response.ActiveQueueID = &qIDStr
-			qResp := NewQueueResponse(active)
-			response.ActiveQueue = &qResp
+			attachActiveQueue(&response, active)
 		}
 	}
 
@@ -187,7 +117,7 @@ type guestTokenData struct {
 	phoneNumber string
 }
 
-func (h *QueueHandlerImpl) resolveGuestQueuesFromRequest(r *http.Request) ([]domain.Queue, error) {
+func extractGuestRequestTokens(r *http.Request) ([]guestTokenData, []string) {
 	var guestTokens []guestTokenData
 	var queueTokenIDs []string
 
@@ -202,7 +132,6 @@ func (h *QueueHandlerImpl) resolveGuestQueuesFromRequest(r *http.Request) ([]dom
 				})
 			}
 		}
-
 		if cookie.Name == "queueToken" || strings.HasPrefix(cookie.Name, "queueToken_") {
 			qID, err := middleware.ValidateQueueToken(cookie.Value)
 			if err == nil && qID != "" {
@@ -210,60 +139,80 @@ func (h *QueueHandlerImpl) resolveGuestQueuesFromRequest(r *http.Request) ([]dom
 			}
 		}
 	}
+	return guestTokens, queueTokenIDs
+}
 
-	seen := make(map[uuid.UUID]bool)
+func (h *QueueHandlerImpl) guestOwnsAnyToken(ctx context.Context, queue *domain.Queue, guestTokens []guestTokenData) bool {
+	businessID := queue.BusinessID.String()
+	for _, gt := range guestTokens {
+		if gt.businessID != businessID {
+			continue
+		}
+		if owned, err := h.s.GuestOwnsQueue(ctx, queue, gt.guestID, gt.businessID, gt.phoneNumber); err == nil && owned {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *QueueHandlerImpl) resolveOwnedTokenQueues(
+	ctx context.Context,
+	queueTokenIDs []string,
+	guestTokens []guestTokenData,
+	seen map[uuid.UUID]bool,
+) []domain.Queue {
 	var activeQueues []domain.Queue
-
-	// 1. Check queues identified by queueTokens
 	for _, qIDStr := range queueTokenIDs {
 		qUUID, err := uuid.Parse(qIDStr)
 		if err != nil || seen[qUUID] {
 			continue
 		}
-		queue, err := h.s.GetQueue(r.Context(), qUUID)
+		queue, err := h.s.GetQueue(ctx, qUUID)
 		if err != nil || queue == nil || queue.IsTerminal() {
 			continue
 		}
-		owned := false
-		for _, gt := range guestTokens {
-			if gt.businessID != queue.BusinessID.String() {
-				continue
-			}
-			guestOwns, accessErr := h.s.GuestOwnsQueue(r.Context(), queue, gt.guestID, gt.businessID, gt.phoneNumber)
-			if accessErr == nil && guestOwns {
-				owned = true
-				break
-			}
-		}
-		if owned {
+		if h.guestOwnsAnyToken(ctx, queue, guestTokens) {
 			seen[queue.ID] = true
 			activeQueues = append(activeQueues, *queue)
 		}
 	}
+	return activeQueues
+}
 
-	// 2. Also check businesses identified by guestTokens in case queueToken was scoped or absent
+func (h *QueueHandlerImpl) appendFallbackGuestQueues(
+	ctx context.Context,
+	guestTokens []guestTokenData,
+	activeQueues []domain.Queue,
+	seen map[uuid.UUID]bool,
+) []domain.Queue {
+	seenBusinesses := make(map[uuid.UUID]bool, len(activeQueues))
+	for _, aq := range activeQueues {
+		seenBusinesses[aq.BusinessID] = true
+	}
+
 	for _, gt := range guestTokens {
 		bUUID, err := uuid.Parse(gt.businessID)
-		if err != nil {
+		if err != nil || seenBusinesses[bUUID] {
 			continue
 		}
-		alreadyHasBusinessQueue := false
-		for _, aq := range activeQueues {
-			if aq.BusinessID == bUUID {
-				alreadyHasBusinessQueue = true
-				break
-			}
-		}
-		if alreadyHasBusinessQueue {
-			continue
-		}
-
-		queue, err := h.s.GetActiveGuestQueue(r.Context(), gt.guestID, gt.businessID, gt.phoneNumber)
+		queue, err := h.s.GetActiveGuestQueue(ctx, gt.guestID, gt.businessID, gt.phoneNumber)
 		if err == nil && queue != nil && !queue.IsTerminal() && !seen[queue.ID] {
 			seen[queue.ID] = true
+			seenBusinesses[bUUID] = true
 			activeQueues = append(activeQueues, *queue)
 		}
 	}
+	return activeQueues
+}
+
+func (h *QueueHandlerImpl) resolveGuestQueuesFromRequest(r *http.Request) ([]domain.Queue, error) {
+	guestTokens, queueTokenIDs := extractGuestRequestTokens(r)
+	seen := make(map[uuid.UUID]bool)
+
+	// 1. Check queues identified by queueTokens.
+	activeQueues := h.resolveOwnedTokenQueues(r.Context(), queueTokenIDs, guestTokens, seen)
+	// 2. Also check businesses identified by guestTokens in case queueToken was scoped or absent.
+	activeQueues = h.appendFallbackGuestQueues(r.Context(), guestTokens, activeQueues, seen)
 
 	return activeQueues, nil
 }
@@ -299,18 +248,20 @@ func (h *QueueHandlerImpl) registerCustomerQueue(w http.ResponseWriter, r *http.
 		httpadapter.WriteError(w, apperror.Wrap(apperror.KindInternal, "CREATE_QUEUE_TOKEN_ERROR", "failed to create queue token", err))
 		return
 	}
+	loadedUser, _ := middleware.LoadedUserFromContext(r.Context())
 	result, err := h.s.RegisterCustomerQueue(r.Context(), app.RegisterCustomerQueueInput{
-		BusinessID:  businessID,
-		UserID:      userID,
-		Username:    request.Username,
-		PhoneNumber: request.PhoneNumber,
+		BusinessID:        businessID,
+		UserID:            userID,
+		AuthenticatedUser: loadedUser,
+		Username:          request.Username,
+		PhoneNumber:       request.PhoneNumber,
 	})
 	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
 	}
 
-	// create and set the queue token
+	// Create and set the queue token.
 	maxAge := int(config.GuestExpirationTime.Seconds())
 	queueToken, err := middleware.CreateQueueToken(result.Username, result.Queue.ID.String())
 	if err != nil {
@@ -319,7 +270,7 @@ func (h *QueueHandlerImpl) registerCustomerQueue(w http.ResponseWriter, r *http.
 	}
 	setTicketCookie(w, r, "queueToken", queueToken, result.Queue.ID.String(), maxAge)
 
-	// create and set the guest token
+	// Create and set the guest token.
 	if result.GuestID != nil {
 		guestToken, err := middleware.CreateGuestToken(result.GuestID.String(), businessID.String(), result.PhoneNumber)
 		if err != nil {
@@ -335,8 +286,9 @@ func (h *QueueHandlerImpl) registerCustomerQueue(w http.ResponseWriter, r *http.
 func setTicketCookie(w http.ResponseWriter, r *http.Request, name, value, queueID string, maxAge int) {
 	// Per-ticket names preserve guest tickets even behind the /api reverse proxy.
 	// Legacy root names retain QR compatibility for the newest ticket.
+	secure := config.IsCookieSecure() || r.TLS != nil
 	for _, cookieName := range []string{name + "_" + queueID, name} {
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: value, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: maxAge})
+		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: value, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge})
 	}
 }
 
@@ -367,6 +319,11 @@ func (h *QueueHandlerImpl) GetQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if preloaded, loaded := middleware.LoadedQueueFromContext(r.Context()); loaded && preloaded.ID == queueID {
+		httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponse(preloaded))
+		return
+	}
+
 	queue, err := h.s.GetQueue(r.Context(), queueID)
 	if err != nil {
 		httpadapter.WriteError(w, err)
@@ -381,7 +338,8 @@ func (h *QueueHandlerImpl) GetCustomerQueueStatus(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	status, err := h.s.GetCustomerQueueStatus(r.Context(), queueID)
+	preloaded, _ := middleware.LoadedQueueFromContext(r.Context())
+	status, err := h.s.GetCustomerQueueStatusWithQueue(r.Context(), queueID, preloaded)
 	if err != nil {
 		httpadapter.WriteError(w, err)
 		return
@@ -392,6 +350,11 @@ func (h *QueueHandlerImpl) GetCustomerQueueStatus(w http.ResponseWriter, r *http
 func (h *QueueHandlerImpl) GetQueueState(w http.ResponseWriter, r *http.Request) {
 	queueID, ok := parseUUIDParam(w, r, "queueID", "INVALID_QUEUE_ID", "invalid queue id")
 	if !ok {
+		return
+	}
+
+	if preloaded, loaded := middleware.LoadedQueueFromContext(r.Context()); loaded && preloaded.ID == queueID {
+		httpadapter.WriteJSON(w, http.StatusOK, QueueStateResponse{State: string(preloaded.State)})
 		return
 	}
 
@@ -455,7 +418,7 @@ func (h *QueueHandlerImpl) GetGuestActiveQueue(w http.ResponseWriter, r *http.Re
 	}
 	status, err := h.s.GetCustomerQueueStatus(r.Context(), queues[0].ID)
 	if err != nil {
-		httpadapter.WriteJSON(w, http.StatusOK, NewQueueResponse(&queues[0]))
+		httpadapter.WriteError(w, err)
 		return
 	}
 	httpadapter.WriteJSON(w, http.StatusOK, NewCustomerQueueStatusResponse(status))
