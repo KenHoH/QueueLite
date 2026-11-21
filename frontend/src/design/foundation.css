@@ -648,6 +648,7 @@ h3 { margin: 0 0 var(--ql-space-2); font-size: 1.0625rem; line-height: 1.4; font
 }
 @media (max-width: 640px) {
   .ql-app .ql-page { width: calc(100% - var(--ql-space-8)); padding-block: var(--ql-space-6) var(--ql-space-10); }
+  .ql-page-heading { align-items: flex-start; gap: var(--ql-space-3); }
   .ql-header-row { gap: var(--ql-space-3); }
   .ql-brand { font-size: var(--ql-title); }
   .ql-customer-nav a[aria-current='page']::after { display: none; }
@@ -681,18 +682,19 @@ h3 { margin: 0 0 var(--ql-space-2); font-size: 1.0625rem; line-height: 1.4; font
   .ql-status-board .ql-customer-counter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ql-customer-counter { padding: var(--ql-space-3); }
   .ql-customer-counter .ql-queue-number { font-size: var(--ql-section); }
-  .ql-workspace-shell .ql-page { width: calc(100% - var(--ql-space-6)); }
-  .ql-sidebar { padding-inline: var(--ql-space-3); }
+  .ql-workspace-shell .ql-page { width: calc(100% - var(--ql-space-8)); }
+  .ql-sidebar { padding-inline: var(--ql-space-4); }
   .ql-sidebar-top .ql-brand { font-size: var(--ql-section); }
-  .ql-sidebar-toggle { padding-inline: var(--ql-space-2); }
-  .ql-workspace-topbar { flex-wrap: wrap; padding-inline: var(--ql-space-3); gap: 0; }
-  .ql-breadcrumb { flex: 1; min-width: 0; padding-block: var(--ql-space-3); }
-  .ql-workspace-topbar .ql-header { margin: 0; padding-block: var(--ql-space-2); }
+  .ql-sidebar-toggle { padding-inline: var(--ql-space-3); }
+  .ql-workspace-topbar { flex-wrap: wrap; padding-inline: var(--ql-space-4); gap: 0 var(--ql-space-2); }
+  .ql-breadcrumb { flex: 1 1 auto; min-width: 0; padding-block: var(--ql-space-3); }
+  .ql-workspace-topbar .ql-header { flex: 0 0 auto; margin: 0; padding-block: var(--ql-space-2); }
   .ql-workspace-topbar .ql-header-row { flex-wrap: wrap; justify-content: flex-end; }
   .ql-workspace-topbar .ql-menu-toggle { display: flex; }
   .ql-workspace-topbar .ql-header-navigation { display: none; width: 100%; }
   .ql-workspace-topbar .ql-header-navigation.is-open { display: flex; }
-  .ql-workspace-topbar:has(.ql-header-navigation.is-open) .ql-header { width: 100%; }
+  .ql-workspace-topbar:has(.ql-header-navigation.is-open) .ql-breadcrumb { flex: 1 1 100%; padding-bottom: var(--ql-space-1); }
+  .ql-workspace-topbar:has(.ql-header-navigation.is-open) .ql-header { flex: 0 0 100%; width: 100%; padding-top: 0; }
   .ql-workspace-topbar .ql-account-panel { text-align: left; }
   .ql-workspace-topbar .ql-account-signout { width: 100%; }
   .ql-workspace-header { align-items: stretch; }
@@ -729,6 +731,11 @@ body {
   background: rgb(255 255 255 / 90%);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+.ql-workspace-topbar .ql-header {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Generous readable copy & section hierarchy */
