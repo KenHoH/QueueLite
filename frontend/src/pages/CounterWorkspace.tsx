@@ -10,6 +10,8 @@ import {
 	skipQueue,
 } from "../api/counters";
 import { getBusinessQueues } from "../api/operations";
+import { businessQueueEventsURL } from "../api/queues";
+import { subscribeSSE } from "../api/sse";
 import { AccountAccess } from "../components/AccountAccess";
 import {
 	Button,
@@ -78,7 +80,19 @@ function Workspace({ counterId }: { counterId: string }) {
 	const lock = useRef(false);
 	const data = resource.data,
 		queue = data && currentQueue(data.counter, data.queues);
-  useWorkspaceBusiness(data?.counter.businessId);
+	const businessId = data?.counter.businessId;
+  useWorkspaceBusiness(businessId);
+
+	useEffect(() => {
+		if (!businessId) return;
+		return subscribeSSE({
+			url: businessQueueEventsURL(businessId),
+			event: "queue.update",
+			onEvent: () => {
+				if (!lock.current) resource.retry();
+			},
+		});
+	}, [businessId, resource.retry]);
 
 	async function act(action: "call" | "process" | "complete" | "skip") {
 		if (lock.current || !data || uncertain) return;
@@ -135,7 +149,7 @@ function Workspace({ counterId }: { counterId: string }) {
 					</Button>
 				</Card>
 			)}
-			{notice && <p role="status">{notice}</p>}
+			{notice && <p role="status" className="ql-success-note">{notice}</p>}
 			{data && (
 				<>
 					<Link

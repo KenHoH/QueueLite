@@ -2,10 +2,18 @@ import { APIError } from '../api/errors';
 import type { Business, BusinessMembership } from '../api/types';
 
 export const validEmail = (value: string) => /^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(value.trim());
-export const validPhone = (value: string) => /^\+?\d{8,15}$/.test(value.replace(/[\s().-]/g, ''));
+export const validPhone = (value: string) => {
+  const cleaned = value.trim().replace(/[\s().-]/g, '');
+  const normalized = cleaned.startsWith('+62')
+    ? `62${cleaned.slice(3)}`
+    : cleaned.startsWith('08')
+      ? `62${cleaned.slice(1)}`
+      : cleaned;
+  return /^628\d{8,11}$/.test(normalized);
+};
 export function validateProfile(fields: { phonenumber: string; email: string }) {
   const errors: Partial<Record<'phonenumber' | 'email', string>> = {};
-  if (!validPhone(fields.phonenumber)) errors.phonenumber = 'Enter a phone number with 8–15 digits.';
+  if (!validPhone(fields.phonenumber)) errors.phonenumber = 'Enter a valid Indonesian mobile number (e.g. 0812 3456 7890).';
   if (fields.email.trim() && !validEmail(fields.email)) errors.email = 'Enter a valid email address.';
   return errors;
 }
@@ -23,7 +31,7 @@ export function validateBusiness(fields: BusinessFields) {
   if (!fields.name.trim()) errors.name = 'Enter a business name.';
   if (!fields.location.trim()) errors.location = 'Enter a location.';
   if (!validEmail(fields.email)) errors.email = 'Enter a valid email address.';
-  if (!validPhone(fields.phoneNumber)) errors.phoneNumber = 'Enter a phone number with 8–15 digits.';
+  if (!validPhone(fields.phoneNumber)) errors.phoneNumber = 'Enter a valid Indonesian mobile number (e.g. 0812 3456 7890).';
   for (const field of ['openTime', 'closeTime'] as const) if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(fields[field])) errors[field] = 'Enter a valid time.';
   return errors;
 }

@@ -6,7 +6,7 @@ export function validateAuth(fields: AuthFields, registering: boolean) {
   const errors: Partial<Record<keyof AuthFields, string>> = {};
   if (!fields.username.trim()) errors.username = 'Enter your username.';
   if (registering && !fields.phonenumber.trim()) errors.phonenumber = 'Enter your phone number.';
-  else if (registering && !validPhone(fields.phonenumber)) errors.phonenumber = 'Enter a phone number with 8–15 digits.';
+  else if (registering && !validPhone(fields.phonenumber)) errors.phonenumber = 'Enter a valid Indonesian mobile number (e.g. 0812 3456 7890).';
   if (registering && fields.email.trim() && !validEmail(fields.email)) errors.email = 'Enter a valid email address.';
   if (!fields.password.trim()) errors.password = 'Enter your password.';
   else if (registering && new TextEncoder().encode(fields.password).length > 72) errors.password = 'Use a password of at most 72 bytes.';

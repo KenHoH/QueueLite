@@ -114,9 +114,11 @@ export function createAPIClient(
 		) as T;
 	};
 }
-export const api = createAPIClient(
-	import.meta.env.VITE_API_BASE_URL || "/api",
-	undefined,
-	{ timeoutMs: 20000, validate: validateAPIResponse },
-);
+export const apiBaseURL = (
+	import.meta.env.VITE_API_BASE_URL || "/api"
+).replace(/\/$/, "");
+export const api = createAPIClient(apiBaseURL, undefined, {
+	timeoutMs: 20000,
+	validate: validateAPIResponse,
+});
 export const pathID = (id: string) => encodeURIComponent(id);

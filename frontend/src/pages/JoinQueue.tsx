@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Clock3, MapPin, ShieldCheck, Store } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Clock3, MapPin, ShieldCheck, Store } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getBusiness } from '../api/businesses';
@@ -40,7 +40,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
       if (controller.signal.aborted) return;
       setBusiness(value);
       setLoad('ready');
-      if (auth.status !== 'authenticated') {
+      if (auth.status === 'guest') {
         try {
           const guestQueues = await getGuestQueues({ signal: controller.signal });
           const existing = guestQueues.find(q => q.businessId === businessId && !['done', 'cancelled', 'skipped'].includes(q.state));
@@ -56,7 +56,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
       if (!controller.signal.aborted) setLoad(failure instanceof APIError && failure.status === 404 ? 'not-found' : 'error');
     });
     return () => controller.abort();
-  }, [businessId, attempt]);
+  }, [businessId, attempt, auth.status, setActiveTicket]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || uncertain || ticket || !business?.operational || !['guest', 'authenticated'].includes(auth.status)) return;
@@ -79,7 +79,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
     } finally { if (!controller.signal.aborted) { submitting.current = false; setBusy(false); } }
   }
   const bind = (name: keyof GuestQueueRequest) => ({ name, value: fields[name], disabled: busy, error: errors[name], onChange: (event: React.ChangeEvent<HTMLInputElement>) => setFields(previous => ({ ...previous, [name]: event.target.value })) });
-  return <PageContainer className={`ql-ticket-page ql-join-page ${ticket ? 'ql-join-success-page' : ''}`}><Link className="ql-back-link" to={`/business/${businessId}`}>Back to business</Link>
+  return <PageContainer className={`ql-ticket-page ql-join-page ${ticket ? 'ql-join-success-page' : ''}`}><Link className="ql-back-link" to={`/business/${businessId}`}><ArrowLeft size={16} aria-hidden="true" />Back to business</Link>
     {load === 'loading' ? <Card><LoadingSkeleton label="Loading business" /></Card>
       : load === 'not-found' ? <EmptyState title="Business not found." description="Choose a business to join its queue." action={<Link to="/#businesses">Browse businesses</Link>} />
       : load === 'error' ? <Card><InlineError>We couldn’t load this business.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>

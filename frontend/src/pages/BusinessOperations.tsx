@@ -9,6 +9,7 @@ import { operationsError } from './operationsDisplay';
 import { useOperations } from './useOperations';
 import { getBusiness } from '../api/businesses';
 import { getBusinessCounters, getBusinessQueues } from '../api/operations';
+import { businessQueueEventsURL } from '../api/queues';
 
 export function OperationsFeedback({ loading, error, retry }: { loading: boolean; error: unknown; retry: () => void }) {
   if (loading) return <LoadingSkeleton label="Loading business operations" />;
@@ -32,5 +33,5 @@ export function useBusinessOperations(business: BusinessMembership) {
     const [details, counters, queues] = await Promise.all([getBusiness(business.id, { signal }), getBusinessCounters(business.id, { signal }), getBusinessQueues(business.id, { signal })]);
     return { business: details, counters, queues };
   }, [business.id]);
-  return useOperations(load);
+  return useOperations(load, businessQueueEventsURL(business.id));
 }

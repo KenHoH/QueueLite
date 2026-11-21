@@ -357,7 +357,7 @@ function BusinessForm({
 					</div>
 				)}
 				{error && <InlineError>{error}</InlineError>}
-				{message && <p role="status">{message}</p>}
+				{message && <p role="status" className="ql-success-note">{message}</p>}
 				{uncertain && <Link to="/business/manage">Check your businesses</Link>}
 				<Button type="submit" loading={busy} disabled={uncertain}>
 					{businessId ? "Save business settings" : "Create business"}

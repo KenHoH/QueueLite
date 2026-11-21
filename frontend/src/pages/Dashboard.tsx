@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Business, BusinessMembership, Counter, Queue, QueueState } from '../api/types';
 import { getBusinessSubscription } from '../api/subscriptions';
+import { businessQueueEventsURL } from '../api/queues';
 import { Button, Card, EmptyState, StatusBadge } from '../components/foundation';
 import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
@@ -99,7 +100,7 @@ export function CounterOverview({ counters, queues }: { counters: Counter[]; que
   return <div className="ql-counter-grid">{counters.map(counter => {
     const queue = currentQueue(counter, queues);
     return <Card key={counter.id} className="ql-counter-service-card">
-      <div className="ql-counter-card-heading"><h3>{counter.name}</h3><Badge variant={queue ? 'secondary' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
+      <div className="ql-counter-card-heading"><h3>{counter.name}</h3><Badge variant={queue ? 'outline' : 'default'}>{counterStatus(counter, queues)}</Badge></div>
 
       {queue ? <p className="ql-counter-customer"><strong>{queue.name}</strong> <PriorityBadge queue={queue} /></p> : <p className="ql-counter-customer">Available</p>}
       <p className="ql-meta">{queue ? 'Currently serving' : 'Ready for the next customer'}</p><Link to={`/counter/${counter.id}`}>Open workspace →</Link>
@@ -124,7 +125,7 @@ export default function Dashboard() {
 
 function Capacity({ businessId }: { businessId: string }) {
   const load = useCallback((signal: AbortSignal) => getBusinessSubscription(businessId, { signal }), [businessId]);
-  const resource = useOperations(load);
+  const resource = useOperations(load, businessQueueEventsURL(businessId));
   return <Card><h2>Daily queue capacity</h2><OperationsFeedback {...resource} />{resource.data && <p>Queue capacity remaining: {resource.data.businessPlan.capacity}</p>}</Card>;
 }
 

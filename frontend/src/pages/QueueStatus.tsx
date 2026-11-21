@@ -1,4 +1,4 @@
-import { Clock3, Info, Ticket as TicketIcon } from 'lucide-react';
+import { ArrowLeft, Clock3, Info, Ticket as TicketIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { updateQueueState } from '../api/queues';
@@ -48,7 +48,7 @@ function Ticket({ queueId }: { queueId: string }) {
   const myCounter = queue ? data?.counters.find(counter => counter.currentQueueId === queue.id) : undefined;
   const back = auth.status === 'authenticated' ? '/my-queues' : '/#businesses';
   return <PageContainer className="ql-ticket-page ql-status-page">
-    <Link className="ql-back-link" to={back}>{auth.status === 'authenticated' ? 'Back to My Queues' : 'Back to businesses'}</Link>
+    <Link className="ql-back-link" to={back}><ArrowLeft size={16} aria-hidden="true" />{auth.status === 'authenticated' ? 'Back to My Queues' : 'Back to businesses'}</Link>
     {persistencePending && !data ? <Card><p className="ql-eyebrow">TICKET CONFIRMATION</p><h1>Saving your ticket</h1><p>Your place was accepted and is still being confirmed. Keep this page open—we’ll retry automatically.</p><LoadingSkeleton label="Confirming your ticket" lines={2} /><Button variant="secondary" onClick={refresh}>Check now</Button></Card>
       : !data && !error ? <Card><LoadingSkeleton label="Loading your queue" lines={8} /></Card> : <>
       {persistencePending && data && <Card role="status"><p>Your latest queue update is still being confirmed. Showing the last known ticket state.</p></Card>}
