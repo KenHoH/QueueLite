@@ -42,25 +42,14 @@ func (r *SubscriptionRepoImpl) GetAllSubscription(ctx context.Context, cursor *d
 }
 
 func (r *SubscriptionRepoImpl) UpdateUserSubscriptionPlanType(ctx context.Context, userID uuid.UUID, userPlan domain.UserPlan) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var record model.Subscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("UserPlan").Where("user_id = ? AND type = ?", userID, model.SubscriptionTypeUser).Take(&record).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, userID)
-			}
-			return fmt.Errorf("get user subscription: %w", err)
-		}
-		if record.UserPlan == nil {
-			return fmt.Errorf("%w: %s", app.ErrUserPlanNotFound, userID)
-		}
-
-		record.UserPlan.UserPlanType = model.UserPlanType(userPlan.UserPlanType)
-		record.UserPlan.Name = userPlan.Name
-		record.UserPlan.Description = userPlan.Description
-		record.UserPlan.Price = userPlan.Price
-		record.UserPlan.Slots = userPlan.Slots
-		record.UserPlan.LastSlotsResetAt = userPlan.LastSlotsResetAt
-		if err := tx.Save(record.UserPlan).Error; err != nil {
+	return r.withLockedUserPlan(ctx, userID, func(tx *gorm.DB, plan *model.UserPlan) error {
+		plan.UserPlanType = model.UserPlanType(userPlan.UserPlanType)
+		plan.Name = userPlan.Name
+		plan.Description = userPlan.Description
+		plan.Price = userPlan.Price
+		plan.Slots = userPlan.Slots
+		plan.LastSlotsResetAt = userPlan.LastSlotsResetAt
+		if err := tx.Save(plan).Error; err != nil {
 			return fmt.Errorf("update user plan: %w", err)
 		}
 		return nil
@@ -161,8 +150,16 @@ func (r *SubscriptionRepoImpl) GetBusinessSubscriptionInfo(ctx context.Context, 
 		return nil, fmt.Errorf("%w: %s", app.ErrBusinessPlanNotFound, businessID)
 	}
 	plan := *record.BusinessPlan
-	if resetBusinessCapacityIfNeeded(&plan, time.Now()) {
-		if err := r.db.WithContext(ctx).Save(&plan).Error; err != nil {
+	if !sameDay(plan.LastCapacityResetAt, time.Now()) {
+		if err := r.withLockedBusinessPlan(ctx, businessID, func(tx *gorm.DB, lockedPlan *model.BusinessPlan) error {
+			if resetBusinessCapacityIfNeeded(lockedPlan, time.Now()) {
+				if err := tx.Save(lockedPlan).Error; err != nil {
+					return fmt.Errorf("reset business capacity: %w", err)
+				}
+			}
+			plan = *lockedPlan
+			return nil
+		}); err != nil {
 			return nil, fmt.Errorf("reset business capacity: %w", err)
 		}
 	}
@@ -185,8 +182,16 @@ func (r *SubscriptionRepoImpl) GetUserSubscriptionInfo(ctx context.Context, user
 		return nil, fmt.Errorf("%w: %s", app.ErrUserPlanNotFound, userID)
 	}
 	plan := *record.UserPlan
-	if resetUserSlotsIfNeeded(&plan, time.Now()) {
-		if err := r.db.WithContext(ctx).Save(&plan).Error; err != nil {
+	if !sameMonth(plan.LastSlotsResetAt, time.Now()) {
+		if err := r.withLockedUserPlan(ctx, userID, func(tx *gorm.DB, lockedPlan *model.UserPlan) error {
+			if resetUserSlotsIfNeeded(lockedPlan, time.Now()) {
+				if err := tx.Save(lockedPlan).Error; err != nil {
+					return fmt.Errorf("reset user slots: %w", err)
+				}
+			}
+			plan = *lockedPlan
+			return nil
+		}); err != nil {
 			return nil, fmt.Errorf("reset user slots: %w", err)
 		}
 	}
@@ -198,25 +203,25 @@ func (r *SubscriptionRepoImpl) UseUserSubscription(ctx context.Context, userID u
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 
-		var userSub model.Subscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("UserPlan").Where("user_id = ? AND type = ?", userID, model.SubscriptionTypeUser).Take(&userSub).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
+		userSub, err := loadLockedUserSubscription(tx, userID)
+		if err != nil {
+			if errors.Is(err, app.ErrSubscriptionNotFound) {
 				result.Message = "user subscription not found"
 				return nil
 			}
-			return fmt.Errorf("get user subscription: %w", err)
-		}
-		if userSub.UserPlan == nil {
-			result.Message = "user plan not found"
-			return nil
+			if errors.Is(err, app.ErrUserPlanNotFound) {
+				result.Message = "user plan not found"
+				return nil
+			}
+			return err
 		}
 		if resetUserSlotsIfNeeded(userSub.UserPlan, now) {
 			if err := tx.Save(userSub.UserPlan).Error; err != nil {
 				return fmt.Errorf("reset user slots: %w", err)
 			}
 		}
-		if !subscriptionActive(userSub, now) {
-			result.Message = inactiveMessage("user", userSub, now)
+		if !subscriptionActive(*userSub, now) {
+			result.Message = inactiveMessage("user", *userSub, now)
 			return nil
 		}
 		if userSub.UserPlan.Slots <= 0 {
@@ -224,25 +229,25 @@ func (r *SubscriptionRepoImpl) UseUserSubscription(ctx context.Context, userID u
 			return nil
 		}
 
-		var businessSub model.Subscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("BusinessPlan").Where("business_id = ? AND type = ?", businessID, model.SubscriptionTypeBusiness).Take(&businessSub).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
+		businessSub, err := loadLockedBusinessSubscription(tx, businessID)
+		if err != nil {
+			if errors.Is(err, app.ErrSubscriptionNotFound) {
 				result.Message = "business subscription not found"
 				return nil
 			}
-			return fmt.Errorf("get business subscription: %w", err)
-		}
-		if businessSub.BusinessPlan == nil {
-			result.Message = "business plan not found"
-			return nil
+			if errors.Is(err, app.ErrBusinessPlanNotFound) {
+				result.Message = "business plan not found"
+				return nil
+			}
+			return err
 		}
 		if resetBusinessCapacityIfNeeded(businessSub.BusinessPlan, now) {
 			if err := tx.Save(businessSub.BusinessPlan).Error; err != nil {
 				return fmt.Errorf("reset business capacity: %w", err)
 			}
 		}
-		if !subscriptionActive(businessSub, now) {
-			result.Message = inactiveMessage("business", businessSub, now)
+		if !subscriptionActive(*businessSub, now) {
+			result.Message = inactiveMessage("business", *businessSub, now)
 			return nil
 		}
 		if !businessSub.BusinessPlan.PrioritySupport {
@@ -278,22 +283,12 @@ func (r *SubscriptionRepoImpl) DecreaseUserSlot(ctx context.Context, userID uuid
 }
 
 func (r *SubscriptionRepoImpl) updateUserSlots(ctx context.Context, userID uuid.UUID, delta int) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var record model.Subscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("UserPlan").Where("user_id = ? AND type = ?", userID, model.SubscriptionTypeUser).Take(&record).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, userID)
-			}
-			return fmt.Errorf("get user subscription: %w", err)
+	return r.withLockedUserPlan(ctx, userID, func(tx *gorm.DB, plan *model.UserPlan) error {
+		if delta < 0 && plan.Slots+delta < 0 {
+			return fmt.Errorf("%w: %s", app.ErrInsufficientPrioritySlots, userID)
 		}
-		if record.UserPlan == nil {
-			return fmt.Errorf("%w: %s", app.ErrUserPlanNotFound, userID)
-		}
-		if delta < 0 && record.UserPlan.Slots+delta < 0 {
-			return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, userID)
-		}
-		record.UserPlan.Slots += delta
-		if err := tx.Save(record.UserPlan).Error; err != nil {
+		plan.Slots += delta
+		if err := tx.Save(plan).Error; err != nil {
 			return fmt.Errorf("update user slot: %w", err)
 		}
 		return nil
@@ -301,27 +296,17 @@ func (r *SubscriptionRepoImpl) updateUserSlots(ctx context.Context, userID uuid.
 }
 
 func (r *SubscriptionRepoImpl) DecreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var record model.Subscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("BusinessPlan").Where("business_id = ? AND type = ?", businessID, model.SubscriptionTypeBusiness).Take(&record).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, businessID)
-			}
-			return fmt.Errorf("get business subscription: %w", err)
-		}
-		if record.BusinessPlan == nil {
-			return fmt.Errorf("%w: %s", app.ErrBusinessPlanNotFound, businessID)
-		}
-		if resetBusinessCapacityIfNeeded(record.BusinessPlan, time.Now()) {
-			if err := tx.Save(record.BusinessPlan).Error; err != nil {
+	return r.withLockedBusinessPlan(ctx, businessID, func(tx *gorm.DB, plan *model.BusinessPlan) error {
+		if resetBusinessCapacityIfNeeded(plan, time.Now()) {
+			if err := tx.Save(plan).Error; err != nil {
 				return fmt.Errorf("reset business capacity: %w", err)
 			}
 		}
-		if record.BusinessPlan.Capacity <= 0 {
+		if plan.Capacity <= 0 {
 			return app.ErrBusinessQueueFull
 		}
-		record.BusinessPlan.Capacity--
-		if err := tx.Save(record.BusinessPlan).Error; err != nil {
+		plan.Capacity--
+		if err := tx.Save(plan).Error; err != nil {
 			return fmt.Errorf("decrease business capacity: %w", err)
 		}
 		return nil
@@ -329,20 +314,80 @@ func (r *SubscriptionRepoImpl) DecreaseBusinessCapacity(ctx context.Context, bus
 }
 
 func (r *SubscriptionRepoImpl) IncreaseBusinessCapacity(ctx context.Context, businessID uuid.UUID) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var record model.Subscription
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("BusinessPlan").Where("business_id = ? AND type = ?", businessID, model.SubscriptionTypeBusiness).Take(&record).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, businessID)
-			}
-			return fmt.Errorf("get business subscription: %w", err)
-		}
-		if record.BusinessPlan == nil {
-			return fmt.Errorf("%w: %s", app.ErrBusinessPlanNotFound, businessID)
-		}
-		record.BusinessPlan.Capacity++
-		if err := tx.Save(record.BusinessPlan).Error; err != nil {
+	return r.withLockedBusinessPlan(ctx, businessID, func(tx *gorm.DB, plan *model.BusinessPlan) error {
+		plan.Capacity++
+		if err := tx.Save(plan).Error; err != nil {
 			return fmt.Errorf("increase business capacity: %w", err)
+		}
+		return nil
+	})
+}
+
+func loadLockedBusinessSubscription(tx *gorm.DB, businessID uuid.UUID) (*model.Subscription, error) {
+	var record model.Subscription
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("BusinessPlan").
+		Where("business_id = ? AND type = ?", businessID, model.SubscriptionTypeBusiness).
+		Take(&record).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, businessID)
+		}
+		return nil, fmt.Errorf("get business subscription: %w", err)
+	}
+	if record.BusinessPlan == nil {
+		return nil, fmt.Errorf("%w: %s", app.ErrBusinessPlanNotFound, businessID)
+	}
+	return &record, nil
+}
+
+func loadLockedUserSubscription(tx *gorm.DB, userID uuid.UUID) (*model.Subscription, error) {
+	var record model.Subscription
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("UserPlan").
+		Where("user_id = ? AND type = ?", userID, model.SubscriptionTypeUser).
+		Take(&record).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %s", app.ErrSubscriptionNotFound, userID)
+		}
+		return nil, fmt.Errorf("get user subscription: %w", err)
+	}
+	if record.UserPlan == nil {
+		return nil, fmt.Errorf("%w: %s", app.ErrUserPlanNotFound, userID)
+	}
+	return &record, nil
+}
+
+func (r *SubscriptionRepoImpl) withLockedBusinessPlan(ctx context.Context, businessID uuid.UUID, fn func(tx *gorm.DB, plan *model.BusinessPlan) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		record, err := loadLockedBusinessSubscription(tx, businessID)
+		if err != nil {
+			return err
+		}
+		return fn(tx, record.BusinessPlan)
+	})
+}
+
+func (r *SubscriptionRepoImpl) withLockedUserPlan(ctx context.Context, userID uuid.UUID, fn func(tx *gorm.DB, plan *model.UserPlan) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		record, err := loadLockedUserSubscription(tx, userID)
+		if err != nil {
+			return err
+		}
+		return fn(tx, record.UserPlan)
+	})
+}
+
+func (r *SubscriptionRepoImpl) ConsumeBusinessCapacityBatch(ctx context.Context, businessID uuid.UUID, amount int) error {
+	if amount <= 0 {
+		return nil
+	}
+	return r.withLockedBusinessPlan(ctx, businessID, func(tx *gorm.DB, plan *model.BusinessPlan) error {
+		resetBusinessCapacityIfNeeded(plan, time.Now())
+		plan.Capacity = max(plan.Capacity-amount, 0)
+		if err := tx.Save(plan).Error; err != nil {
+			return fmt.Errorf("consume business capacity batch: %w", err)
 		}
 		return nil
 	})
@@ -392,14 +437,14 @@ func resetUserSlotsIfNeeded(plan *model.UserPlan, now time.Time) bool {
 }
 
 func sameDay(a time.Time, b time.Time) bool {
-	ay, am, ad := a.Date()
-	by, bm, bd := b.Date()
+	ay, am, ad := a.UTC().Date()
+	by, bm, bd := b.UTC().Date()
 	return ay == by && am == bm && ad == bd
 }
 
 func sameMonth(a time.Time, b time.Time) bool {
-	ay, am, _ := a.Date()
-	by, bm, _ := b.Date()
+	ay, am, _ := a.UTC().Date()
+	by, bm, _ := b.UTC().Date()
 	return ay == by && am == bm
 }
 
