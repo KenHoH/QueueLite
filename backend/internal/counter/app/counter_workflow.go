@@ -252,7 +252,7 @@ func (s *CounterService) notifyNextInLine(ctx context.Context, businessID uuid.U
 	if s.rdt == nil {
 		return
 	}
-	snapshot, err := s.GetWaitingQueueSnapshot(ctx, businessID)
+	snapshot, err := cache.GetWaitingQueueSnapshot(ctx, s.rdt, businessID.String())
 	if err != nil {
 		log.Printf("[COUNTER WARN] failed to load waiting snapshot for next notification: %v", err)
 		return

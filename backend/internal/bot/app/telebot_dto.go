@@ -1,5 +1,10 @@
 package app
 
+const (
+	NextQueueNotificationMessage    string = "Your Queue is next"
+	CurrentQueueNotificationMessage string = "Your Queue is being called, please go to"
+)
+
 type TelebotMSGRequest struct {
 	ChatID string `json:"chat_id"`
 	Text   string `json:"text"`
