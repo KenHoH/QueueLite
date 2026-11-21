@@ -17,6 +17,7 @@ func toUserRecord(user *domain.User) model.User {
 		PhoneNumber: user.PhoneNumber,
 		Password:    password,
 		Email:       user.Email,
+		ChatID:      user.ChatID,
 	}
 }
 
@@ -32,5 +33,6 @@ func toDomainUser(record *model.User) *domain.User {
 		PhoneNumber: record.PhoneNumber,
 		Password:    password,
 		Email:       record.Email,
+		ChatID:      record.ChatID,
 	}
 }

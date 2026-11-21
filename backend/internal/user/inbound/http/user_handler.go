@@ -6,6 +6,7 @@ import (
 	"time"
 
 	httpadapter "QueueLite/internal/adapter/http"
+	"QueueLite/internal/config"
 	"QueueLite/internal/httputil"
 	"QueueLite/internal/middleware"
 	"QueueLite/internal/user/app"
@@ -100,8 +101,8 @@ func (u *UserHandlerImpl) LoginUser(w http.ResponseWriter, r *http.Request) {
 		Name:     "token",
 		Value:    tokenString,
 		Expires:  time.Now().Add(time.Hour * 24),
-		HttpOnly: true,                 // Prevents JavaScript from reading the cookie (Mitigates XSS)
-		Secure:   false,                // Set to true in production to force HTTPS
+		HttpOnly: true, // Prevents JavaScript from reading the cookie (Mitigates XSS)
+		Secure:   config.IsCookieSecure() || r.TLS != nil,
 		Path:     "/",                  // Accessible across the entire domain
 		SameSite: http.SameSiteLaxMode, // Controls cross-site cookie behavior
 	})
@@ -127,7 +128,7 @@ func (u *UserHandlerImpl) GetCurrentUser(w http.ResponseWriter, r *http.Request)
 func (u *UserHandlerImpl) LogoutUser(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name: "token", Value: "", Path: "/", HttpOnly: true,
-		Secure: false, SameSite: http.SameSiteLaxMode,
+		Secure: config.IsCookieSecure() || r.TLS != nil, SameSite: http.SameSiteLaxMode,
 		MaxAge: -1, Expires: time.Unix(1, 0),
 	})
 	httpadapter.WriteJSON(w, http.StatusOK, map[string]string{"message": "logout successful"})
