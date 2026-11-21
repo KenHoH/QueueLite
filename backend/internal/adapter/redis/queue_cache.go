@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	_ "embed"
 	"github.com/redis/go-redis/v9"
@@ -24,7 +25,10 @@ type GuestQueueUser struct {
 
 type WaitingQueueItem struct {
 	redis.Z
-	QueueKey string
+	QueueKey      string
+	BusinessID    string
+	PrevStreak    int
+	HasPrevStreak bool
 }
 
 func WaitingQueueKey(businessID string) string {
@@ -71,8 +75,63 @@ func GetQueueName(ctx context.Context, rdt *redis.Client, queueID string) (strin
 	return string(val), nil
 }
 
+// GetQueueNamesBatch fetches queue names for all IDs in a single MGET round-trip.
+func GetQueueNamesBatch(ctx context.Context, rdt *redis.Client, queueIDs []string) (map[string]string, error) {
+	names := make(map[string]string, len(queueIDs))
+	if len(queueIDs) == 0 || rdt == nil {
+		return names, nil
+	}
+	keys := make([]string, len(queueIDs))
+	for i, id := range queueIDs {
+		keys[i] = QueueNameKey(id)
+	}
+	vals, err := rdt.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	for i, raw := range vals {
+		if raw == nil {
+			continue
+		}
+		if str, ok := raw.(string); ok {
+			names[queueIDs[i]] = str
+		}
+	}
+	return names, nil
+}
+
+type WaitingQueueEntry struct {
+	QueueID   string
+	QueueName string
+}
+
+// GetWaitingQueueSnapshot returns ordered waiting queue entries using a single MGET for names.
+func GetWaitingQueueSnapshot(ctx context.Context, rdt *redis.Client, businessID string) ([]WaitingQueueEntry, error) {
+	tasks, err := GetWaitingQueues(ctx, businessID, rdt)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(tasks))
+	for _, data := range tasks {
+		if queueID, ok := data.Member.(string); ok {
+			ids = append(ids, queueID)
+		}
+	}
+	names, err := GetQueueNamesBatch(ctx, rdt, ids)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]WaitingQueueEntry, 0, len(ids))
+	for _, queueID := range ids {
+		if queueName, ok := names[queueID]; ok {
+			entries = append(entries, WaitingQueueEntry{QueueID: queueID, QueueName: queueName})
+		}
+	}
+	return entries, nil
+}
+
 func SetQueueName(ctx context.Context, rdt *redis.Client, queueID string, queueName string) error {
-	return rdt.Set(ctx, QueueNameKey(queueID), queueName, config.QueueExpirationTime).Err()
+	return rdt.Set(ctx, QueueNameKey(queueID), queueName, config.GuestExpirationTime).Err()
 }
 
 func QueueExists(ctx context.Context, rdt *redis.Client, queueID string) (bool, error) {
@@ -118,18 +177,15 @@ func GetGuestQueueUser(ctx context.Context, rdt *redis.Client, guestID string) (
 func AddQueue(ctx context.Context, rdt *redis.Client, queueKey string, record domain.Queue) error {
 	score := QueueScore(record)
 
-	err := SetQueueName(ctx, rdt, record.ID.String(), record.Name)
-	if err != nil {
+	if err := SetQueueName(ctx, rdt, record.ID.String(), record.Name); err != nil {
 		return err
 	}
-
-	if err = rdt.ZAdd(ctx, queueKey, redis.Z{
+	if err := rdt.ZAdd(ctx, queueKey, redis.Z{
 		Score:  score,
 		Member: record.ID.String(),
 	}).Err(); err != nil {
 		return fmt.Errorf("add queue to redis sorted set: %w", err)
 	}
-
 	return nil
 }
 
@@ -161,11 +217,7 @@ func PopTopWaitingQueue(ctx context.Context, rdt *redis.Client, businessID strin
 }
 
 func PopTopWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, businessID string) (*redis.Z, error) {
-	item, err := popTopWaitingQueueFromKey(ctx, rdt, WaitingQueueKey(businessID))
-	if item == nil || err != nil {
-		return item, err
-	}
-	return item, nil
+	return popTopWaitingQueueFromKey(ctx, rdt, WaitingQueueKey(businessID))
 }
 
 //go:embed script/pop_next_fair_waiting_queue.lua
@@ -183,7 +235,11 @@ func PopNextFairWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, bu
 	if len(result) == 0 {
 		return nil, nil
 	}
-	if len(result) != 3 {
+	return parseWaitingQueueItem(businessID, result)
+}
+
+func parseWaitingQueueItem(businessID string, result []any) (*WaitingQueueItem, error) {
+	if len(result) != 3 && len(result) != 4 {
 		return nil, fmt.Errorf("invalid fair waiting queue result")
 	}
 	key, keyOK := result[0].(string)
@@ -196,7 +252,20 @@ func PopNextFairWaitingQueueWithScore(ctx context.Context, rdt *redis.Client, bu
 	if err != nil {
 		return nil, fmt.Errorf("parse waiting queue score: %w", err)
 	}
-	return &WaitingQueueItem{Z: redis.Z{Member: member, Score: score}, QueueKey: key}, nil
+	item := &WaitingQueueItem{
+		Z:          redis.Z{Member: member, Score: score},
+		QueueKey:   key,
+		BusinessID: businessID,
+	}
+	if len(result) == 4 {
+		if prevRaw, ok := result[3].(string); ok {
+			if prev, parseErr := strconv.Atoi(prevRaw); parseErr == nil && prev >= 0 {
+				item.PrevStreak = prev
+				item.HasPrevStreak = true
+			}
+		}
+	}
+	return item, nil
 }
 
 func popTopWaitingQueueFromKey(ctx context.Context, rdt *redis.Client, queueKey string) (*redis.Z, error) {
@@ -218,6 +287,15 @@ func RestoreWaitingQueue(ctx context.Context, rdt *redis.Client, businessID stri
 }
 
 func RestoreWaitingQueueItem(ctx context.Context, rdt *redis.Client, item WaitingQueueItem) error {
+	if item.HasPrevStreak && item.BusinessID != "" {
+		pipe := rdt.TxPipeline()
+		pipe.ZAdd(ctx, item.QueueKey, item.Z)
+		pipe.Set(ctx, PriorityStreakKey(item.BusinessID), item.PrevStreak, 48*time.Hour)
+		if _, err := pipe.Exec(ctx); err != nil {
+			return fmt.Errorf("restore waiting queue to redis sorted set: %w", err)
+		}
+		return nil
+	}
 	if err := rdt.ZAdd(ctx, item.QueueKey, item.Z).Err(); err != nil {
 		return fmt.Errorf("restore waiting queue to redis sorted set: %w", err)
 	}
@@ -229,14 +307,11 @@ func GetTopQueue(ctx context.Context, queueKey string, rdt *redis.Client) (*stri
 	if err != nil {
 		return nil, fmt.Errorf("pop top queue from redis sorted set: %w", err)
 	}
-
-	// there's nothing to get
 	if len(results) == 0 {
 		return nil, nil
 	}
 
-	payload := results[0]
-	memberStr, ok := payload.Member.(string)
+	memberStr, ok := results[0].Member.(string)
 	if !ok {
 		return nil, fmt.Errorf("redis sorted set member is not a string")
 	}
@@ -244,11 +319,56 @@ func GetTopQueue(ctx context.Context, queueKey string, rdt *redis.Client) (*stri
 }
 
 func GetQueue(ctx context.Context, queueKey string, rdt *redis.Client) ([]redis.Z, error) {
-	tasks, err := rdt.ZRangeWithScores(ctx, queueKey, 0, -1).Result()
-	if err != nil {
-		return nil, err
+	return rdt.ZRangeWithScores(ctx, queueKey, 0, -1).Result()
+}
+
+func readPriorityStreak(ctx context.Context, rdt *redis.Client, businessID string) (int, error) {
+	streakRaw, err := rdt.Get(ctx, PriorityStreakKey(businessID)).Result()
+	if err == redis.Nil {
+		return 0, nil
 	}
-	return tasks, nil
+	if err != nil {
+		return 0, fmt.Errorf("read priority streak: %w", err)
+	}
+	streak, err := strconv.Atoi(streakRaw)
+	if err != nil || streak < 0 {
+		return 0, fmt.Errorf("invalid priority streak")
+	}
+	return streak, nil
+}
+
+// mergeFairWaitingQueues simulates the same fair selection policy as the atomic pop script
+// without mutating Redis, so customer positions match subsequent call-nexts.
+func mergeFairWaitingQueues(priorityTasks, normalTasks, legacyTasks []redis.Z, streak int) []redis.Z {
+	tasks := make([]redis.Z, 0, len(priorityTasks)+len(normalTasks)+len(legacyTasks))
+	priorityIdx, normalIdx, legacyIdx := 0, 0, 0
+
+	for priorityIdx < len(priorityTasks) || normalIdx < len(normalTasks) || legacyIdx < len(legacyTasks) {
+		if streak < maxPriorityStreak && priorityIdx < len(priorityTasks) {
+			tasks = append(tasks, priorityTasks[priorityIdx])
+			priorityIdx++
+			streak = min(streak+1, maxPriorityStreak)
+			continue
+		}
+		if normalIdx < len(normalTasks) {
+			tasks = append(tasks, normalTasks[normalIdx])
+			normalIdx++
+			streak = 0
+			continue
+		}
+		if legacyIdx < len(legacyTasks) {
+			tasks = append(tasks, legacyTasks[legacyIdx])
+			legacyIdx++
+			streak = 0
+			continue
+		}
+		if priorityIdx < len(priorityTasks) {
+			tasks = append(tasks, priorityTasks[priorityIdx])
+			priorityIdx++
+			streak = min(streak+1, maxPriorityStreak)
+		}
+	}
+	return tasks
 }
 
 func GetWaitingQueues(ctx context.Context, businessID string, rdt *redis.Client) ([]redis.Z, error) {
@@ -264,46 +384,9 @@ func GetWaitingQueues(ctx context.Context, businessID string, rdt *redis.Client)
 	if err != nil {
 		return nil, err
 	}
-	streakRaw, err := rdt.Get(ctx, PriorityStreakKey(businessID)).Result()
-	if err != nil && err != redis.Nil {
-		return nil, fmt.Errorf("read priority streak: %w", err)
+	streak, err := readPriorityStreak(ctx, rdt, businessID)
+	if err != nil {
+		return nil, err
 	}
-	streak := 0
-	if err == nil {
-		streak, err = strconv.Atoi(streakRaw)
-		if err != nil || streak < 0 {
-			return nil, fmt.Errorf("invalid priority streak")
-		}
-	}
-
-	// Simulate the same fair selection policy as the atomic pop script without
-	// mutating Redis. This makes customer positions match subsequent call-nexts.
-	tasks := make([]redis.Z, 0, len(priorityTasks)+len(normalTasks)+len(legacyTasks))
-	priorityIndex, normalIndex, legacyIndex := 0, 0, 0
-	for priorityIndex < len(priorityTasks) || normalIndex < len(normalTasks) || legacyIndex < len(legacyTasks) {
-		if streak < maxPriorityStreak && priorityIndex < len(priorityTasks) {
-			tasks = append(tasks, priorityTasks[priorityIndex])
-			priorityIndex++
-			streak = min(streak+1, maxPriorityStreak)
-			continue
-		}
-		if normalIndex < len(normalTasks) {
-			tasks = append(tasks, normalTasks[normalIndex])
-			normalIndex++
-			streak = 0
-			continue
-		}
-		if legacyIndex < len(legacyTasks) {
-			tasks = append(tasks, legacyTasks[legacyIndex])
-			legacyIndex++
-			streak = 0
-			continue
-		}
-		if priorityIndex < len(priorityTasks) {
-			tasks = append(tasks, priorityTasks[priorityIndex])
-			priorityIndex++
-			streak = min(streak+1, maxPriorityStreak)
-		}
-	}
-	return tasks, nil
+	return mergeFairWaitingQueues(priorityTasks, normalTasks, legacyTasks, streak), nil
 }

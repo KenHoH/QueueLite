@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, X } from 'lucide-react';
+import { Clock3, Search, X } from 'lucide-react';
 import { BusinessCard } from '../components/BusinessCard';
 import { JoinedQueuesPreview } from '../components/JoinedQueuesPreview';
 import { Button, Card, EmptyState, InlineError, LoadingSkeleton, PageContainer, Spinner } from '../components/foundation';
@@ -18,11 +18,11 @@ export default function Home() {
   const discovery = useBusinessDiscovery(query);
   useEffect(() => { if (hash === '#businesses') document.getElementById('businesses')?.scrollIntoView(); }, [hash]);
   return <PageContainer className="ql-discovery-page">
-    <section className="ql-discovery-intro">
-      <p className="ql-eyebrow">QueueLite</p>
+    <section className="ql-discovery-intro"><div>
+      <p className="ql-eyebrow">More life. Less waiting.</p>
       <h1>{auth.status === 'authenticated' ? greeting(auth.user.username) : 'Find a business queue'}</h1>
-      <p className="ql-muted">Search nearby businesses, join remotely, and keep your place from this device.</p>
-    </section>
+      <p className="ql-muted">Find a business and join the queue without waiting in line.</p>
+    </div><div className="ql-time-note"><Clock3 size={24} aria-hidden="true" /><span>Your time.<br /><strong>Back in your hands.</strong></span></div></section>
     <div className="ql-search">
       <Search size={21} aria-hidden="true" />
       <Label className="ql-sr-only" htmlFor="business-search">Search businesses</Label>
@@ -31,7 +31,7 @@ export default function Home() {
     </div>
     <JoinedQueuesPreview />
     <section id="businesses" className="ql-discovery-section" aria-labelledby="businesses-heading" aria-busy={discovery.loading || discovery.loadingMore}>
-      <div className="ql-section-heading"><div><h2 id="businesses-heading">Discover businesses</h2><p className="ql-muted">Choose a business to see its details.</p></div>
+      <div className="ql-section-heading"><div><h2 id="businesses-heading">Discover businesses</h2><p className="ql-muted">Local businesses. A better way to wait.</p></div>
         {discovery.loading && discovery.query && <Spinner label="Searching businesses" />}
       </div>
       {discovery.loading ? <div className="ql-business-grid">{Array.from({ length: 6 }, (_, index) => <Card key={index}><LoadingSkeleton label={discovery.query ? 'Loading search results' : 'Loading businesses'} lines={4} /></Card>)}</div>

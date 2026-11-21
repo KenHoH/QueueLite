@@ -50,7 +50,11 @@ func (s *QueueService) GenerateQRImage(url string, businessID string) ([]byte, e
 }
 
 func (s *QueueService) GetCustomerQueueStatus(ctx context.Context, queueID uuid.UUID) (*CustomerQueueStatus, error) {
-	data, err := s.loadCustomerQueueStatusData(ctx, queueID)
+	return s.GetCustomerQueueStatusWithQueue(ctx, queueID, nil)
+}
+
+func (s *QueueService) GetCustomerQueueStatusWithQueue(ctx context.Context, queueID uuid.UUID, preloaded *domain.Queue) (*CustomerQueueStatus, error) {
+	data, err := s.loadCustomerQueueStatusData(ctx, queueID, preloaded)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +363,10 @@ func (s *QueueService) CancelWaitingQueue(ctx context.Context, queueID uuid.UUID
 	}
 	_ = s.publishQueueUpdate(ctx, queue.BusinessID)
 	return nil
+}
+
+func (s *QueueService) UpdateQueueIfState(ctx context.Context, queue *domain.Queue, expected domain.QueueState) error {
+	return s.repo.UpdateQueueIfState(ctx, queue, expected)
 }
 
 func (s *QueueService) MarkAsSkipped(ctx context.Context, queueID uuid.UUID) error {

@@ -4,15 +4,17 @@ import (
 	businessdomain "QueueLite/internal/business/domain"
 	counterdomain "QueueLite/internal/counter/domain"
 	"QueueLite/internal/queue/domain"
+	userdomain "QueueLite/internal/user/domain"
 
 	"github.com/google/uuid"
 )
 
 type RegisterCustomerQueueInput struct {
-	BusinessID  uuid.UUID
-	UserID      *uuid.UUID
-	Username    string
-	PhoneNumber string
+	BusinessID        uuid.UUID
+	UserID            *uuid.UUID
+	AuthenticatedUser *userdomain.User
+	Username          string
+	PhoneNumber       string
 }
 
 type RegisterCustomerQueueResult struct {

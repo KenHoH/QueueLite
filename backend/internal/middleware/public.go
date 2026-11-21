@@ -29,12 +29,14 @@ func PublicMiddleware(userRepo userapp.UserRepo) func(http.Handler) http.Handler
 				return
 			}
 
-			if _, err := userRepo.GetUser(r.Context(), userID); err != nil {
+			user, err := userRepo.GetUser(r.Context(), userID)
+			if err != nil {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			ctx := WithOptionalUserId(r.Context(), userIDString)
+			ctx = WithLoadedUser(ctx, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

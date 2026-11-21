@@ -57,7 +57,7 @@ function ProfileContent({ user }: { user: User }) {
       <PasswordInput label="Confirm new password" name="confirmation" autoComplete="new-password" value={confirmation} disabled={!!busy} required error={passwordErrors.confirmation} onChange={event => setConfirmation(event.target.value)} />
       <Button type="submit" disabled={!!busy} loading={busy === 'password'}>Change password</Button>
     </form></Card>
-    {error && <InlineError>{error}</InlineError>}{message && <p role="status">{message}</p>}
+    {error && <InlineError>{error}</InlineError>}{message && <p role="status" className="ql-success-note">{message}</p>}
     <UserSubscriptionSummary userId={user.id} /><Link to="/plans">Plans &amp; Subscription →</Link>
     <Card><h2>Your businesses</h2>{businessesStatus === 'error' ? <><InlineError>We couldn’t load your businesses.</InlineError><Button onClick={() => refreshBusinesses()}>Try again</Button></> : businessesStatus === 'loading' ? <p role="status">Loading your businesses…</p> : businesses.length ? <div className="ql-stack"><Link to="/business/manage">{businesses.some(canManage) ? 'Manage business →' : 'Open your assigned business →'}</Link><Link to="/counters">My service counters →</Link></div> : <p className="ql-muted">You don’t own or manage a business yet.</p>}<p><Link to="/business/create">Create a business →</Link></p></Card>
   </div>;

@@ -267,6 +267,9 @@ func (s *SubscriptionService) DecreaseUserSlot(ctx context.Context, userID uuid.
 		return apperror.New(apperror.KindInvalid, "USER_ID_REQUIRED", "user id is required")
 	}
 	if err := s.repo.DecreaseUserSlot(ctx, userID); err != nil {
+		if errors.Is(err, ErrInsufficientPrioritySlots) {
+			return apperror.Wrap(apperror.KindConflict, "NO_PRIORITY_SLOT", "there's no priority token left", err)
+		}
 		if errors.Is(err, ErrSubscriptionNotFound) {
 			return apperror.Wrap(apperror.KindNotFound, "SUBSCRIPTION_NOT_FOUND", "user subscription not found", err)
 		}
@@ -334,6 +337,36 @@ func (s *SubscriptionService) IncreaseBusinessCapacity(ctx context.Context, busi
 			return apperror.Wrap(apperror.KindNotFound, "BUSINESS_PLAN_NOT_FOUND", "business plan not found", err)
 		}
 		return apperror.Wrap(apperror.KindInternal, "INCREASE_BUSINESS_CAPACITY_ERROR", "failed to increase business capacity", err)
+	}
+	return nil
+}
+
+type businessCapacityBatchRepo interface {
+	ConsumeBusinessCapacityBatch(ctx context.Context, businessID uuid.UUID, amount int) error
+}
+
+func (s *SubscriptionService) GetRemainingBusinessCapacity(ctx context.Context, businessID uuid.UUID) (int, error) {
+	info, err := s.GetBusinessSubscriptionInfo(ctx, businessID)
+	if err != nil {
+		return 0, err
+	}
+	return info.BusinessPlan.Capacity, nil
+}
+
+func (s *SubscriptionService) ConsumeBusinessCapacityBatch(ctx context.Context, businessID uuid.UUID, amount int) error {
+	if businessID == uuid.Nil || amount <= 0 {
+		return nil
+	}
+	if batchRepo, ok := s.repo.(businessCapacityBatchRepo); ok {
+		return batchRepo.ConsumeBusinessCapacityBatch(ctx, businessID, amount)
+	}
+	for i := 0; i < amount; i++ {
+		if err := s.repo.DecreaseBusinessCapacity(ctx, businessID); err != nil {
+			if errors.Is(err, ErrBusinessQueueFull) {
+				return nil
+			}
+			return err
+		}
 	}
 	return nil
 }

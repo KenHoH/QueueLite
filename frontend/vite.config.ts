@@ -3,17 +3,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { uiPreviewPlugin } from "./dev/uiPreview";
 import { defineConfig, loadEnv } from "vite";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const needsWindowsTildeFix = process.platform === "win32" && root.includes("~");
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
+	const uiPreview = command === "serve" && mode === "ui-preview";
 	const env = loadEnv(mode, root, "");
 	return {
 		resolve: { alias: { "@": path.resolve(root, "src") } },
-		base: env.VITE_BASE_URL,
+		base: uiPreview ? "/" : env.VITE_BASE_URL,
+		define: uiPreview ? { "import.meta.env.VITE_API_BASE_URL": JSON.stringify("/api") } : undefined,
 		plugins: [
+			...(uiPreview ? [uiPreviewPlugin()] : []),
 			react(),
 			tailwindcss(),
 			// Vite's Windows short-name guard also rejects literal tildes in folder names.
@@ -63,7 +67,12 @@ export default defineConfig(({ mode }) => {
 		server: {
 			host: "127.0.0.1",
 			fs: { strict: !needsWindowsTildeFix },
-			proxy: {
+			proxy: uiPreview ? undefined : {
+				"^/api(?:/|$)": {
+					target: env.API_PROXY_TARGET || "http://127.0.0.1:8080",
+					changeOrigin: true,
+					rewrite: (url) => url.replace(/^\/api(?=\/|$)/, "") || "/",
+				},
 				"^/queuelite/api(?:/|$)": {
 					target: env.API_PROXY_TARGET || "http://127.0.0.1:8080",
 					changeOrigin: true,

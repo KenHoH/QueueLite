@@ -8,7 +8,6 @@ import {
 } from "../api/businesses";
 import { APIError } from "../api/errors";
 import { AccountAccess } from "../components/AccountAccess";
-import { BusinessNavigation } from "../components/BusinessNavigation";
 import {
 	Button,
 	Card,
@@ -101,7 +100,7 @@ function SettingsAccess({ businessId }: { businessId: string }) {
 		);
 	return (
 		<div className="ql-stack">
-			<BusinessNavigation businessId={businessId} />
+
 			<SettingsContent businessId={businessId} />
 		</div>
 	);
@@ -358,7 +357,7 @@ function BusinessForm({
 					</div>
 				)}
 				{error && <InlineError>{error}</InlineError>}
-				{message && <p role="status">{message}</p>}
+				{message && <p role="status" className="ql-success-note">{message}</p>}
 				{uncertain && <Link to="/business/manage">Check your businesses</Link>}
 				<Button type="submit" loading={busy} disabled={uncertain}>
 					{businessId ? "Save business settings" : "Create business"}

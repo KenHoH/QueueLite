@@ -38,6 +38,7 @@ async function scenario(t, options = {}) {
     if (url.pathname === '/api/users/me') {
       return route.fulfill({ status: options.user ? 200 : 401, json: options.user ?? { error: { code: 'UNAUTHORIZED', message: 'guest' } } });
     }
+    if (url.pathname === '/api/queues/guest/me' || url.pathname === '/api/queues/me') return route.fulfill({ json: [] });
     if (url.pathname === '/api/businesses/mine') return route.fulfill({ json: [] });
     const response = await options.respond?.(url, route.request());
     try { await route.fulfill(response ?? { status: 200, json: url.pathname === '/api/businesses/search' ? [second] : url.pathname === '/api/businesses/' ? { data: [first], nextCursor: cursor } : first }); }
@@ -205,4 +206,13 @@ test('mobile discovery and detail stack without horizontal overflow', async t =>
   await page.goto(`${origin}/business/${first.id}`); await visible(page.getByRole('link', { name: 'Join queue' }));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.screenshot({ path: 'output/playwright/discovery-detail-mobile.png', fullPage: true });
+});
+
+test('public discovery and business detail never request staff-only queue lists or unsupported notification controls', async t => {
+  const { page, requests } = await scenario(t);
+  await page.goto(origin); await visible(page.getByRole('heading', { name: first.name }));
+  await page.locator('.ql-business-card').click(); await visible(page.getByRole('heading', { name: 'Business information' }));
+  assert.ok(requests.every(url => !/^\/api\/(queues\/business\/|businesses\/[^/]+\/(queues|counters))/.test(url.pathname)));
+  await page.getByRole('link', { name: 'Join queue' }).click(); await visible(page.getByLabel('Name', { exact: true }));
+  assert.equal(await page.getByRole('checkbox', { name: /notif/i }).count(), 0);
 });

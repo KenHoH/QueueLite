@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { APIError } from '../api/errors';
-import { getCustomerQueueStatus } from '../api/queues';
+import { customerQueueEventsURL, getCustomerQueueStatus } from '../api/queues';
+import { subscribeSSE } from '../api/sse';
 import type { CustomerQueueStatus } from '../api/types';
 import { isBusinessId } from './businessDisplay';
 import { isActiveQueue, isQueuePersistencePending } from './queueDisplay';
 
-/** Polls without overlapping requests and pauses while the tab is hidden. */
+/** Loads initial queue status and subscribes to live Server-Sent Events (no client polling). */
 export function useCustomerQueueStatus(queueId: string, paused: boolean) {
   const [data, setData] = useState<CustomerQueueStatus | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -18,48 +19,58 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
       setError(new APIError(400, 'INVALID_QUEUE_ID', 'Invalid ticket link.'));
       return;
     }
+
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let pending = false;
-    let active = true;
-    const read = async () => {
-      if (pending || controller.signal.aborted || document.hidden) return;
-      pending = true;
-      try {
-        const next = await getCustomerQueueStatus(queueId, { signal: controller.signal });
-        if (controller.signal.aborted) return;
-        active = isActiveQueue(next.queue.state);
-        setData(next);
-        setError(null);
-        setPersistencePending(false);
-        if (active) timer = setTimeout(() => { void read(); }, 5000);
-      } catch (failure) {
-        if (!controller.signal.aborted && isQueuePersistencePending(failure)) {
-          active = true;
-          setError(null);
-          setPersistencePending(true);
-          timer = setTimeout(() => { void read(); }, 2000);
-        } else if (!controller.signal.aborted) {
-          active = false;
-          setPersistencePending(false);
-          setError(failure);
-        }
-      } finally {
-        pending = false;
-      }
+    let unsubscribe: (() => void) | null = null;
+    let disposed = false;
+
+    const startStream = () => {
+      if (disposed || unsubscribe) return;
+      unsubscribe = subscribeSSE({
+        url: customerQueueEventsURL(queueId),
+        event: 'status',
+        onEvent: raw => {
+          try {
+            const parsed = JSON.parse(raw) as CustomerQueueStatus;
+            if (!parsed?.queue) return;
+            setData(parsed);
+            setError(null);
+            setPersistencePending(false);
+            if (!isActiveQueue(parsed.queue.state)) {
+              unsubscribe?.();
+              unsubscribe = null;
+            }
+          } catch {
+            // Ignore malformed SSE frame.
+          }
+        },
+      });
     };
-    const visibility = () => {
-      if (timer) clearTimeout(timer);
-      if (!document.hidden && active) void read();
-    };
+
     setError(null);
     setPersistencePending(false);
-    void read();
-    document.addEventListener('visibilitychange', visibility);
+    void getCustomerQueueStatus(queueId, { signal: controller.signal }).then(next => {
+      if (disposed || controller.signal.aborted) return;
+      setData(next);
+      setError(null);
+      setPersistencePending(false);
+      if (isActiveQueue(next.queue.state)) startStream();
+    }).catch(failure => {
+      if (disposed || controller.signal.aborted) return;
+      if (isQueuePersistencePending(failure)) {
+        setError(null);
+        setPersistencePending(true);
+        startStream();
+      } else {
+        setPersistencePending(false);
+        setError(failure);
+      }
+    });
+
     return () => {
+      disposed = true;
       controller.abort();
-      if (timer) clearTimeout(timer);
-      document.removeEventListener('visibilitychange', visibility);
+      unsubscribe?.();
     };
   }, [queueId, paused, attempt]);
 

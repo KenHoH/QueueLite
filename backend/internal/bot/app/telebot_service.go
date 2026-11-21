@@ -10,14 +10,20 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"QueueLite/internal/config"
 	userapp "QueueLite/internal/user/app"
+
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type TelebotService struct {
-	userRepo userapp.UserRepo
+	userRepo   userapp.UserRepo
+	rdb        *redis.Client
+	httpClient *http.Client
 }
 
 const (
@@ -26,29 +32,70 @@ const (
 	SendMessageEndpoint string = "sendMessage"
 )
 
+var ErrTelebotNotConfigured = errors.New("telebot api key is not configured")
+
 func loadTelebotAPIKey() (string, error) {
-	cfg, err := config.Load()
-	if err != nil || cfg == nil || cfg.SecretKey == "" {
-		return "", errors.New("invalid telebot api key")
+	apiKey := strings.TrimSpace(config.LoadTelebotAPIKey())
+	if apiKey == "" {
+		return "", ErrTelebotNotConfigured
 	}
-	return cfg.TelebotAPI, nil
+	return apiKey, nil
 }
 
-func NewTelebotService(repo userapp.UserRepo) *TelebotService {
+func NewTelebotService(repo userapp.UserRepo, rdb ...*redis.Client) *TelebotService {
+	var client *redis.Client
+	if len(rdb) > 0 {
+		client = rdb[0]
+	}
 	return &TelebotService{
 		userRepo: repo,
+		rdb:      client,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
-func (s *TelebotService) requestPhonenumber(chatID string) error {
+func (s *TelebotService) client() *http.Client {
+	if s != nil && s.httpClient != nil {
+		return s.httpClient
+	}
+	return &http.Client{Timeout: 10 * time.Second}
+}
+
+func (s *TelebotService) postTelegramJSON(ctx context.Context, apiKey string, endpoint string, payload any) error {
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode telegram payload: %w", err)
+	}
+
+	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return fmt.Errorf("create telegram request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client().Do(req)
+	if err != nil {
+		return fmt.Errorf("send telegram request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return fmt.Errorf("read telegram response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("telegram api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func (s *TelebotService) requestPhonenumber(ctx context.Context, chatID string) error {
 	apiKey, err := loadTelebotAPIKey()
 	if err != nil {
 		return err
-	}
-	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, SendMessageEndpoint)
-	fmt.Println(fullURL)
-	client := &http.Client{
-		Timeout: 10 * time.Second,
 	}
 
 	telebotMSGRequestData := TelebotPhonenumberRequest{
@@ -67,93 +114,91 @@ func (s *TelebotService) requestPhonenumber(chatID string) error {
 			},
 		},
 	}
-	// 2. Marshal the struct into a JSON byte slice
-	jsonBytes, err := json.Marshal(telebotMSGRequestData)
-	if err != nil {
-		log.Fatalf("Error encoding JSON: %v", err)
-		return err
-	}
-
-	// 3. Create the POST request using bytes.NewBuffer to create an io.Reader
-	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
-		return err
-	}
-
-	// 4. Set headers (Important for APIs expecting JSON)
-	req.Header.Set("Content-Type", "application/json")
-
-	// 5. Execute the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// 6. Read and display the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Error reading response: %v", err)
-		return err
-	}
-
-	fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	fmt.Printf("Response Body:\n%s\n", string(body))
-	return nil
+	return s.postTelegramJSON(ctx, apiKey, SendMessageEndpoint, telebotMSGRequestData)
 }
 
-func (s *TelebotService) SendMessageToUser(chatID string, text string) error {
+func (s *TelebotService) SendMessageToUser(ctx context.Context, userID uuid.UUID, text string) error {
+	if s == nil || s.userRepo == nil || userID == uuid.Nil {
+		return nil
+	}
 	apiKey, err := loadTelebotAPIKey()
 	if err != nil {
+		if errors.Is(err, ErrTelebotNotConfigured) {
+			return nil
+		}
 		return err
 	}
-	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, SendMessageEndpoint)
-	fmt.Println(fullURL)
-	client := &http.Client{
-		Timeout: 10 * time.Second,
+
+	user, err := s.userRepo.GetUser(ctx, userID)
+	if err != nil {
+		if errors.Is(err, userapp.ErrUserNotFound) {
+			// Guest tickets use ephemeral UUIDs that do not exist in the users table.
+			return nil
+		}
+		return err
+	}
+	if user == nil || user.ChatID == nil || strings.TrimSpace(*user.ChatID) == "" {
+		return nil
 	}
 
-	telebotMSGRequestData := TelebotMSGRequest{
-		ChatID: chatID,
+	return s.postTelegramJSON(ctx, apiKey, SendMessageEndpoint, TelebotMSGRequest{
+		ChatID: strings.TrimSpace(*user.ChatID),
 		Text:   text,
+	})
+}
+
+func (s *TelebotService) fetchTelegramUpdates(ctx context.Context, apiKey string) (*TeleUpdateStatusResponse, error) {
+	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, UpdateEndpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create telegram getUpdates request: %w", err)
 	}
 
-	// 2. Marshal the struct into a JSON byte slice
-	jsonBytes, err := json.Marshal(telebotMSGRequestData)
+	resp, err := s.client().Do(req)
 	if err != nil {
-		log.Fatalf("Error encoding JSON: %v", err)
-		return err
-	}
-
-	// 3. Create the POST request using bytes.NewBuffer to create an io.Reader
-	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
-		return err
-	}
-
-	// 4. Set headers (Important for APIs expecting JSON)
-	req.Header.Set("Content-Type", "application/json")
-
-	// 5. Execute the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
+		return nil, fmt.Errorf("send telegram getUpdates request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// 6. Read and display the response
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		log.Fatalf("Error reading response: %v", err)
-		return err
+		return nil, fmt.Errorf("read telegram getUpdates response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("telegram getUpdates returned status %d", resp.StatusCode)
 	}
 
-	fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	fmt.Printf("Response Body:\n%s\n", string(body))
+	var apiResponse TeleUpdateStatusResponse
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("unmarshal telegram updates: %w", err)
+	}
+	if !apiResponse.Ok {
+		return nil, errors.New("telegram api returned ok=false")
+	}
+	return &apiResponse, nil
+}
 
-	return nil
+func (s *TelebotService) handleTelegramUpdate(ctx context.Context, update TeleResultUpdateStatusResponse) {
+	msg := update.Message
+	if msg.Chat == nil || msg.From == nil {
+		return
+	}
+
+	chatID := strconv.FormatInt(msg.Chat.ID, 10)
+	fromID := strconv.FormatInt(msg.From.ID, 10)
+	if chatID != fromID {
+		return
+	}
+
+	if msg.Contact != nil {
+		if err := s.userRepo.InsertChatIDByPhoneNumber(ctx, chatID, msg.Contact.PhoneNumber); err != nil {
+			log.Printf("[TELEBOT WARN] failed to link chat_id for update %d: %v", update.UpdateID, err)
+		}
+		return
+	}
+	if err := s.EnqueuePhoneRequest(ctx, chatID); err != nil {
+		log.Printf("[TELEBOT WARN] failed to enqueue phone request for update %d: %v", update.UpdateID, err)
+	}
 }
 
 func (s *TelebotService) GetUpdateStatus(ctx context.Context) error {
@@ -162,76 +207,12 @@ func (s *TelebotService) GetUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
-	fullURL := fmt.Sprintf("%s%s/%s", TelebotBaseURL, apiKey, UpdateEndpoint)
-	fmt.Println(fullURL)
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	req, err := http.NewRequest("GET", fullURL, nil)
+	apiResponse, err := s.fetchTelegramUpdates(ctx, apiKey)
 	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
 		return err
 	}
-
-	// 3. Execute the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
-		return err
-	}
-
-	// CRITICAL: Always defer closing the response body to prevent resource leaks
-	defer resp.Body.Close()
-
-	// 4. Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Error reading response: %v", err)
-		return err
-	}
-
-	fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	fmt.Printf("Response Body:\n%s\n", string(body))
-
-	var apiResponse TeleUpdateStatusResponse
-	err = json.Unmarshal(body, &apiResponse)
-	if err != nil {
-		fmt.Printf("Error unmarshaling JSON: %v\n", err)
-		return err
-	}
-
-	if !apiResponse.Ok {
-		fmt.Println("Telegram returned ok: false")
-		return fmt.Errorf("There's something wrong with telegram response")
-	}
-
 	for _, update := range apiResponse.Result {
-		fmt.Printf("Processing Update ID: %d\n", update.UpdateID)
-
-		msg := update.Message
-
-		userID := strconv.FormatInt(msg.Chat.ID, 10)
-		fromID := strconv.FormatInt(msg.From.ID, 10)
-		if userID != fromID {
-			return fmt.Errorf("Different ID missmatch")
-		}
-
-		// The phone number check
-		if msg.Contact != nil {
-			// insert to database
-			phoneNumber := msg.Contact.PhoneNumber
-			s.userRepo.InsertChatIDByPhoneNumber(ctx, userID, phoneNumber)
-		} else {
-
-			// TODO: implement message queue use go routine to create a new thread
-			// Send Request Phone Number
-			err := s.requestPhonenumber(userID)
-			if err != nil {
-				return err
-			}
-		}
+		s.handleTelegramUpdate(ctx, update)
 	}
-
 	return nil
 }

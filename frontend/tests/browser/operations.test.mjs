@@ -53,7 +53,7 @@ async function scenario(t, options = {}) {
 test('dashboard loads real groups, counters, capacity and explicit navigation', async t => {
   const queues = [queue, { ...queue, id: 'q2', name: 'Q002', state: 'called', priority: false, calledByCounterId: counter.id }, { ...queue, id: 'q3', name: 'Q003', state: 'processing', priority: false }, { ...queue, id: 'q4', name: 'Q004', state: 'done' }];
   const { page, requests } = await scenario(t, { queues, counters: [{ ...counter, currentQueueId: 'q2' }] }); await page.goto(`${origin}/business/${business.id}/dashboard`);
-  for (const [state, name] of [['waiting', 'Q001'], ['called', 'Q002'], ['processing', 'Q003']]) await visible(page.getByRole('region', { name: `${state} queues` }).getByText(name, { exact: true }));
+  for (const name of ['Q001', 'Q002', 'Q003']) await visible(page.locator('.ql-queue-table').getByText(name, { exact: true }));
   assert.equal(await page.getByText('Q004', { exact: true }).count(), 0); await visible(page.getByText('Queue capacity remaining: 43')); await visible(page.getByRole('link', { name: 'Open workspace →' }));
   assert.equal(await page.getByRole('link', { name: 'Counters', exact: true }).getAttribute('href'), `/business/${business.id}/counters`);
   assert.ok(requests.some(r => r.path === `/api/businesses/${business.id}/queues`));
@@ -101,7 +101,7 @@ test('management creates, renames, assigns, clears assignment and confirms delet
 test('staff see assigned desks without management or member/subscription reads', async t => {
   const { page, requests } = await scenario(t, { businesses: [{ ...business, role: 'counter' }] }); await page.goto(`${origin}/business/${business.id}/counters`); await visible(page.getByRole('heading', { name: 'Desk A', exact: true }));
   assert.equal(await page.getByRole('button', { name: /Create counter|Save counter|Delete counter/ }).count(), 0); assert.ok(requests.every(r => !r.path.endsWith('/members')));
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click(); await visible(page.getByRole('heading', { name: business.name })); assert.ok(requests.every(r => !r.path.startsWith('/api/subscriptions/')));
+  await page.getByRole('link', { name: 'Overview', exact: true }).click(); await visible(page.getByRole('heading', { name: business.name })); assert.ok(requests.every(r => !r.path.startsWith('/api/subscriptions/')));
 });
 test('workspace calls next, shows priority, starts service, completes and refreshes', async t => {
   const { page, requests, queues, counters } = await scenario(t); await page.goto(`${origin}/counter/${counter.id}`); await page.getByRole('button', { name: 'Call next', exact: true }).click();
@@ -132,13 +132,13 @@ test('dashboard loading, visible polling, hidden pause and unmount cleanup', asy
   let release; const held = new Promise(resolve => { release = resolve; }); let initial = true;
   const { page, requests } = await scenario(t, { respond: async path => { if (path.endsWith('/queues') && initial) await held; } });
   await page.clock.install(); await page.goto(`${origin}/business/${business.id}/dashboard`); await visible(page.getByText('Loading business operations', { exact: true }));
-  initial = false; release(); await visible(page.getByRole('region', { name: 'waiting queues' }).getByText('Q001', { exact: true }));
+  initial = false; release(); await visible(page.locator('.ql-queue-table').getByText('Q001', { exact: true }));
   const count = () => requests.filter(r => r.path.endsWith('/queues')).length;
   const before = count(); await page.clock.fastForward(10001); await pause(100); assert.equal(count(), before + 1);
   await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
   const hidden = count(); await page.clock.fastForward(20001); await pause(100); assert.equal(count(), hidden);
   await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')); }); await pause(100); assert.equal(count(), hidden + 1);
-  await page.getByRole('link', { name: 'Your businesses', exact: false }).click(); await visible(page.getByRole('heading', { name: 'Manage business', exact: true })); const gone = count(); await page.clock.fastForward(20001); await pause(100); assert.equal(count(), gone);
+  await page.getByRole('link', { name: 'All businesses', exact: true }).click(); await visible(page.getByRole('heading', { name: 'Your businesses', exact: true })); const gone = count(); await page.clock.fastForward(20001); await pause(100); assert.equal(count(), gone);
 });
 test('counter management validates names and prevents duplicate create submissions', async t => {
   let release; const held = new Promise(resolve => { release = resolve; });
@@ -156,8 +156,8 @@ test('workspace uses protected counter reads and fails closed on 403', async t =
   const { page, requests } = await scenario(t, { respond: path => path === `/api/counters/${counter.id}` ? { status: 403, json: {} } : undefined }); await page.goto(`${origin}/counter/${counter.id}`); await visible(page.getByRole('heading', { name: 'Permission required' })); assert.equal(await page.getByRole('button', { name: 'Call next', exact: true }).count(), 0); assert.ok(!requests.some(r => r.path.endsWith('/queues')));
 });
 test('business links preserve multi-business selection and plans use explicit IDs', async t => {
-  const { page, requests } = await scenario(t); await page.goto(`${origin}/business/manage`); await page.getByLabel('Select business').click(); await page.getByRole('option', { name: `${other.name} (admin)` }).click(); await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await visible(page.getByRole('heading', { name: other.name })); assert.match(page.url(), new RegExp(`${other.id}/dashboard$`)); await page.getByRole('link', { name: 'Plans', exact: true }).click(); await visible(page.getByText('Queue capacity remaining: 43'));
+  const { page, requests } = await scenario(t); await page.goto(`${origin}/business/manage`); await page.getByLabel('Select business').click(); await page.getByRole('option', { name: `${other.name} (admin)` }).click(); await page.getByRole('link', { name: 'Open dashboard', exact: true }).click();
+  await visible(page.getByRole('heading', { name: other.name })); assert.match(page.url(), new RegExp(`${other.id}/dashboard$`)); await page.getByRole('link', { name: 'Subscription', exact: true }).click(); await visible(page.getByText('Queue capacity remaining: 43'));
   assert.match(page.url(), new RegExp(`${other.id}/plans$`)); assert.ok(requests.some(r => r.path === `/api/subscriptions/businesses/${other.id}`));
 });
 for (const path of [`/business/${business.id}/dashboard`, `/business/${business.id}/counters`, `/counter/${counter.id}`]) test(`guest sees sign-in on ${path}`, async t => {
@@ -169,4 +169,22 @@ test('staff screens fit mobile and expose clear workspace actions', async t => {
     await page.goto(origin + path); await visible(page.getByRole('heading', { name: path.includes('/counter/') ? 'Desk A' : business.name, exact: true }).or(page.getByRole('heading', { name: 'Create counter', exact: true })).first()); await pause(100);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true); await page.screenshot({ path: `output/playwright/operations-${screenshot}-mobile.png`, fullPage: true });
   }
+});
+
+test('phone workspace navigation expands, navigates and closes while preserving membership permissions', async t => {
+  const { page } = await scenario(t, { businesses: [{ ...business, role: 'counter' }] });
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(`${origin}/business/${business.id}/dashboard`);
+  await visible(page.locator('.ql-queue-table').getByText('Q001', { exact: true }));
+  const toggle = page.getByRole('button', { name: 'Workspace menu' });
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+  await toggle.click();
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.getByRole('link', { name: 'Settings', exact: true }).count(), 0);
+  await page.getByRole('link', { name: 'Counters', exact: true }).click();
+  await page.waitForURL(`**/business/${business.id}/counters`);
+  await page.locator('.ql-sidebar-toggle[aria-expanded="false"]').waitFor({ state: 'visible' });
+  await visible(page.getByRole('heading', { name: 'Desk A', exact: true }));
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });

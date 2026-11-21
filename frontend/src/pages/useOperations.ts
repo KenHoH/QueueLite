@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APIError } from "../api/errors";
+import { subscribeSSE } from "../api/sse";
 import { useAppState } from "../state/AppState";
 
-/** One cancellable read at a time. Poll only visible tabs; clear stale data on errors. */
+/** One cancellable read at a time. Live updates arrive via SSE when eventSourceURL is supplied (no polling). */
 export function useOperations<T>(
 	load: (signal: AbortSignal) => Promise<T>,
-	poll = true,
+	eventSourceURL?: string | false,
 ) {
 	const { refreshUser } = useAppState();
 	const [state, setState] = useState<{
@@ -20,47 +21,50 @@ export function useOperations<T>(
 		setState({ data: null, loading: true, error: null });
 		setRefresh((value) => value + 1);
 	}, []);
+
 	useEffect(() => {
-		let disposed = false,
-			stopped = false,
-			timer: ReturnType<typeof setTimeout> | undefined;
-		async function read() {
+		let disposed = false;
+		let unsubscribe: (() => void) | null = null;
+
+		async function read(): Promise<boolean> {
+			controller.current?.abort();
 			const request = new AbortController();
 			controller.current = request;
 			try {
 				const data = await load(request.signal);
 				if (!disposed && !request.signal.aborted)
 					setState({ data, loading: false, error: null });
+				return true;
 			} catch (error) {
 				if (!disposed && !request.signal.aborted) {
-					stopped = true;
+					unsubscribe?.();
+					unsubscribe = null;
 					setState({ data: null, loading: false, error });
 					if (error instanceof APIError && error.status === 401)
 						void refreshUser(true).catch(() => {});
 				}
-				return; // Failed/unauthorized reads require explicit retry.
+				return false;
 			}
-			if (!disposed && !request.signal.aborted && poll)
-				timer = setTimeout(() => {
-					if (document.visibilityState === "visible") void read();
-				}, 10000);
 		}
+
 		setState({ data: null, loading: true, error: null });
-		void read();
-		const visible = () => {
-			if (document.visibilityState === "visible" && poll && !stopped) {
-				clearTimeout(timer);
-				controller.current?.abort();
-				void read();
-			}
-		};
-		document.addEventListener("visibilitychange", visible);
+		void read().then((ok) => {
+			if (disposed || !ok || typeof eventSourceURL !== "string" || !eventSourceURL)
+				return;
+			unsubscribe = subscribeSSE({
+				url: eventSourceURL,
+				event: "queue.update",
+				onEvent: () => void read(),
+				onVisible: () => void read(),
+			});
+		});
+
 		return () => {
 			disposed = true;
-			clearTimeout(timer);
+			unsubscribe?.();
 			controller.current?.abort();
-			document.removeEventListener("visibilitychange", visible);
 		};
-	}, [load, refresh, poll, refreshUser]);
+	}, [load, refresh, eventSourceURL, refreshUser]);
+
 	return { ...state, retry };
 }

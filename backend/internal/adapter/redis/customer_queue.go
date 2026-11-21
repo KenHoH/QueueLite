@@ -15,16 +15,47 @@ func DailyQueueCounterKey(businessID string, day time.Time) string {
 	return "queue:daily:" + businessID + ":" + day.UTC().Format("2006-01-02")
 }
 
+func DailyBusinessCapacityKey(businessID string, day time.Time) string {
+	return "queue:capacity:" + businessID + ":" + day.UTC().Format("2006-01-02")
+}
+
+func HasDailyQueueCounter(ctx context.Context, rdb *redis.Client, businessID string, day time.Time) (bool, error) {
+	if rdb == nil {
+		return false, nil
+	}
+	count, err := rdb.Exists(ctx, DailyQueueCounterKey(businessID, day)).Result()
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// SeedBusinessCapacity initializes today's Redis capacity key only if absent so concurrent
+// joins cannot reset an already-decremented counter.
+func SeedBusinessCapacity(ctx context.Context, rdb *redis.Client, businessID string, day time.Time, capacity int) error {
+	if rdb == nil {
+		return nil
+	}
+	return rdb.SetNX(ctx, DailyBusinessCapacityKey(businessID, day), capacity, 48*time.Hour).Err()
+}
+
+// InvalidateBusinessCapacity clears today's cached capacity key (e.g. after plan changes).
+func InvalidateBusinessCapacity(ctx context.Context, rdb *redis.Client, businessID string, day time.Time) error {
+	if rdb == nil {
+		return nil
+	}
+	return rdb.Del(ctx, DailyBusinessCapacityKey(businessID, day)).Err()
+}
+
 // The DB maximum is a floor, never a replacement for Redis's high-water mark.
 // Atomic initialization/increment avoids the async DB-count race.
+// On cache miss, scan only a bounded recent stream tail (500 entries) so Lua stays O(1).
 var dailyQueueNumber = redis.NewScript(`
 local stored = redis.call('GET', KEYS[1])
 local current = tonumber(stored or '0')
 local floor = tonumber(ARGV[1])
--- Recover accepted but not yet persisted labels if the counter alone is lost.
--- The source stream is deliberately not trimmed until recovery/retention is designed.
 if not stored then
-  for _,entry in ipairs(redis.call('XRANGE', KEYS[2], '-', '+')) do
+  for _,entry in ipairs(redis.call('XREVRANGE', KEYS[2], '+', '-', 'COUNT', 500)) do
     local fields = entry[2]
     local business, day, name
     for i=1,#fields,2 do
@@ -64,18 +95,32 @@ func ActiveQueueOwnerKey(businessID, ownerID string) string {
 	return "queue:active_owner:" + businessID + ":" + ownerID
 }
 
-// All registration-side Redis state and the stream entry are accepted together.
+// All registration-side Redis state, optional atomic daily capacity decrement, and the
+// bounded stream entry are accepted together in a single Lua execution.
 // Key type checks precede writes because Lua runtime errors do not roll back writes.
 var enqueueCustomer = redis.NewScript(`
 local expected = {'string','string','string','string','zset','stream'}
-for i,key in ipairs(KEYS) do
-  local kind = redis.call('TYPE', key).ok
+for i=1,6 do
+  local kind = redis.call('TYPE', KEYS[i]).ok
   if kind ~= 'none' and kind ~= expected[i] then return 'CACHE_KEY_TYPE_ERROR' end
+end
+local checkCapacity = ARGV[11] == '1'
+if checkCapacity then
+  local capKind = redis.call('TYPE', KEYS[7]).ok
+  if capKind ~= 'none' and capKind ~= 'string' then return 'CACHE_KEY_TYPE_ERROR' end
 end
 if redis.call('EXISTS', KEYS[3]) == 1 then return 'OK' end
 if redis.call('EXISTS', KEYS[2]) == 1 then return 'ACTIVE_QUEUE_EXISTS' end
 if redis.call('EXISTS', KEYS[1]) == 1 then return 'PHONE_ALREADY_REGISTERED' end
-redis.call('XADD', KEYS[6], '*', 'id', ARGV[1], 'business_id', ARGV[2], 'user_id', ARGV[3], 'name', ARGV[4], 'priority', ARGV[5], 'state', ARGV[6], 'created_at', ARGV[7])
+if checkCapacity then
+  local remaining = redis.call('GET', KEYS[7])
+  if not remaining then return 'CAPACITY_NOT_SEEDED' end
+  local cap = tonumber(remaining)
+  if not cap or cap <= 0 then return 'BUSINESS_QUEUE_FULL' end
+  redis.call('DECR', KEYS[7])
+  redis.call('EXPIRE', KEYS[7], 172800)
+end
+redis.call('XADD', KEYS[6], 'MAXLEN', '~', ARGV[12], '*', 'id', ARGV[1], 'business_id', ARGV[2], 'user_id', ARGV[3], 'name', ARGV[4], 'priority', ARGV[5], 'state', ARGV[6], 'created_at', ARGV[7])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[10])
 redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[10])
 redis.call('SET', KEYS[3], ARGV[8], 'EX', ARGV[10])
@@ -85,6 +130,14 @@ return 'OK'
 `)
 
 func EnqueueCustomerQueue(ctx context.Context, rdb *redis.Client, customer CustomerQueue) (string, error) {
+	return enqueueCustomerQueueInternal(ctx, rdb, customer, false, time.Time{})
+}
+
+func EnqueueCustomerQueueWithCapacity(ctx context.Context, rdb *redis.Client, customer CustomerQueue, day time.Time) (string, error) {
+	return enqueueCustomerQueueInternal(ctx, rdb, customer, true, day)
+}
+
+func enqueueCustomerQueueInternal(ctx context.Context, rdb *redis.Client, customer CustomerQueue, checkCapacity bool, day time.Time) (string, error) {
 	q := customer.Queue
 	payload, err := json.Marshal(customer)
 	if err != nil {
@@ -94,13 +147,22 @@ func EnqueueCustomerQueue(ctx context.Context, rdb *redis.Client, customer Custo
 	if q.Priority {
 		waitingKey = PriorityWaitingQueueKey(q.BusinessID.String())
 	}
-	return enqueueCustomer.Run(ctx, rdb, []string{
+	keys := []string{
 		GuestPhoneKey(q.BusinessID.String(), customer.PhoneNumber),
 		ActiveQueueOwnerKey(q.BusinessID.String(), q.UserID.String()),
 		CustomerQueueKey(q.ID.String()), QueueNameKey(q.ID.String()),
 		waitingKey, config.StreamName,
-	}, q.ID.String(), q.BusinessID.String(), q.UserID.String(), q.Name, q.Priority,
-		string(q.State), q.CreatedAt.Format(time.RFC3339Nano), string(payload), QueueScore(q), int(config.GuestExpirationTime.Seconds())).Text()
+	}
+	capFlag := "0"
+	if checkCapacity {
+		capFlag = "1"
+		keys = append(keys, DailyBusinessCapacityKey(q.BusinessID.String(), day))
+	}
+	return enqueueCustomer.Run(ctx, rdb, keys,
+		q.ID.String(), q.BusinessID.String(), q.UserID.String(), q.Name, q.Priority,
+		string(q.State), q.CreatedAt.Format(time.RFC3339Nano), string(payload), QueueScore(q),
+		int(config.GuestExpirationTime.Seconds()), capFlag, config.QueueStreamMaxLen,
+	).Text()
 }
 
 func GetCustomerQueue(ctx context.Context, rdb *redis.Client, queueID string) (*CustomerQueue, error) {

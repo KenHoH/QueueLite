@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowRight, Check, Clock3, MapPin, ShieldCheck, Store } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getBusiness } from '../api/businesses';
@@ -6,7 +7,8 @@ import { joinBusinessQueue, getGuestQueues } from '../api/queues';
 import type { Business, GuestQueueRequest, Queue } from '../api/types';
 import { Button, Card, EmptyState, InlineError, Input, LoadingSkeleton, PageContainer, StatusBadge } from '../components/foundation';
 import { useAppState } from '../state/AppState';
-import { isBusinessId } from './businessDisplay';
+import { businessHours, isBusinessId } from './businessDisplay';
+import { BusinessAvailability } from '../components/BusinessCard';
 import { isAmbiguousJoin, joinErrorMessage, validateGuestJoin } from './queueDisplay';
 
 export default function JoinQueue() {
@@ -29,7 +31,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
   const errorRef = useRef<HTMLDivElement>(null);
   const successRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => () => mutation.current?.abort(), []);
-  useEffect(() => { if (ticket) successRef.current?.focus(); }, [ticket]);
+  useEffect(() => { if (ticket) { window.scrollTo({ top: 0, behavior: 'auto' }); successRef.current?.focus({ preventScroll: true }); } }, [ticket]);
   useEffect(() => {
     if (!isBusinessId(businessId)) { setLoad('not-found'); return; }
     const controller = new AbortController();
@@ -38,7 +40,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
       if (controller.signal.aborted) return;
       setBusiness(value);
       setLoad('ready');
-      if (auth.status !== 'authenticated') {
+      if (auth.status === 'guest') {
         try {
           const guestQueues = await getGuestQueues({ signal: controller.signal });
           const existing = guestQueues.find(q => q.businessId === businessId && !['done', 'cancelled', 'skipped'].includes(q.state));
@@ -54,7 +56,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
       if (!controller.signal.aborted) setLoad(failure instanceof APIError && failure.status === 404 ? 'not-found' : 'error');
     });
     return () => controller.abort();
-  }, [businessId, attempt]);
+  }, [businessId, attempt, auth.status, setActiveTicket]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || uncertain || ticket || !business?.operational || !['guest', 'authenticated'].includes(auth.status)) return;
@@ -77,12 +79,12 @@ function JoinBusiness({ businessId }: { businessId: string }) {
     } finally { if (!controller.signal.aborted) { submitting.current = false; setBusy(false); } }
   }
   const bind = (name: keyof GuestQueueRequest) => ({ name, value: fields[name], disabled: busy, error: errors[name], onChange: (event: React.ChangeEvent<HTMLInputElement>) => setFields(previous => ({ ...previous, [name]: event.target.value })) });
-  return <PageContainer className="ql-ticket-page"><Link className="ql-back-link" to={`/business/${businessId}`}>Back to business</Link>
+  return <PageContainer className={`ql-ticket-page ql-join-page ${ticket ? 'ql-join-success-page' : ''}`}><Link className="ql-back-link" to={`/business/${businessId}`}><ArrowLeft size={16} aria-hidden="true" />Back to business</Link>
     {load === 'loading' ? <Card><LoadingSkeleton label="Loading business" /></Card>
       : load === 'not-found' ? <EmptyState title="Business not found." description="Choose a business to join its queue." action={<Link to="/#businesses">Browse businesses</Link>} />
       : load === 'error' ? <Card><InlineError>We couldn’t load this business.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>
-      : ticket ? <Card className="ql-ticket-card"><p className="ql-eyebrow">YOUR QUEUE</p><h1 tabIndex={-1} ref={successRef}>Your place is saved.</h1><p>{business?.name}</p><p className="ql-queue-number">{ticket.name}</p><StatusBadge state="waiting" /><p className="ql-muted">Keep this ticket handy for your visit.{auth.status === 'guest' ? ' Reopen it in this browser so your guest credentials remain available.' : ''}</p><Button asChild><Link to={`/queue/${ticket.id}`}>View my queue</Link></Button></Card>
-      : <Card><p className="ql-eyebrow">QUEUE ACCESS · {business?.name}</p><h1>Join queue</h1><p className="ql-muted">Confirm your identity below to save your place from this page or a business QR code.</p>
+      : ticket ? <section className="ql-join-success"><span className="ql-success-icon" aria-hidden="true"><Check size={30} /></span><p className="ql-eyebrow">A little less waiting starts now</p><h1 tabIndex={-1} ref={successRef}>Your place is saved.</h1><p className="ql-muted">Your ticket at {business?.name} is ready.</p><Card className="ql-ticket-card"><p className="ql-eyebrow">Your queue number</p><p className="ql-queue-number">{ticket.name}</p><StatusBadge state={ticket.state} /><p className="ql-meta">Open your ticket for the latest queue position.</p></Card><Button asChild><Link to={`/queue/${ticket.id}`}>View my queue <ArrowRight size={17} aria-hidden="true" /></Link></Button>{auth.status === 'guest' && <p className="ql-meta">Reopen your ticket in this browser to keep access to your place.</p>}</section>
+      : <div className="ql-join-content"><div className="ql-join-heading"><p className="ql-eyebrow">Your next stop, without the wait</p><h1>Join queue</h1><p className="ql-muted">A few details, and you’re good to go.</p></div><div className="ql-join-layout"><Card className="ql-join-form"><h2>Your details</h2><p className="ql-muted">So the team knows how to welcome you.</p>
         {!business?.operational ? <p className="ql-muted">This business is currently unavailable. Joining is paused.</p>
           : auth.status === 'loading' ? <LoadingSkeleton label="Checking your account" />
           : auth.status === 'error' ? <InlineError>Please retry the session check above before joining.</InlineError>
@@ -94,6 +96,6 @@ function JoinBusiness({ businessId }: { businessId: string }) {
             {(error || uncertain) && auth.status === 'authenticated' && <Link to="/my-queues">Check My Queues</Link>}
             {uncertain && auth.status === 'guest' && <p className="ql-meta">Do not submit again yet. Keep this browser open and ask the business to confirm whether your ticket was accepted.</p>}
           </form>}
-      </Card>}
+      </Card><aside className="ql-join-aside"><Card><span className="ql-business-icon" aria-hidden="true"><Store size={26} /></span><h2>{business?.name}</h2><p className="ql-business-location"><MapPin size={16} aria-hidden="true" />{business?.location || 'Location not provided'}</p>{business && <><BusinessAvailability business={business} /><p className="ql-soft-note"><Clock3 size={18} aria-hidden="true" />{businessHours(business)}</p></>}</Card><p className="ql-meta ql-security-note"><ShieldCheck size={18} aria-hidden="true" />Your place is linked to your account or this browser.</p></aside></div></div>}
   </PageContainer>;
 }

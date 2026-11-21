@@ -14,11 +14,11 @@ local function pop(key, priority)
   local item = redis.call('ZPOPMIN', key, 1)
   if #item == 0 then return nil end
   if priority then
-    redis.call('SET', KEYS[1], math.min(streak + 1, limit))
+    redis.call('SET', KEYS[1], math.min(streak + 1, limit), 'EX', 172800)
   else
-    redis.call('SET', KEYS[1], 0)
+    redis.call('SET', KEYS[1], 0, 'EX', 172800)
   end
-  return {key, item[1], item[2]}
+  return {key, item[1], item[2], tostring(streak)}
 end
 if streak < limit then
   local item = pop(KEYS[2], true)

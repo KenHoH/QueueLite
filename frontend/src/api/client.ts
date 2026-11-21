@@ -9,7 +9,7 @@ export interface APIRequestOptions extends RequestOptions {
 	query?: object;
 	responseType?: "json" | "blob";
 }
-function createAPIClient(
+export function createAPIClient(
 	baseURL = "/api",
 	fetcher: typeof fetch = (...args) => fetch(...args),
 	config: { timeoutMs?: number; validate?: typeof validateAPIResponse } = {},
@@ -55,15 +55,8 @@ function createAPIClient(
 			);
 			const responseType = options.responseType ?? "json";
 
-			if (responseType === "blob") {
-				const blob = await response.blob();
-
-				if (!response.ok) {
-					// Handle the error appropriately.
-					console.error(response);
-				}
-
-				return blob as T;
+			if (responseType === "blob" && response.ok) {
+				return await response.blob() as T;
 			}
 
 			raw = await response.text();
@@ -121,9 +114,11 @@ function createAPIClient(
 		) as T;
 	};
 }
-export const api = createAPIClient(
-	import.meta.env.VITE_API_BASE_URL || "/api",
-	undefined,
-	{ timeoutMs: 20000, validate: validateAPIResponse },
-);
+export const apiBaseURL = (
+	import.meta.env.VITE_API_BASE_URL || "/api"
+).replace(/\/$/, "");
+export const api = createAPIClient(apiBaseURL, undefined, {
+	timeoutMs: 20000,
+	validate: validateAPIResponse,
+});
 export const pathID = (id: string) => encodeURIComponent(id);

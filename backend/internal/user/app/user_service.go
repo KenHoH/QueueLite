@@ -44,9 +44,11 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	if user.PhoneNumber == "" {
 		return nil, apperror.New(apperror.KindInvalid, "PHONENUMBER_REQUIRED", "missing phonenumber")
 	}
-	if !validation.Phone(user.PhoneNumber) {
-		return nil, apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+	normalizedPhone, ok := validation.NormalizeIndonesiaPhone(user.PhoneNumber)
+	if !ok {
+		return nil, apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "phone number must be a valid Indonesian mobile number")
 	}
+	user.PhoneNumber = normalizedPhone
 	if user.Email != nil && *user.Email != "" && !validation.Email(*user.Email) {
 		return nil, apperror.New(apperror.KindInvalid, "INVALID_EMAIL", "invalid email address")
 	}
@@ -66,8 +68,10 @@ func (s *UserService) RegisterUser(ctx context.Context, user domain.User) (*doma
 	}
 
 	// creating the default subscription
-	if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
-		return nil, err
+	if s.subscriptionService != nil {
+		if _, err := s.subscriptionService.CreateDefaultUserSubscriptionPlan(ctx, record.ID); err != nil {
+			return nil, err
+		}
 	}
 	return record, nil
 }
@@ -111,10 +115,11 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, input domain
 	}
 
 	if strings.TrimSpace(input.PhoneNumber) != "" {
-		if !validation.Phone(input.PhoneNumber) {
-			return apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "invalid phone number")
+		normalizedPhone, ok := validation.NormalizeIndonesiaPhone(input.PhoneNumber)
+		if !ok {
+			return apperror.New(apperror.KindInvalid, "INVALID_PHONE_NUMBER", "phone number must be a valid Indonesian mobile number")
 		}
-		user.PhoneNumber = strings.TrimSpace(input.PhoneNumber)
+		user.PhoneNumber = normalizedPhone
 	}
 	if input.Email != nil {
 		email := strings.TrimSpace(*input.Email)

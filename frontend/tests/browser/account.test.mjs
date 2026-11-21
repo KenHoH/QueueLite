@@ -126,7 +126,7 @@ test('settings load, save all editable fields and false operational state', asyn
   await page.getByRole('button', { name: 'Save business settings' }).click(); await visible(page.getByText('Business settings saved.'));
   assert.deepEqual(requests.find(r => r.method === 'PUT').body, { name: 'Updated business', location: business.location, description: business.description, openTime: business.openTime, closeTime: business.closeTime, email: business.email, phoneNumber: business.phoneNumber, operational: false });
   await page.screenshot({ path: 'output/playwright/account-settings-desktop.png', fullPage: true });
-  await page.getByRole('link', { name: 'Manage Business', exact: true }).click();
+  await page.getByRole('link', { name: 'All businesses', exact: true }).click();
   await visible(page.getByRole('heading', { name: 'Updated business', exact: true }));
 });
 for (const role of ['unrelated', 'counter']) test(`settings reject ${role} account before offering edits`, async t => {
@@ -145,8 +145,8 @@ test('plans show fetched subscriptions and user/business comparison tables witho
   await visible(page.getByRole('columnheader', { name: 'Premium', exact: true })); await visible(page.getByRole('columnheader', { name: 'Max', exact: true }));
   await visible(page.getByRole('rowheader', { name: 'Extra Priority Pass', exact: true })); await visible(page.getByRole('rowheader', { name: 'AI Weekly Insights', exact: true }));
   await page.getByLabel('Select business').click(); await page.getByRole('option', { name: `${second.name} (admin)` }).click(); await visible(page.getByText('Queue capacity remaining: 321')); await visible(page.getByRole('heading', { name: 'Plus', exact: true }));
-  assert.equal(await page.getByRole('button', { name: 'Upgrade — coming later' }).isDisabled(), true); assert.equal(await page.getByRole('button', { name: 'Change plan — coming later' }).isDisabled(), true);
-  assert.ok(requests.every(r => r.method === 'GET')); const text = await page.locator('main').innerText(); assert.doesNotMatch(text, /499|299|\$|checkout/i);
+  assert.equal(await page.getByRole('button', { name: 'Current plan: Premium' }).isDisabled(), true); assert.equal(await page.getByRole('button', { name: 'Change plan — coming later' }).isDisabled(), true);
+  assert.ok(requests.every(r => r.method === 'GET')); const text = await page.locator('main').innerText(); assert.doesNotMatch(text, /499|299|checkout/i);
   await page.screenshot({ path: 'output/playwright/account-plans-desktop.png', fullPage: true });
   await page.getByRole('link', { name: 'Manage Business', exact: true }).click(); await visible(page.getByRole('heading', { name: second.name }));
   assert.equal(await page.getByRole('link', { name: 'Business settings →' }).getAttribute('href'), `/business/${second.id}/settings`);

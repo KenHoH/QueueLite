@@ -1,31 +1,55 @@
 :root {
   color-scheme: light;
-  --ql-background: #F8F9F6;
+  --ql-background: #F8FAF9;
   --ql-surface: #FFFFFF;
-  --ql-text: #202825;
-  --ql-text-secondary: #65706A;
-  --ql-mint: #69C5AA;
-  --ql-action: #29473E;
-  --ql-soft-mint: #EDF5EF;
-  --ql-border: #E3E7E2;
-  --ql-error: #B75D57;
-  --ql-priority: #A68542;
-  --ql-priority-surface: #FBE9E7;
-  --ql-priority-border: #E8B4AF;
-  /* Stronger foregrounds for small text on light surfaces. */
-  --ql-error-text: #93453F;
-  --ql-priority-text: #795F2A;
+  --ql-text: #16241F;
+  --ql-text-secondary: #4D6159;
+  --ql-mint: #2EB88A;
+  --ql-action: #1C4A3B;
+  --ql-action-hover: #153A2E;
+  --ql-soft-mint: #E6F6F0;
+  --ql-mint-border: #A8DEC9;
+  --ql-border: #DCE5E0;
+  --ql-error: #C84B45;
+  --ql-priority: #B45309;
+  --ql-priority-surface: #FEF3C7;
+  --ql-priority-border: #F5C97B;
+  /* Stronger foregrounds for small text on light surfaces (WCAG AA >= 4.5:1). */
+  --ql-error-text: #9B2C2C;
+  --ql-priority-text: #92400E;
+
+  /* Distinct semantic queue state colors */
+  --ql-state-waiting-bg: #E0F5EE;
+  --ql-state-waiting-text: #145341;
+  --ql-state-waiting-border: #7AD3B5;
+  --ql-state-called-bg: #1C4A3B;
+  --ql-state-called-text: #FFFFFF;
+  --ql-state-called-accent: #5EEAD4;
+  --ql-state-processing-bg: #E0F2FE;
+  --ql-state-processing-text: #075985;
+  --ql-state-processing-border: #7DD3FC;
+  --ql-state-done-bg: #DCFCE7;
+  --ql-state-done-text: #166534;
+  --ql-state-done-border: #86EFAC;
+  --ql-state-skipped-bg: #FEF3C7;
+  --ql-state-skipped-text: #92400E;
+  --ql-state-skipped-border: #FCD34D;
+  --ql-state-cancelled-bg: #FEE2E2;
+  --ql-state-cancelled-text: #991B1B;
+  --ql-state-cancelled-border: #FCA5A5;
+
   /* Inter is bundled locally (main.tsx) so the UI looks identical on every machine, offline. */
   --ql-font: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif;
   --ql-weight-heading: 600;
-  --ql-shadow-card: 0 1px 2px rgb(32 40 37 / 3%);
-  --ql-shadow-raised: 0 8px 24px rgb(32 40 37 / 6%);
-  --ql-display: 2.25rem;
-  --ql-title: 2rem;
-  --ql-section: 1.25rem;
+  --ql-shadow-card: 0 2px 6px -1px rgb(22 36 31 / 5%), 0 1px 2px rgb(22 36 31 / 4%);
+  --ql-shadow-raised: 0 14px 30px -10px rgb(28 74 59 / 14%), 0 4px 10px -4px rgb(22 36 31 / 6%);
+  --ql-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ql-display: 2.75rem;
+  --ql-title: 2.25rem;
+  --ql-section: 1.375rem;
   --ql-body: 1rem;
-  --ql-small: .875rem;
-  --ql-meta: .8125rem;
+  --ql-small: .9375rem;
+  --ql-meta: .875rem;
   --ql-space-1: .25rem;
   --ql-space-2: .5rem;
   --ql-space-3: .75rem;
@@ -35,12 +59,25 @@
   --ql-space-10: 2.5rem;
   --ql-space-12: 3rem;
   --ql-space-16: 4rem;
-  --ql-radius-control: .5rem;
-  --ql-radius-card: .75rem;
+  --ql-radius-control: .625rem;
+  --ql-radius-card: .875rem;
   --ql-radius-pill: 999px;
-  --ql-content-width: 72rem;
+  --ql-content-width: 68rem;
   /* Matches the real height of inputs, selects and buttons (min-h-11 = 44px). */
   --ql-control-height: 2.75rem;
+
+  --ql-sidebar-width: 14.5rem;
+  --ql-flow-width: 50rem;
+  --ql-ticket-display: clamp(3.5rem, 8vw, 5.25rem);
+  --ql-hero-surface: #E3F4EC;
+  --ql-hero-decoration: #B4DFCD;
+  --ql-icon-surface: #E8F5EF;
+  --ql-count-size: 1.625rem;
+  --ql-banner-height: 10rem;
+  --ql-icon-size: 3rem;
+  --ql-icon-size-large: 4rem;
+  --ql-header-height: 5rem;
+  --ql-border-accent: #2EB88A;
 
   /* shadcn/Tailwind semantic aliases backed by QueueLite product tokens. */
   --background: var(--ql-background);

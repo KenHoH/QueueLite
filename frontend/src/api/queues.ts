@@ -1,4 +1,4 @@
-import { api, pathID, type RequestOptions } from "./client";
+import { api, apiBaseURL, pathID, type RequestOptions } from "./client";
 import type {
 	CreateQueueRequest,
 	CustomerQueueJoinRequest,
@@ -92,6 +92,11 @@ export const deleteQueue = (queueId: string, options?: RequestOptions) =>
 		...options,
 		method: "DELETE",
 	});
+
+export const customerQueueEventsURL = (queueId: string) =>
+	`${apiBaseURL}/queues/${pathID(queueId)}/events`;
+export const businessQueueEventsURL = (businessId: string) =>
+	`${apiBaseURL}/businesses/${pathID(businessId)}/events`;
 
 export const generateQRImage = async (businessId: string) => {
 	const blob = await api<Blob>(`/queues/qr/generate/${businessId}`, {

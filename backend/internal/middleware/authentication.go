@@ -35,12 +35,14 @@ func AuthMiddleware(userRepo userapp.UserRepo) func(http.Handler) http.Handler {
 				return
 			}
 
-			if _, err := userRepo.GetUser(r.Context(), userID); err != nil {
+			user, err := userRepo.GetUser(r.Context(), userID)
+			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			// inject the user id to the context
+			// inject the user id and loaded user to the context
 			ctx := WithUserId(r.Context(), userIDString)
+			ctx = WithLoadedUser(ctx, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
