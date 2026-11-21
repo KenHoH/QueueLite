@@ -58,7 +58,9 @@ func ProtectedMiddleware(queueService app.QueueService) func(http.Handler) http.
 				httpadapter.WriteError(w, apperror.New(kind, code, "queue ownership credentials required"))
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(WithQueueId(r.Context(), queueID.String())))
+			ctx := WithQueueId(r.Context(), queueID.String())
+			ctx = WithLoadedQueue(ctx, queue)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
