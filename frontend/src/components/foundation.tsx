@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { Check, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import {
 	type ButtonHTMLAttributes,
 	type HTMLAttributes,
@@ -80,11 +80,13 @@ export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
 	label: string;
 	hint?: string;
 	error?: string;
+	valid?: boolean;
 };
 export function Input({
 	label,
 	hint,
 	error,
+	valid = false,
 	id,
 	className,
 	...props
@@ -99,16 +101,24 @@ export function Input({
 		]
 			.filter(Boolean)
 			.join(" ") || undefined;
+	const showValid = valid && !error;
 	return (
 		<div className="ql-field">
 			<Label htmlFor={inputId}>{label}</Label>
-			<ShadcnInput
-				{...props}
-				id={inputId}
-				className={className}
-				aria-invalid={error ? true : props["aria-invalid"]}
-				aria-describedby={describedBy}
-			/>
+			<div className="ql-input-wrap">
+				<ShadcnInput
+					{...props}
+					id={inputId}
+					className={`${showValid ? "pr-10" : ""} ${className ?? ""}`.trim()}
+					aria-invalid={error ? true : props["aria-invalid"]}
+					aria-describedby={describedBy}
+				/>
+				{showValid && (
+					<span className="ql-input-valid" aria-hidden="true">
+						<Check className="size-4" />
+					</span>
+				)}
+			</div>
 			{hint && (
 				<span id={`${inputId}-hint`} className="ql-meta">
 					{hint}
@@ -147,11 +157,13 @@ export function PasswordInput(props: Omit<InputProps, "type">) {
 				aria-pressed={visible}
 				onClick={() => setVisible(!visible)}
 			>
-				{visible ? (
-					<EyeOff className="size-[18px]" aria-hidden="true" />
-				) : (
-					<Eye className="size-[18px]" aria-hidden="true" />
-				)}
+				<span key={visible ? "hide" : "show"} className="ql-icon-pop">
+					{visible ? (
+						<EyeOff className="size-[18px]" aria-hidden="true" />
+					) : (
+						<Eye className="size-[18px]" aria-hidden="true" />
+					)}
+				</span>
 			</ShadcnButton>
 		</div>
 	);

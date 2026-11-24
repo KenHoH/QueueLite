@@ -1,8 +1,15 @@
+export type SSEConnectionStatus =
+	| "connecting"
+	| "live"
+	| "reconnecting"
+	| "closed";
+
 export interface SSESubscription {
 	url: string;
 	event: string;
 	onEvent: (rawData: string) => void;
 	onVisible?: () => void;
+	onStatus?: (status: SSEConnectionStatus) => void;
 }
 
 /**
@@ -14,6 +21,7 @@ export function subscribeSSE({
 	event,
 	onEvent,
 	onVisible,
+	onStatus,
 }: SSESubscription): () => void {
 	let source: EventSource | null = null;
 	let closed = false;
@@ -23,19 +31,29 @@ export function subscribeSSE({
 			source.close();
 			source = null;
 		}
+		onStatus?.("closed");
 	};
 
 	const connect = () => {
 		if (closed || source || document.hidden || typeof EventSource === "undefined") {
 			return;
 		}
+		onStatus?.("connecting");
 		const next = new EventSource(url, { withCredentials: true });
 		source = next;
+		next.addEventListener("open", () => {
+			if (!closed) onStatus?.("live");
+		});
 		next.addEventListener(event, (message: MessageEvent<string>) => {
-			if (!closed) onEvent(message.data);
+			if (!closed) {
+				onStatus?.("live");
+				onEvent(message.data);
+			}
 		});
 		next.addEventListener("error", () => {
+			if (closed) return;
 			if (next.readyState === EventSource.CLOSED) disconnect();
+			else onStatus?.("reconnecting");
 		});
 	};
 

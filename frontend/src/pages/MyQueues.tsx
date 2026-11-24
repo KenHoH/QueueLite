@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getBusiness } from '../api/businesses';
@@ -41,7 +42,7 @@ function QueueList() {
   if (status === 'loading') return <Card><LoadingSkeleton label="Loading your queues" lines={5} /></Card>;
   if (status === 'unauthorized') return <Card><InlineError>Your session has ended. Please sign in to view your queues.</InlineError><Link to="/login?returnTo=%2Fmy-queues">Sign in</Link></Card>;
   if (status === 'error') return <Card><InlineError>We couldn’t load your queues.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>;
-  return <><div className="ql-toolbar-end"><Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Refresh queues</Button></div>
+  return <><div className="ql-toolbar-end"><Button variant="secondary" onClick={() => setAttempt(value => value + 1)}><RefreshCw key={attempt} className={attempt > 0 ? 'ql-spin-once' : undefined} size={15} aria-hidden="true" />Refresh queues</Button></div>
     {queues.length === 0 ? <EmptyState title="You don’t have any active queues." description="Find a business and save your place. Recently joined queues may take a moment to appear here." action={<Link to="/#businesses">Browse businesses</Link>} />
       : <div className="ql-business-grid">{queues.map(queue => <Card asChild className="ql-queue-card" key={queue.id}><Link to={`/queue/${queue.id}`}><h2>{names[queue.businessId]}</h2><p className="ql-queue-number">{queue.name}</p><StatusBadge state={queue.state} /><span className="ql-meta">View queue →</span></Link></Card>)}</div>}
   </>;

@@ -2,6 +2,7 @@ import {
 	ArrowLeft,
 	ArrowRight,
 	Clock3,
+	Copy,
 	Mail,
 	MapPin,
 	Phone,
@@ -9,7 +10,7 @@ import {
 	Store,
 	Ticket,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getBusiness } from "../api/businesses";
 import { APIError } from "../api/errors";
@@ -23,6 +24,7 @@ import {
 	LoadingSkeleton,
 	PageContainer,
 } from "../components/foundation";
+import { useToast } from "../components/Toast";
 import { businessHours, isBusinessId } from "./businessDisplay";
 
 type DetailState =
@@ -35,11 +37,32 @@ type DetailState =
 	| { id: string; status: "ready"; business: Business };
 export default function BusinessDetail() {
 	const { businessId } = useParams();
+	const toast = useToast();
 	const [attempt, setAttempt] = useState(0);
+	const [copiedField, setCopiedField] = useState<"email" | "phone" | null>(null);
+	const copyTimer = useRef<number | null>(null);
 	const [state, setState] = useState<DetailState>({
 		id: businessId,
 		status: "loading",
 	});
+	useEffect(() => () => { if (copyTimer.current !== null) window.clearTimeout(copyTimer.current); }, []);
+	async function copyContact(kind: "email" | "phone", value: string) {
+		try {
+			await navigator.clipboard.writeText(value);
+			setCopiedField(kind);
+			if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+			copyTimer.current = window.setTimeout(() => setCopiedField(null), 1800);
+			toast.success(kind === "email" ? "Email copied." : "Phone number copied.");
+		} catch {
+			toast.info("Clipboard access was blocked by your browser.");
+		}
+	}
+	function handleBannerPointer(event: React.PointerEvent<HTMLDivElement>) {
+		if (event.pointerType !== "mouse") return;
+		const rect = event.currentTarget.getBoundingClientRect();
+		event.currentTarget.style.setProperty("--ql-mx", `${event.clientX - rect.left}px`);
+		event.currentTarget.style.setProperty("--ql-my", `${event.clientY - rect.top}px`);
+	}
 	useEffect(() => {
 		if (!isBusinessId(businessId)) {
 			setState({ id: businessId, status: "not-found" });
@@ -81,15 +104,15 @@ export default function BusinessDetail() {
       : current.status === 'not-found' ? <EmptyState title="Business not found." description="This business may no longer be available." action={<Link to="/#businesses">Back to businesses</Link>} />
       : current.status === 'error' ? <Card><InlineError>We couldn’t load this business.</InlineError><Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>
       : <>
-        <div className="ql-business-banner"><div><p className="ql-eyebrow">Your neighborhood, at your pace</p><p>More than a visit. A little time for you.</p></div><span aria-hidden="true">Q<span>Lite</span></span></div>
+        <div className="ql-business-banner" onPointerMove={handleBannerPointer}><div><p className="ql-eyebrow">Your neighborhood, at your pace</p><p>More than a visit. A little time for you.</p></div><span aria-hidden="true">Q<span>Lite</span></span></div>
         <div className="ql-detail-layout">
           <section className="ql-detail-content">
-            <div className="ql-business-title"><span className="ql-business-icon" aria-hidden="true"><Store size={30} /></span><div><BusinessAvailability business={current.business} /><h1>{current.business.name}</h1><p className="ql-business-location"><MapPin size={17} aria-hidden="true" />{current.business.location || 'Location not provided'}</p></div></div>
+            <div className="ql-business-title"><span className="ql-business-icon" style={{ viewTransitionName: `ql-biz-icon-${current.business.id}` }} aria-hidden="true"><Store size={30} /></span><div><BusinessAvailability business={current.business} /><h1 style={{ viewTransitionName: `ql-biz-title-${current.business.id}` }}>{current.business.name}</h1><p className="ql-business-location"><MapPin size={17} aria-hidden="true" />{current.business.location || 'Location not provided'}</p></div></div>
             <div className="ql-detail-description"><h2>About this business</h2><p className="ql-muted">{current.business.description || 'No description provided.'}</p></div>
             <dl className="ql-contact-list">
               <div><dt><Clock3 size={17} aria-hidden="true" /><span className="ql-sr-only">Daily hours</span></dt><dd>{businessHours(current.business)}</dd></div>
-              <div><dt><Mail size={17} aria-hidden="true" /><span className="ql-sr-only">Email</span></dt><dd>{current.business.email ? <a href={`mailto:${current.business.email}`}>{current.business.email}</a> : 'Not provided'}</dd></div>
-              <div><dt><Phone size={17} aria-hidden="true" /><span className="ql-sr-only">Phone</span></dt><dd>{current.business.phoneNumber ? <a href={`tel:${current.business.phoneNumber.replace(/[^+\d]/g, '')}`}>{current.business.phoneNumber}</a> : 'Not provided'}</dd></div>
+              <div><dt><Mail size={17} aria-hidden="true" /><span className="ql-sr-only">Email</span></dt><dd className="ql-contact-copy-row">{current.business.email ? <><a href={`mailto:${current.business.email}`}>{current.business.email}</a><button type="button" className="ql-copy-inline" aria-label="Copy email address" onClick={() => { void copyContact("email", current.business.email!); }}><span key={copiedField === "email" ? "done" : "copy"} className="ql-icon-pop">{copiedField === "email" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}</span></button></> : 'Not provided'}</dd></div>
+              <div><dt><Phone size={17} aria-hidden="true" /><span className="ql-sr-only">Phone</span></dt><dd className="ql-contact-copy-row">{current.business.phoneNumber ? <><a href={`tel:${current.business.phoneNumber.replace(/[^+\d]/g, '')}`}>{current.business.phoneNumber}</a><button type="button" className="ql-copy-inline" aria-label="Copy phone number" onClick={() => { void copyContact("phone", current.business.phoneNumber!); }}><span key={copiedField === "phone" ? "done" : "copy"} className="ql-icon-pop">{copiedField === "phone" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}</span></button></> : 'Not provided'}</dd></div>
             </dl>
             <p className="ql-soft-note"><Check size={18} aria-hidden="true" />Join from wherever you are. Keep an eye on your ticket and head over when your turn is close.</p>
           </section>

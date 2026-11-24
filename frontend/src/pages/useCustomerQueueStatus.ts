@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { APIError } from '../api/errors';
 import { customerQueueEventsURL, getCustomerQueueStatus } from '../api/queues';
-import { subscribeSSE } from '../api/sse';
+import { subscribeSSE, type SSEConnectionStatus } from '../api/sse';
 import type { CustomerQueueStatus } from '../api/types';
 import { isBusinessId } from './businessDisplay';
 import { isActiveQueue, isQueuePersistencePending } from './queueDisplay';
@@ -11,12 +11,17 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
   const [data, setData] = useState<CustomerQueueStatus | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [persistencePending, setPersistencePending] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<SSEConnectionStatus>('closed');
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (paused) return;
+    if (paused) {
+      setStreamStatus('closed');
+      return;
+    }
     if (!isBusinessId(queueId)) {
       setError(new APIError(400, 'INVALID_QUEUE_ID', 'Invalid ticket link.'));
+      setStreamStatus('closed');
       return;
     }
 
@@ -29,6 +34,9 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
       unsubscribe = subscribeSSE({
         url: customerQueueEventsURL(queueId),
         event: 'status',
+        onStatus: nextStatus => {
+          if (!disposed) setStreamStatus(nextStatus);
+        },
         onEvent: raw => {
           try {
             const parsed = JSON.parse(raw) as CustomerQueueStatus;
@@ -39,6 +47,7 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
             if (!isActiveQueue(parsed.queue.state)) {
               unsubscribe?.();
               unsubscribe = null;
+              setStreamStatus('closed');
             }
           } catch {
             // Ignore malformed SSE frame.
@@ -49,6 +58,7 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
 
     setError(null);
     setPersistencePending(false);
+    setStreamStatus('closed');
     void getCustomerQueueStatus(queueId, { signal: controller.signal }).then(next => {
       if (disposed || controller.signal.aborted) return;
       setData(next);
@@ -74,5 +84,5 @@ export function useCustomerQueueStatus(queueId: string, paused: boolean) {
     };
   }, [queueId, paused, attempt]);
 
-  return { data, error, persistencePending, refresh: () => setAttempt(value => value + 1) };
+  return { data, error, persistencePending, streamStatus, refresh: () => setAttempt(value => value + 1) };
 }

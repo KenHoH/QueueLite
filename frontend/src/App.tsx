@@ -1,8 +1,10 @@
+import { MotionConfig } from "motion/react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ApplicationShell } from "./components/ApplicationShell";
 import { Button, Card, PageContainer } from "./components/foundation";
 import { AccountRoute, BusinessRoute } from "./components/RouteAccess";
 import { RouteEffects } from "./components/RouteEffects";
+import { ToastProvider } from "./components/Toast";
 import { ForbiddenPage, UnauthorizedPage } from "./pages/AccessPage";
 import { AuthPage } from "./pages/AuthPage";
 import BusinessDetail from "./pages/BusinessDetail";
@@ -23,10 +25,11 @@ import ShareQueue from "./pages/ShareQueue";
 import StaffCounters from "./pages/StaffCounters";
 export default function App() {
 	return (
-		<>
-			<RouteEffects />
-			<ApplicationShell>
-			<Routes>
+		<MotionConfig reducedMotion="user">
+			<ToastProvider>
+				<RouteEffects />
+				<ApplicationShell>
+				<Routes>
 				<Route path="/" element={<Home />} />
 				<Route path="/business/:businessId" element={<BusinessDetail />} />
 				<Route path="/qr/:businessId" element={<QueueQRLanding />} />
@@ -170,8 +173,9 @@ export default function App() {
 						</PageContainer>
 					}
 				/>
-			</Routes>
-			</ApplicationShell>
-		</>
+				</Routes>
+				</ApplicationShell>
+			</ToastProvider>
+		</MotionConfig>
 	);
 }

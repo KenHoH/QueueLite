@@ -902,31 +902,41 @@ body {
 .ql-search:focus-within > svg { color: var(--ql-action); }
 .ql-search input { font-size: var(--ql-body); }
 
-/* Interactive cards: lively hover elevation, border tint, icon & arrow glide */
+/* Interactive cards: flicker-free elevation (outer hit-target stays still; shadow, border & children carry motion) */
 .ql-business-card,
 .ql-queue-card,
 .ql-active-queue {
   transition:
-    transform .22s var(--ql-ease-out),
     box-shadow .22s var(--ql-ease-out),
-    border-color .22s var(--ql-ease-out);
+    border-color .22s var(--ql-ease-out),
+    background-color .22s var(--ql-ease-out);
 }
 .ql-business-card:hover,
 .ql-queue-card:hover,
 .ql-active-queue:hover {
-  transform: translateY(-3px);
+  transform: none;
   border-color: var(--ql-mint);
   box-shadow: var(--ql-shadow-raised);
   opacity: 1;
 }
+.ql-business-card h3,
+.ql-queue-card h2,
+.ql-active-business h3 {
+  transition: color .2s var(--ql-ease-out);
+}
+.ql-business-card:hover h3,
+.ql-queue-card:hover h2,
+.ql-active-queue:hover .ql-active-business h3 {
+  color: var(--ql-action);
+}
 .ql-business-icon {
-  transition: background-color .2s var(--ql-ease-out), color .2s var(--ql-ease-out), transform .2s var(--ql-ease-out);
+  transition: background-color .2s var(--ql-ease-out), color .2s var(--ql-ease-out), transform .22s var(--ql-ease-out);
 }
 .ql-business-card:hover .ql-business-icon,
 .ql-active-queue:hover .ql-business-icon {
   background: var(--ql-action);
   color: var(--ql-surface);
-  transform: scale(1.06);
+  transform: translateY(-2px) scale(1.06);
 }
 .ql-view-business {
   font-weight: 600;
@@ -940,7 +950,7 @@ body {
 .ql-business-card:hover .ql-view-business svg,
 .ql-active-queue:hover .ql-active-link svg,
 .ql-join-link:hover svg {
-  transform: translateX(4px);
+  transform: translateX(5px);
 }
 
 /* Tactile button press */
@@ -959,6 +969,616 @@ body {
   font-size: var(--ql-small);
 }
 
+/* Scroll-elevated sticky header & smooth nav underline */
+.ql-header {
+  position: sticky;
+  top: 0;
+  transition: box-shadow .22s var(--ql-ease-out), border-color .22s var(--ql-ease-out), background-color .22s var(--ql-ease-out);
+}
+.ql-header.is-scrolled {
+  background: rgb(255 255 255 / 96%);
+  border-bottom-color: var(--ql-mint-border);
+  box-shadow: 0 8px 24px -14px rgb(22 36 31 / 18%);
+}
+.ql-workspace-topbar .ql-header {
+  position: relative;
+  box-shadow: none;
+}
+.ql-header-navigation-inner {
+  display: contents;
+}
+.ql-sidebar-content-inner {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+.ql-sidebar-chevron {
+  transition: transform .2s var(--ql-ease-out);
+}
+.ql-sidebar.is-open .ql-sidebar-chevron {
+  transform: rotate(180deg);
+}
+.ql-customer-nav a::after {
+  content: '';
+  position: absolute;
+  bottom: calc(-1 * var(--ql-space-4));
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ql-border-accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .22s var(--ql-ease-out);
+}
+.ql-customer-nav a[aria-current='page']::after {
+  transform: scaleX(1);
+}
+.ql-customer-nav a:hover::after {
+  transform: scaleX(.55);
+}
+.ql-customer-nav a[aria-current='page']:hover::after {
+  transform: scaleX(1);
+}
+
+/* Smooth collapsible mobile menu & workspace sidebar drawer */
+@media (max-width: 1050px) {
+  .ql-header-navigation {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    padding-top: 0;
+    border-top-color: transparent;
+    transition: grid-template-rows .24s var(--ql-ease-out), opacity .18s ease, padding-top .24s var(--ql-ease-out), border-color .2s ease, visibility 0s linear .24s;
+  }
+  .ql-header-navigation.is-open {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+    padding-top: var(--ql-space-4);
+    border-top-color: var(--ql-border);
+    transition: grid-template-rows .26s var(--ql-ease-out), opacity .2s ease, padding-top .26s var(--ql-ease-out), border-color .2s ease, visibility 0s;
+  }
+  .ql-header-navigation-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .ql-workspace-topbar .ql-header-navigation {
+    display: flex;
+    grid-template-rows: none;
+    opacity: 1;
+    visibility: visible;
+    transition: none;
+  }
+  .ql-workspace-topbar .ql-header-navigation-inner {
+    display: contents;
+  }
+  .ql-sidebar-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    margin-top: 0;
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden;
+    transition: grid-template-rows .26s var(--ql-ease-out), opacity .2s ease, margin-top .26s var(--ql-ease-out), visibility 0s linear .26s;
+  }
+  .ql-sidebar.is-open .ql-sidebar-content {
+    display: grid;
+    grid-template-rows: 1fr;
+    margin-top: var(--ql-space-6);
+    opacity: 1;
+    visibility: visible;
+    transition: grid-template-rows .28s var(--ql-ease-out), opacity .22s ease, margin-top .28s var(--ql-ease-out), visibility 0s;
+  }
+  .ql-sidebar-content-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .ql-customer-nav a::after {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .ql-workspace-topbar .ql-header-navigation {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    width: 100%;
+    transition: grid-template-rows .24s var(--ql-ease-out), opacity .18s ease, visibility 0s linear .24s;
+  }
+  .ql-workspace-topbar .ql-header-navigation.is-open {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+    transition: grid-template-rows .26s var(--ql-ease-out), opacity .2s ease, visibility 0s;
+  }
+  .ql-workspace-topbar .ql-header-navigation-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    min-height: 0;
+  }
+}
+
+/* Smooth Radix AlertDialog & Select popover motion */
+.ql-dialog-overlay[data-state='open'] {
+  animation: ql-fade-in .18s var(--ql-ease-out) both;
+}
+.ql-dialog-overlay[data-state='closed'] {
+  animation: ql-fade-out .14s ease-in both;
+}
+.ql-dialog-content[data-state='open'] {
+  animation: ql-dialog-in .22s var(--ql-ease-out) both;
+}
+.ql-dialog-content[data-state='closed'] {
+  animation: ql-dialog-out .14s ease-in both;
+}
+.ql-popover-motion[data-state='open'] {
+  animation: ql-pop-in .16s var(--ql-ease-out) both;
+}
+
+/* Mint-tinted shimmer loading skeleton */
+.ql-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    var(--ql-border) 0%,
+    #EEF6F2 48%,
+    var(--ql-border) 100%
+  );
+  background-size: 220% 100%;
+  animation: ql-shimmer-sweep 1.5s ease-in-out infinite;
+}
+
+/* Form micro-interactions: valid checkmark, icon pop, validation shake */
+.ql-input-wrap {
+  position: relative;
+}
+.ql-input-valid {
+  position: absolute;
+  right: .75rem;
+  inset-block: 0;
+  margin-block: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--ql-soft-mint);
+  color: var(--ql-action);
+  pointer-events: none;
+  animation: ql-icon-pop .22s var(--ql-ease-out) both;
+}
+.ql-icon-pop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: ql-icon-pop .18s var(--ql-ease-out) both;
+}
+.ql-shake {
+  animation: ql-shake .28s var(--ql-ease-out) both;
+}
+
+/* Toast notifications */
+.ql-toast-viewport {
+  position: fixed;
+  z-index: 60;
+  right: var(--ql-space-4);
+  bottom: var(--ql-space-4);
+  display: grid;
+  gap: var(--ql-space-2);
+  width: min(22rem, calc(100vw - var(--ql-space-8)));
+  pointer-events: none;
+}
+.ql-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--ql-space-3);
+  padding: var(--ql-space-3) var(--ql-space-4);
+  border: 1px solid var(--ql-mint-border);
+  border-radius: var(--ql-radius-card);
+  background: var(--ql-surface);
+  color: var(--ql-text);
+  font-size: var(--ql-small);
+  box-shadow: var(--ql-shadow-raised);
+  pointer-events: auto;
+}
+.ql-toast-success {
+  background: linear-gradient(90deg, var(--ql-soft-mint) 0%, var(--ql-surface) 38%);
+}
+.ql-toast-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ql-action);
+}
+.ql-toast-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ql-toast-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: var(--ql-radius-control);
+  background: transparent;
+  color: var(--ql-text-secondary);
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.ql-toast-close:hover {
+  background: var(--ql-soft-mint);
+  color: var(--ql-action);
+}
+
+/* Phase 2: Perforated ticket stub, live value roll, progress track, SSE heartbeat & sound alert */
+.ql-ticket-stub-motion {
+  width: min(100%, 26rem);
+  margin-block: var(--ql-space-4) var(--ql-space-6);
+}
+.ql-join-success .ql-ticket-stub-motion .ql-ticket-card {
+  width: 100%;
+  margin-block: 0;
+}
+.ql-ticket-stub {
+  position: relative;
+}
+.ql-ticket-stub::before,
+.ql-ticket-stub::after {
+  content: '';
+  position: absolute;
+  top: 56%;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--ql-background);
+  border: 1px solid var(--ql-border);
+  pointer-events: none;
+}
+.ql-ticket-stub::before {
+  left: -.625rem;
+  clip-path: inset(0 0 0 50%);
+}
+.ql-ticket-stub::after {
+  right: -.625rem;
+  clip-path: inset(0 50% 0 0);
+}
+
+.ql-status-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ql-space-2);
+}
+.ql-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .375rem .75rem;
+  border: 1px solid var(--ql-mint-border);
+  border-radius: var(--ql-radius-pill);
+  background: var(--ql-surface);
+  color: var(--ql-action);
+  font-size: var(--ql-meta);
+  font-weight: 500;
+}
+.ql-live-pill-dot {
+  width: .45rem;
+  height: .45rem;
+  border-radius: 50%;
+  background: var(--ql-mint);
+  animation: ql-live-pulse 2s ease-in-out infinite;
+}
+.ql-live-pill-reconnecting {
+  border-color: var(--ql-priority-border);
+  background: var(--ql-priority-surface);
+  color: var(--ql-priority-text);
+}
+.ql-live-pill-reconnecting .ql-live-pill-dot {
+  background: var(--ql-priority);
+}
+
+.ql-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-height: 2.25rem;
+  padding: .375rem .8rem;
+  border: 1px solid var(--ql-border);
+  border-radius: var(--ql-radius-pill);
+  background: var(--ql-surface);
+  color: var(--ql-text-secondary);
+  font-size: var(--ql-meta);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color .16s var(--ql-ease-out), border-color .16s var(--ql-ease-out), color .16s var(--ql-ease-out);
+}
+.ql-sound-toggle:hover {
+  border-color: var(--ql-mint-border);
+  background: var(--ql-soft-mint);
+  color: var(--ql-action);
+}
+.ql-sound-toggle.is-on {
+  border-color: var(--ql-mint);
+  background: var(--ql-soft-mint);
+  color: var(--ql-action);
+}
+
+.ql-live-value-wrap {
+  display: inline-block;
+  position: relative;
+  border-radius: .375rem;
+  transition: background-color .45s ease;
+}
+.ql-live-value-wrap.is-flashing {
+  background-color: rgb(46 184 138 / 18%);
+}
+.ql-live-value {
+  display: inline-block;
+}
+
+.ql-progress-track-wrap {
+  margin-top: var(--ql-space-4);
+  text-align: left;
+}
+.ql-progress-track {
+  height: .5rem;
+  border-radius: var(--ql-radius-pill);
+  background: var(--ql-soft-mint);
+  border: 1px solid var(--ql-mint-border);
+  overflow: hidden;
+}
+.ql-progress-fill {
+  height: 100%;
+  border-radius: var(--ql-radius-pill);
+  background: linear-gradient(90deg, var(--ql-mint) 0%, var(--ql-action) 100%);
+}
+.ql-progress-fill.is-next {
+  background: var(--ql-action);
+}
+.ql-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: .375rem;
+  font-size: .8125rem;
+  color: var(--ql-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Assigned counter spotlight on CounterBoard */
+.ql-customer-counter {
+  transition: border-color .22s var(--ql-ease-out), box-shadow .22s var(--ql-ease-out), background-color .22s var(--ql-ease-out);
+}
+.ql-customer-counter-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ql-space-2);
+}
+.ql-counter-your-tag {
+  font-size: .75rem;
+  font-weight: 700;
+  padding: .15rem .5rem;
+  border-radius: var(--ql-radius-pill);
+  background: var(--ql-action);
+  color: var(--ql-surface);
+  white-space: nowrap;
+}
+.ql-customer-counter-mine {
+  border: 2px solid var(--ql-mint);
+  background: linear-gradient(180deg, var(--ql-soft-mint) 0%, var(--ql-surface) 75%);
+  animation: ql-called-glow 2.2s ease-in-out infinite;
+}
+
+/* Phase 3: Discovery stagger, search kbd, availability filters, banner sheen & contact copy */
+.ql-card-stagger {
+  animation: ql-enter .28s var(--ql-ease-out) var(--ql-stagger, 0ms) both;
+}
+.ql-kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding-inline: .35rem;
+  border: 1px solid var(--ql-border);
+  border-bottom-width: 2px;
+  border-radius: .375rem;
+  background: var(--ql-background);
+  color: var(--ql-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.ql-kbd-on-dark {
+  border-color: rgb(255 255 255 / 28%);
+  background: rgb(255 255 255 / 14%);
+  color: rgb(255 255 255 / 92%);
+}
+.ql-discovery-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ql-space-3);
+}
+.ql-filter-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ql-space-1);
+  padding: .25rem;
+  border: 1px solid var(--ql-border);
+  border-radius: var(--ql-radius-pill);
+  background: var(--ql-surface);
+}
+.ql-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-height: 2.125rem;
+  padding: .25rem .75rem;
+  border: 0;
+  border-radius: var(--ql-radius-pill);
+  background: transparent;
+  color: var(--ql-text-secondary);
+  font-size: var(--ql-meta);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color .16s var(--ql-ease-out), color .16s var(--ql-ease-out);
+}
+.ql-filter-pill:hover {
+  color: var(--ql-action);
+  background: var(--ql-soft-mint);
+}
+.ql-filter-pill.is-active {
+  background: var(--ql-action);
+  color: var(--ql-surface);
+}
+.ql-filter-count {
+  font-size: .75rem;
+  opacity: .82;
+  font-variant-numeric: tabular-nums;
+}
+.ql-spin-once {
+  animation: ql-spin-once .48s var(--ql-ease-out) both;
+}
+
+.ql-business-banner {
+  position: relative;
+}
+.ql-business-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(280px circle at var(--ql-mx, 50%) var(--ql-my, 50%), rgb(255 255 255 / 45%), transparent 70%);
+  transition: opacity .25s ease;
+}
+@media (hover: hover) {
+  .ql-business-banner:hover::before {
+    opacity: 1;
+  }
+}
+.ql-contact-copy-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ql-space-2);
+}
+.ql-copy-inline {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--ql-border);
+  border-radius: var(--ql-radius-control);
+  background: var(--ql-surface);
+  color: var(--ql-text-secondary);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.ql-copy-inline:hover {
+  border-color: var(--ql-mint-border);
+  background: var(--ql-soft-mint);
+  color: var(--ql-action);
+}
+
+/* View Transitions timing for Home -> Business Detail continuity */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: .22s;
+  animation-timing-function: var(--ql-ease-out);
+}
+
+/* Phase 4: Staff workspace state accents, timer pulse, dashboard row flash & capacity bar */
+.ql-workspace-current {
+  border-top: 4px solid var(--ql-border);
+  transition: border-color .24s var(--ql-ease-out), background-color .24s var(--ql-ease-out);
+}
+.ql-workspace-state-called {
+  border-top-color: var(--ql-mint);
+  background: linear-gradient(180deg, rgb(230 246 240 / 48%) 0%, var(--ql-surface) 36%);
+}
+.ql-workspace-state-processing {
+  border-top-color: #0284C7;
+  background: linear-gradient(180deg, rgb(224 242 254 / 52%) 0%, var(--ql-surface) 36%);
+}
+.ql-timer-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+}
+.ql-timer-dot {
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: #0284C7;
+  animation: ql-live-pulse 1.6s ease-in-out infinite;
+}
+.ql-tab-count {
+  display: inline-block;
+  transition: transform .18s var(--ql-ease-out);
+}
+.ql-tab-count.is-bumped {
+  animation: ql-badge-bump .28s var(--ql-ease-out) both;
+}
+.ql-queue-table tbody tr.ql-row-flash > * {
+  animation: ql-row-flash 1.25s var(--ql-ease-out) both;
+}
+.ql-capacity-card p {
+  margin-bottom: var(--ql-space-3);
+}
+.ql-capacity-bar {
+  height: .5625rem;
+  border-radius: var(--ql-radius-pill);
+  background: var(--ql-soft-mint);
+  border: 1px solid var(--ql-mint-border);
+  overflow: hidden;
+}
+.ql-capacity-fill {
+  height: 100%;
+  border-radius: var(--ql-radius-pill);
+  background: linear-gradient(90deg, var(--ql-mint) 0%, var(--ql-action) 100%);
+}
+.ql-capacity-fill.is-low {
+  background: linear-gradient(90deg, #F59E0B 0%, var(--ql-error) 100%);
+}
+
+@media (max-width: 768px) {
+  .ql-kbd {
+    display: none;
+  }
+}
+
+@keyframes ql-spin-once {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes ql-badge-bump {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+@keyframes ql-row-flash {
+  0% { background-color: rgb(46 184 138 / 24%); }
+  100% { background-color: transparent; }
+}
+
 @keyframes ql-enter {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -966,6 +1586,37 @@ body {
 @keyframes ql-pop-in {
   from { opacity: 0; transform: translateY(-4px) scale(.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ql-icon-pop {
+  from { opacity: 0; transform: scale(.75); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ql-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  45% { transform: translateX(4px); }
+  70% { transform: translateX(-3px); }
+  88% { transform: translateX(2px); }
+}
+@keyframes ql-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ql-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes ql-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes ql-dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -48%) scale(.96); }
+}
+@keyframes ql-shimmer-sweep {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
 }
 @keyframes ql-live-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
@@ -981,22 +1632,55 @@ body {
 }
 
 @media (max-width: 640px) {
+  .ql-status-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .ql-status-controls > [role='status'][aria-live] {
+    width: 100%;
+  }
   .ql-status-heading .ql-badge {
     width: 100%;
     justify-content: center;
     font-size: 1.125rem;
     padding: .6875rem 1.25rem;
   }
+  .ql-toast-viewport {
+    left: var(--ql-space-4);
+    right: var(--ql-space-4);
+    width: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ql-page > *,
+  .ql-card-stagger,
   .ql-account-panel.is-open,
   .ql-success-note,
   .ql-ticket-called,
+  .ql-customer-counter-mine,
   .ql-status-heading .ql-badge::before,
-  .ql-availability .ql-status-dot {
+  .ql-availability .ql-status-dot,
+  .ql-live-pill-dot,
+  .ql-timer-dot,
+  .ql-spin-once,
+  .ql-tab-count.is-bumped,
+  .ql-queue-table tbody tr.ql-row-flash > *,
+  .ql-shimmer,
+  .ql-shake,
+  .ql-icon-pop,
+  .ql-input-valid,
+  .ql-dialog-overlay[data-state],
+  .ql-dialog-content[data-state],
+  .ql-popover-motion[data-state] {
     animation: none;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: .01ms;
+  }
+  .ql-shimmer {
+    background: var(--ql-border);
   }
   .ql-business-card,
   .ql-queue-card,
@@ -1004,17 +1688,22 @@ body {
   .ql-business-icon,
   .ql-view-business svg,
   .ql-active-link svg,
-  .ql-join-link svg {
+  .ql-join-link svg,
+  .ql-header,
+  .ql-header-navigation,
+  .ql-sidebar-content,
+  .ql-sidebar-chevron,
+  .ql-customer-nav a::after,
+  .ql-sound-toggle,
+  .ql-customer-counter {
     transition: none;
   }
-  .ql-business-card:hover,
-  .ql-queue-card:hover,
-  .ql-active-queue:hover,
   .ql-business-card:hover .ql-business-icon,
   .ql-active-queue:hover .ql-business-icon,
   .ql-business-card:hover .ql-view-business svg,
   .ql-active-queue:hover .ql-active-link svg,
-  .ql-join-link:hover svg {
+  .ql-join-link:hover svg,
+  .ql-button:not(:disabled):active {
     transform: none;
   }
 }

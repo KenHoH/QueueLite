@@ -26,12 +26,14 @@ export function ApplicationShell({ children }: { children: ReactNode }) {
   if (!workspace) return <div className="ql-app"><CustomerHeader /><div className="ql-app-content">{children}</div><footer className="ql-footer"><span>QueueLite <span aria-hidden="true">·</span> Don’t wait in line. Join the line.</span><span><MapPin size={14} aria-hidden="true" /> Made for your neighborhood</span></footer></div>;
   return <WorkspaceBusiness.Provider value={setBusiness}><div className="ql-app ql-workspace-shell">
     <aside className={`ql-sidebar ${open ? 'is-open' : ''}`} aria-label="Business workspace">
-      <div className="ql-sidebar-top"><Link className="ql-brand" to="/">Queue<span>Lite</span></Link><button className="ql-sidebar-toggle" type="button" aria-expanded={open} aria-controls="workspace-navigation" onClick={() => setOpen(value => !value)}>Workspace menu <ChevronDown size={16} aria-hidden="true" /></button></div>
+      <div className="ql-sidebar-top"><Link className="ql-brand" to="/">Queue<span>Lite</span></Link><button className="ql-sidebar-toggle" type="button" aria-expanded={open} aria-controls="workspace-navigation" onClick={() => setOpen(value => !value)}>Workspace menu <ChevronDown className="ql-sidebar-chevron" size={16} aria-hidden="true" /></button></div>
       <div id="workspace-navigation" className="ql-sidebar-content">
-        <p className="ql-eyebrow">Business workspace</p>
-        <Link className="ql-business-identity" to="/business/manage"><span className="ql-business-monogram" aria-hidden="true">{business?.name.charAt(0).toUpperCase() ?? 'Q'}</span><span><strong>{business?.name ?? 'Your workspace'}</strong><small>{business?.location ?? 'Choose a business'}</small></span></Link>
-        {business ? <BusinessNavigation businessId={business.id} manager={business.role === 'owner' || business.role === 'admin'} /> : <nav className="ql-business-nav" aria-label="Business tools"><Link to="/business/manage">Your businesses <ArrowUpRight size={16} aria-hidden="true" /></Link><Link to="/counters">My counters</Link></nav>}
-        <div className="ql-sidebar-bottom"><Link to="/business/manage">Switch business <ArrowUpRight size={14} aria-hidden="true" /></Link><Link to="/"><ArrowLeft size={16} aria-hidden="true" /> Customer view</Link></div>
+        <div className="ql-sidebar-content-inner">
+          <p className="ql-eyebrow">Business workspace</p>
+          <Link className="ql-business-identity" to="/business/manage"><span className="ql-business-monogram" aria-hidden="true">{business?.name.charAt(0).toUpperCase() ?? 'Q'}</span><span><strong>{business?.name ?? 'Your workspace'}</strong><small>{business?.location ?? 'Choose a business'}</small></span></Link>
+          {business ? <BusinessNavigation businessId={business.id} manager={business.role === 'owner' || business.role === 'admin'} /> : <nav className="ql-business-nav" aria-label="Business tools"><Link to="/business/manage">Your businesses <ArrowUpRight size={16} aria-hidden="true" /></Link><Link to="/counters">My counters</Link></nav>}
+          <div className="ql-sidebar-bottom"><Link to="/business/manage">Switch business <ArrowUpRight size={14} aria-hidden="true" /></Link><Link to="/"><ArrowLeft size={16} aria-hidden="true" /> Customer view</Link></div>
+        </div>
       </div>
     </aside>
     <div className="ql-workspace-body"><div className="ql-workspace-topbar"><span className="ql-breadcrumb">{business?.name ?? 'QueueLite'} <span aria-hidden="true">/</span> Workspace</span><CustomerHeader /></div><div className="ql-app-content">{children}</div></div>

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { generateQRImage } from "@/api/queues";
 import type { BusinessMembership } from "../api/types";
 import { Button, Card, InlineError, Input } from "../components/foundation";
+import { useToast } from "../components/Toast";
 import { BusinessOperationsPage } from "./BusinessOperations";
 
 export default function ShareQueue() {
@@ -14,6 +15,7 @@ export default function ShareQueue() {
 }
 
 function Share({ business }: { business: BusinessMembership }) {
+	const toast = useToast();
 	const [copied, setCopied] = useState(false);
 	const [error, setError] = useState("");
 	const url = `${window.location.origin}/queuelite/qr/${encodeURIComponent(business.id)}`;
@@ -22,6 +24,7 @@ function Share({ business }: { business: BusinessMembership }) {
 		try {
 			await navigator.clipboard.writeText(url);
 			setCopied(true);
+			toast.success("Queue link copied to clipboard.");
 			window.setTimeout(() => setCopied(false), 2000);
 		} catch {
 			setError(
@@ -49,11 +52,13 @@ function Share({ business }: { business: BusinessMembership }) {
 							void copy();
 						}}
 					>
-						{copied ? (
-							<Check aria-hidden="true" />
-						) : (
-							<Copy aria-hidden="true" />
-						)}
+						<span key={copied ? "copied" : "copy"} className="ql-icon-pop">
+							{copied ? (
+								<Check aria-hidden="true" />
+							) : (
+								<Copy aria-hidden="true" />
+							)}
+						</span>
 						{copied ? "Copied" : "Copy link"}
 					</Button>
 				</div>

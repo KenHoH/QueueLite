@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Ticket } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ticket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getBusiness } from '../api/businesses';
 import { APIError } from '../api/errors';
@@ -39,7 +39,7 @@ export function JoinedQueuesPreview() {
   const guest = auth.status === 'guest';
   const displayed = queues;
   return <section className="ql-joined-queues" aria-labelledby="joined-queues-heading">
-    <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues {status === 'ready' && <span className="ql-count">{displayed.length}</span>}</h2><p className="ql-muted">A little freedom while you wait.</p></div>{status === 'ready' && <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Refresh queues</Button>}</div>
+    <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues {status === 'ready' && <span className="ql-count">{displayed.length}</span>}</h2><p className="ql-muted">A little freedom while you wait.</p></div>{status === 'ready' && <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}><RefreshCw key={attempt} className={attempt > 0 ? 'ql-spin-once' : undefined} size={15} aria-hidden="true" />Refresh queues</Button>}</div>
     {auth.status === 'loading' || status === 'loading' && auth.status !== 'error' ? <Card><LoadingSkeleton label="Loading joined queues" lines={2} /></Card>
       : auth.status === 'error' ? <Card><InlineError>Please retry the session check above to view your queues.</InlineError></Card>
       : status === 'unauthorized' && !guest ? <Card><InlineError>Your session has ended. Please sign in to view your queues.</InlineError><Link to="/login?returnTo=%2F">Sign in</Link></Card>

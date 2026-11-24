@@ -1,8 +1,9 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, InlineError, Input, PageContainer, PasswordInput } from '../components/foundation';
 import { useAppState } from '../state/AppState';
 import { RegistrationSignInError } from '../state/authStore';
+import { validEmail, validPhone } from './accountForms';
 import { authErrorMessage, validateAuth, type AuthFields } from './authForm';
 
 export function AuthPage({ registering = false }: { registering?: boolean }) {
@@ -16,17 +17,50 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
   const [error, setError] = useState('');
   const [created, setCreated] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [shaking, setShaking] = useState(false);
+  const shakeTimer = useRef<number | null>(null);
   const submitting = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => () => { if (shakeTimer.current !== null) window.clearTimeout(shakeTimer.current); }, []);
+  function triggerShake() {
+    if (shakeTimer.current !== null) window.clearTimeout(shakeTimer.current);
+    setShaking(false);
+    requestAnimationFrame(() => {
+      setShaking(true);
+      shakeTimer.current = window.setTimeout(() => setShaking(false), 320);
+    });
+  }
   if (auth.status === 'authenticated') return <Navigate to={returnTo} replace />;
-  const bind = (name: keyof AuthFields) => ({ name, id: `auth-${name}`, value: fields[name], disabled: busy, error: errors[name], onChange: (event: React.ChangeEvent<HTMLInputElement>) => setFields(previous => ({ ...previous, [name]: event.target.value })) });
+  const isFieldValid = (name: keyof AuthFields) => {
+    if (!registering) return false;
+    if (name === 'phonenumber') return fields.phonenumber.trim().length > 0 && validPhone(fields.phonenumber);
+    if (name === 'email') return fields.email.trim().length > 0 && validEmail(fields.email);
+    return false;
+  };
+  const bind = (name: keyof AuthFields) => ({
+    name,
+    id: `auth-${name}`,
+    value: fields[name],
+    disabled: busy,
+    error: errors[name],
+    valid: isFieldValid(name),
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+      const next = event.target.value;
+      setFields(previous => ({ ...previous, [name]: next }));
+      if (errors[name]) setErrors(previous => ({ ...previous, [name]: undefined }));
+    },
+  });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || created) return;
     const validation = validateAuth(fields, registering);
     setErrors(validation); setError('');
     const first = Object.keys(validation)[0];
-    if (first) { (event.currentTarget.elements.namedItem(first) as HTMLInputElement)?.focus(); return; }
+    if (first) {
+      triggerShake();
+      (event.currentTarget.elements.namedItem(first) as HTMLInputElement)?.focus();
+      return;
+    }
     submitting.current = true; setBusy(true);
     try {
       const credentials = { username: fields.username.trim(), password: fields.password };
@@ -40,6 +74,7 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
         setFields(previous => ({ ...previous, password: '', confirmPassword: '' }));
       }
       setError(authErrorMessage(failure, registering));
+      triggerShake();
       requestAnimationFrame(() => errorRef.current?.focus());
     } finally { submitting.current = false; setBusy(false); }
   }
@@ -47,7 +82,7 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
     <p className="ql-auth-eyebrow">QueueLite · A little less waiting</p>
     <h1>{registering ? 'Create your QueueLite account.' : 'Welcome back.'}</h1>
     <p className="ql-muted">{registering ? 'Save your queues, manage your profile, and unlock more ways to wait less.' : 'Sign in to keep track of your queues and make waiting a little easier.'}</p>
-    <form className="ql-stack" onSubmit={submit} noValidate aria-busy={busy}>
+    <form className={`ql-stack ${shaking ? 'ql-shake' : ''}`} onSubmit={submit} noValidate aria-busy={busy}>
       <Input label="Username" autoComplete="username" required {...bind('username')} />
       {registering && <><Input label="Phone number" type="tel" autoComplete="tel" required {...bind('phonenumber')} /><Input label="Email (optional)" type="email" autoComplete="email" {...bind('email')} /></>}
       <PasswordInput label="Password" autoComplete={registering ? 'new-password' : 'current-password'} required {...bind('password')} />

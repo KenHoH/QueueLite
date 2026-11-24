@@ -1,4 +1,5 @@
-import { Check, Monitor, SkipForward, Users } from 'lucide-react';
+import { Check, Monitor, RefreshCw, SkipForward, Users } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useWorkspaceBusiness } from '../components/ApplicationShell';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -20,6 +21,8 @@ import {
 	PageContainer,
 	StatusBadge,
 } from "../components/foundation";
+import { LiveValue } from "../components/LiveMotion";
+import { useToast } from "../components/Toast";
 import { OperationsFeedback } from "./BusinessOperations";
 import { isBusinessId } from "./businessDisplay";
 import { PriorityBadge } from "./Dashboard";
@@ -73,10 +76,12 @@ function Workspace({ counterId }: { counterId: string }) {
 		[counterId],
 	);
 	const resource = useOperations(load, false);
+	const toast = useToast();
 	const [busy, setBusy] = useState(false),
 		[error, setError] = useState(""),
 		[notice, setNotice] = useState(""),
-		[uncertain, setUncertain] = useState(false);
+		[uncertain, setUncertain] = useState(false),
+		[refreshTick, setRefreshTick] = useState(0);
 	const lock = useRef(false);
 	const data = resource.data,
 		queue = data && currentQueue(data.counter, data.queues);
@@ -105,11 +110,15 @@ function Workspace({ counterId }: { counterId: string }) {
 				const result = await callNextQueue(counterId, data.counter.businessId);
 				if ("queue" in result && result.queue === null)
 					setNotice("No waiting customer available.");
+				else toast.success("Next customer called.");
 			} else if (queue) {
-				if (action === "process") await processCalledQueue(counterId, queue.id);
-				else if (action === "complete")
+				if (action === "process") {
+					await processCalledQueue(counterId, queue.id);
+					toast.info(`Started serving ${queue.name}.`);
+				} else if (action === "complete") {
 					await removeQueueFromCounter(counterId, queue.id);
-				else {
+					toast.success(`Completed visit for ${queue.name}.`);
+				} else {
 					await skipQueue(counterId, queue.id);
 					setNotice(
 						"Customer skipped. The scheduler selected the next available customer.",
@@ -131,12 +140,52 @@ function Workspace({ counterId }: { counterId: string }) {
 		setError("");
 		setNotice("");
 		setUncertain(false);
+		setRefreshTick((v) => v + 1);
 		resource.retry();
 	}
 	const active =
 		queue && (queue.state === "called" || queue.state === "processing");
 	const waiting =
 		data?.queues.filter((item) => item.state === "waiting").length ?? 0;
+
+	const actRef = useRef(act);
+	actRef.current = act;
+
+	// Single-key operational shortcuts on desktop when focus is not inside an editable control.
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.ctrlKey || event.metaKey || event.altKey || busy || uncertain || !data) return;
+			const target = event.target as HTMLElement | null;
+			if (target && (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(target.tagName) || target.isContentEditable)) return;
+			const key = event.key.toLowerCase();
+			if (!active && !data.counter.currentQueueId && key === "c") {
+				event.preventDefault();
+				void actRef.current("call");
+			} else if (active && queue?.state === "called" && key === "s") {
+				event.preventDefault();
+				void actRef.current("process");
+			} else if (active && queue?.state === "processing" && key === "d") {
+				event.preventDefault();
+				void actRef.current("complete");
+			} else if (active && key === "k") {
+				event.preventDefault();
+				void actRef.current("skip");
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [active, busy, data, queue?.state, uncertain]);
+
+	const workspaceTone = active
+		? queue.state === "processing"
+			? "ql-workspace-state-processing"
+			: "ql-workspace-state-called"
+		: "ql-workspace-state-idle";
+	const ticketViewKey = active
+		? `${queue.id}-${queue.state}`
+		: data?.counter.currentQueueId
+			? "pending"
+			: "idle";
 
 	return (
 		<div className="ql-stack">
@@ -162,89 +211,100 @@ function Workspace({ counterId }: { counterId: string }) {
 						<div>
 							<p className="ql-eyebrow">Active service counter</p>
 							<h2>{data.counter.name}</h2>
-							<p className="ql-muted">Waiting customers: {waiting}</p>
+							<p className="ql-muted">Waiting customers: <LiveValue value={String(waiting)} /></p>
 						</div>
 						<Button variant="secondary" disabled={busy} onClick={refresh}>
+							<RefreshCw key={refreshTick} className={refreshTick > 0 ? "ql-spin-once" : undefined} size={15} aria-hidden="true" />
 							Refresh workspace
 						</Button>
 					</Card>
 					<div className="ql-workspace-grid">
 						<Card
-							className="ql-workspace-current"
+							className={`ql-workspace-current ${workspaceTone}`}
 							aria-labelledby="current-customer-heading"
 						>
 							<h2 id="current-customer-heading">Currently serving</h2><Monitor className="ql-workspace-icon" size={26} aria-hidden="true" />
-							{active ? (
-								<>
-									<div className="ql-workspace-badges">
-										<StatusBadge state={queue.state} />
-										<PriorityBadge queue={queue} />
-									</div>
-									<p className="ql-queue-number">{queue.name}</p>
-									{queue.state === "processing" ? (
-										<div className="ql-time-panel">
-											<span className="ql-meta">Time taken</span>
-											<ServiceTimer startedAt={queue.processingAt} />
-										</div>
+							<AnimatePresence mode="wait" initial={false}>
+								<motion.div
+									key={ticketViewKey}
+									initial={{ opacity: 0.25, x: 16 }}
+									animate={{ opacity: 1, x: 0 }}
+									exit={{ opacity: 0, x: -16 }}
+									transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+								>
+									{active ? (
+										<>
+											<div className="ql-workspace-badges">
+												<StatusBadge state={queue.state} />
+												<PriorityBadge queue={queue} />
+											</div>
+											<p className="ql-queue-number">{queue.name}</p>
+											{queue.state === "processing" ? (
+												<div className="ql-time-panel">
+													<span className="ql-meta ql-timer-label"><span className="ql-timer-dot" aria-hidden="true" />Time taken</span>
+													<ServiceTimer startedAt={queue.processingAt} />
+												</div>
+											) : (
+												<p className="ql-muted">
+													Service time starts after you begin service.
+												</p>
+											)}
+											<div className="ql-actions">
+												{queue.state === "called" ? (
+													<Button
+														loading={busy}
+														disabled={uncertain}
+														onClick={() => void act("process")}
+													>
+														Start service <kbd className="ql-kbd ql-kbd-on-dark" aria-hidden="true">S</kbd>
+													</Button>
+												) : (
+													<Button
+														loading={busy}
+														disabled={uncertain}
+														onClick={() => void act("complete")}
+													>
+														<Check size={17} aria-hidden="true" /> Complete <kbd className="ql-kbd ql-kbd-on-dark" aria-hidden="true">D</kbd>
+													</Button>
+												)}
+												<Button
+													variant="secondary"
+													disabled={busy || uncertain}
+													onClick={() => void act("skip")}
+												>
+													<SkipForward size={17} aria-hidden="true" /> Skip <kbd className="ql-kbd" aria-hidden="true">K</kbd>
+												</Button>
+											</div>
+										</>
+									) : data.counter.currentQueueId ? (
+										<>
+											<h3>Customer state pending</h3>
+											<p className="ql-muted">
+												The assigned queue is not available in an active state.
+												Refresh before operating this counter.
+											</p>
+										</>
 									) : (
-										<p className="ql-muted">
-											Service time starts after you begin service.
-										</p>
+										<>
+											<p className="ql-workspace-empty">No active customer</p>
+											<Button
+												loading={busy}
+												disabled={uncertain}
+												onClick={() => void act("call")}
+											>
+												Call next <kbd className="ql-kbd ql-kbd-on-dark" aria-hidden="true">C</kbd>
+											</Button>
+										</>
 									)}
-									<div className="ql-actions">
-										{queue.state === "called" ? (
-											<Button
-												loading={busy}
-												disabled={uncertain}
-												onClick={() => void act("process")}
-											>
-												Start service
-											</Button>
-										) : (
-											<Button
-												loading={busy}
-												disabled={uncertain}
-												onClick={() => void act("complete")}
-											>
-                        <Check size={17} aria-hidden="true" /> Complete
-											</Button>
-										)}
-										<Button
-											variant="secondary"
-											disabled={busy || uncertain}
-											onClick={() => void act("skip")}
-										>
-                      <SkipForward size={17} aria-hidden="true" /> Skip
-										</Button>
-									</div>
-								</>
-							) : data.counter.currentQueueId ? (
-								<>
-									<h3>Customer state pending</h3>
-									<p className="ql-muted">
-										The assigned queue is not available in an active state.
-										Refresh before operating this counter.
-									</p>
-								</>
-							) : (
-								<>
-									<p className="ql-workspace-empty">No active customer</p>
-									<Button
-										loading={busy}
-										disabled={uncertain}
-										onClick={() => void act("call")}
-									>
-										Call next
-									</Button>
-								</>
-							)}
+								</motion.div>
+							</AnimatePresence>
 						</Card>
 						<Card
 							className="ql-workspace-next"
 							aria-labelledby="next-customer-heading"
 						>
 							<h2 id="next-customer-heading">Next customer</h2>
-              <Users className="ql-workspace-icon" size={27} aria-hidden="true" /><p className="ql-workspace-next-value">{waiting} {waiting === 1 ? 'customer' : 'customers'} waiting</p>
+              <Users className="ql-workspace-icon" size={27} aria-hidden="true" /><p className="ql-workspace-next-value"><LiveValue value={`${waiting} ${waiting === 1 ? 'customer' : 'customers'} waiting`} /></p>
 							<p className="ql-muted">
 								Call the next customer when this counter is ready.
 							</p>
