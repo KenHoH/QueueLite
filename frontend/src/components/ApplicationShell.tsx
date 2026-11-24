@@ -30,7 +30,13 @@ export function ApplicationShell({ children }: { children: ReactNode }) {
       <div id="workspace-navigation" className="ql-sidebar-content">
         <div className="ql-sidebar-content-inner">
           <p className="ql-eyebrow">Business workspace</p>
-          <Link className="ql-business-identity" to="/business/manage"><span className="ql-business-monogram" aria-hidden="true">{business?.name.charAt(0).toUpperCase() ?? 'Q'}</span><span><strong>{business?.name ?? 'Your workspace'}</strong><small>{business?.location ?? 'Choose a business'}</small></span></Link>
+          <Link className="ql-business-identity" to="/business/manage">
+            <span className="ql-business-monogram" aria-hidden="true">{business?.name.charAt(0).toUpperCase() ?? 'Q'}</span>
+            <span className="ql-business-identity-text">
+              <strong title={business?.name}>{business?.name ?? 'Your workspace'}</strong>
+              <small title={business?.location || undefined}>{business ? (business.location || 'Location not provided') : 'Choose a business'}</small>
+            </span>
+          </Link>
           {business ? <BusinessNavigation businessId={business.id} manager={business.role === 'owner' || business.role === 'admin'} /> : <nav className="ql-business-nav" aria-label="Business tools"><Link to="/business/manage">Your businesses <ArrowUpRight size={16} aria-hidden="true" /></Link><Link to="/counters">My counters</Link></nav>}
           <div className="ql-sidebar-bottom"><Link to="/business/manage">Switch business <ArrowUpRight size={14} aria-hidden="true" /></Link><Link to="/"><ArrowLeft size={16} aria-hidden="true" /> Customer view</Link></div>
         </div>
