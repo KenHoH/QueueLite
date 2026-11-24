@@ -10,6 +10,7 @@ import { Button, Card, EmptyState, InlineError, Input, LoadingSkeleton, PageCont
 import { AnimatedCheckIcon } from '../components/LiveMotion';
 import { useToast } from '../components/Toast';
 import { useAppState } from '../state/AppState';
+import { useSound } from '../state/SoundContext';
 import { businessHours, isBusinessId } from './businessDisplay';
 import { BusinessAvailability } from '../components/BusinessCard';
 import { isAmbiguousJoin, joinErrorMessage, validateGuestJoin } from './queueDisplay';
@@ -26,6 +27,7 @@ export default function JoinQueue() {
 function JoinBusiness({ businessId }: { businessId: string }) {
   const { auth, setActiveTicket } = useAppState();
   const toast = useToast();
+  const sound = useSound();
   const [business, setBusiness] = useState<Business | null>(null);
   const [load, setLoad] = useState<'loading' | 'ready' | 'not-found' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -87,6 +89,7 @@ function JoinBusiness({ businessId }: { businessId: string }) {
     const first = Object.keys(validation)[0];
     if (first) {
       triggerShake();
+      sound.softError();
       (event.currentTarget.elements.namedItem(first) as HTMLInputElement)?.focus();
       return;
     }
@@ -96,12 +99,14 @@ function JoinBusiness({ businessId }: { businessId: string }) {
       const queue = await joinBusinessQueue(businessId, auth.status === 'authenticated' ? undefined : { username: fields.username.trim(), phoneNumber: fields.phoneNumber.trim() }, { signal: controller.signal });
       if (!controller.signal.aborted) {
         setTicket(queue); setActiveTicket({ queue, joinedAs: auth.status === 'authenticated' ? 'user' : 'guest' });
+        sound.ticketIssued();
         toast.success(`Ticket ${queue.name} issued.`);
       }
     } catch (failure) {
       if (!controller.signal.aborted) {
         setError(joinErrorMessage(failure)); setUncertain(isAmbiguousJoin(failure));
         triggerShake();
+        sound.softError();
         requestAnimationFrame(() => errorRef.current?.focus());
       }
     } finally { if (!controller.signal.aborted) { submitting.current = false; setBusy(false); } }

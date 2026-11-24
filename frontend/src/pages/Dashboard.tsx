@@ -8,6 +8,7 @@ import { getBusinessSubscription } from '../api/subscriptions';
 import { businessQueueEventsURL } from '../api/queues';
 import { Button, Card, EmptyState, StatusBadge } from '../components/foundation';
 import { LiveValue } from '../components/LiveMotion';
+import { useSound } from '../state/SoundContext';
 import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -36,13 +37,14 @@ export function PriorityBadge({ queue }: { queue: Queue }) {
 }
 
 function ServicesDashboardHeader({ business, refresh }: { business: Business; refresh: () => void }) {
+  const sound = useSound();
   const [tick, setTick] = useState(0);
   return <div className="ql-services-header">
     <div>
       <h2>{business.name}</h2>
       <p className="ql-muted">Here’s how things are moving at your business.</p>
     </div>
-    <Button variant="secondary" onClick={() => { setTick(v => v + 1); refresh(); }}>
+    <Button variant="secondary" onClick={() => { sound.pop(); setTick(v => v + 1); refresh(); }}>
       <RefreshCw key={tick} className={tick > 0 ? 'ql-spin-once' : undefined} size={15} aria-hidden="true" />
       Refresh
     </Button>
@@ -63,9 +65,13 @@ function TabCount({ count }: { count: number }) {
 }
 
 function QueueFilterTabs({ value, queues, onChange }: { value: QueueFilter; queues: Queue[]; onChange: (value: QueueFilter) => void }) {
+  const sound = useSound();
   const count = (filter: QueueFilter) => queues.filter(queue => filter === 'current' ? activeStates.includes(queue.state) : queue.state === filter).length;
-  return <Tabs value={value} onValueChange={next => onChange(next as QueueFilter)}><TabsList className="ql-queue-tabs" aria-label="Filter customer queues">
-    {filters.map(filter => <TabsTrigger key={filter.value} value={filter.value}>{filter.label} <TabCount count={count(filter.value)} /></TabsTrigger>)}
+  return <Tabs value={value} onValueChange={next => { sound.tap(); onChange(next as QueueFilter); }}><TabsList className="ql-queue-tabs" aria-label="Filter customer queues">
+    {filters.map(filter => <TabsTrigger key={filter.value} value={filter.value} className="ql-queue-tab-trigger">
+      {filter.label} <TabCount count={count(filter.value)} />
+      {value === filter.value && <motion.span layoutId="dashboard-tab-indicator" layoutDependency={value} className="ql-tab-indicator" aria-hidden="true" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+    </TabsTrigger>)}
   </TabsList></Tabs>;
 }
 

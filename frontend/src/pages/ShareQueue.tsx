@@ -4,6 +4,7 @@ import { generateQRImage } from "@/api/queues";
 import type { BusinessMembership } from "../api/types";
 import { Button, Card, InlineError, Input } from "../components/foundation";
 import { useToast } from "../components/Toast";
+import { useSound } from "../state/SoundContext";
 import { BusinessOperationsPage } from "./BusinessOperations";
 
 export default function ShareQueue() {
@@ -16,6 +17,7 @@ export default function ShareQueue() {
 
 function Share({ business }: { business: BusinessMembership }) {
 	const toast = useToast();
+	const sound = useSound();
 	const [copied, setCopied] = useState(false);
 	const [error, setError] = useState("");
 	const url = `${window.location.origin}/queuelite/qr/${encodeURIComponent(business.id)}`;
@@ -24,9 +26,11 @@ function Share({ business }: { business: BusinessMembership }) {
 		try {
 			await navigator.clipboard.writeText(url);
 			setCopied(true);
+			sound.stepSuccess();
 			toast.success("Queue link copied to clipboard.");
 			window.setTimeout(() => setCopied(false), 2000);
 		} catch {
+			sound.softError();
 			setError(
 				"Copying was blocked by your browser. Select and copy the link manually.",
 			);

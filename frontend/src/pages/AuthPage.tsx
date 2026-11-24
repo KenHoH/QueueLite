@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, InlineError, Input, PageContainer, PasswordInput } from '../components/foundation';
 import { useAppState } from '../state/AppState';
+import { useSound } from '../state/SoundContext';
 import { RegistrationSignInError } from '../state/authStore';
 import { validEmail, validPhone } from './accountForms';
 import { authErrorMessage, validateAuth, type AuthFields } from './authForm';
 
 export function AuthPage({ registering = false }: { registering?: boolean }) {
   const { auth, login, register } = useAppState();
+  const sound = useSound();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const requestedPath = params.get('returnTo') ?? '/';
@@ -58,6 +60,7 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
     const first = Object.keys(validation)[0];
     if (first) {
       triggerShake();
+      sound.softError();
       (event.currentTarget.elements.namedItem(first) as HTMLInputElement)?.focus();
       return;
     }
@@ -67,6 +70,7 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
       if (registering) await register({ ...credentials, phonenumber: fields.phonenumber.trim(), ...(fields.email.trim() ? { email: fields.email.trim() } : {}) });
       else await login(credentials);
       setFields(previous => ({ ...previous, password: '', confirmPassword: '' }));
+      sound.stepSuccess();
       navigate(returnTo, { replace: true });
     } catch (failure) {
       if (failure instanceof RegistrationSignInError) {
@@ -75,6 +79,7 @@ export function AuthPage({ registering = false }: { registering?: boolean }) {
       }
       setError(authErrorMessage(failure, registering));
       triggerShake();
+      sound.softError();
       requestAnimationFrame(() => errorRef.current?.focus());
     } finally { submitting.current = false; setBusy(false); }
   }

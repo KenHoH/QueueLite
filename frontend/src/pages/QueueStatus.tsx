@@ -1,5 +1,5 @@
 import { ArrowLeft, Clock3, Info, Ticket as TicketIcon, Volume2, VolumeX } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { updateQueueState } from '../api/queues';
 import type { QueueState } from '../api/types';
@@ -8,8 +8,8 @@ import { Button, Card, InlineError, LoadingSkeleton, PageContainer, StatusBadge 
 import { LiveValue, QueueProgressTrack } from '../components/LiveMotion';
 import { useToast } from '../components/Toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../components/ui/alert-dialog';
-import { playTurnChime } from '../lib/sound';
 import { useAppState } from '../state/AppState';
+import { useSound } from '../state/SoundContext';
 import { cancellationErrorMessage, isActiveQueue, queueHeadings, ticketErrorMessage } from './queueDisplay';
 import { useCustomerQueueStatus } from './useCustomerQueueStatus';
 
@@ -21,11 +21,11 @@ export default function QueueStatus() {
 function Ticket({ queueId }: { queueId: string }) {
   const { auth } = useAppState();
   const toast = useToast();
+  const sound = useSound();
   const [busy, setBusy] = useState(false);
   const [cancelled, setCancelled] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [cancelError, setCancelError] = useState('');
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const { data, error, persistencePending, streamStatus, refresh } = useCustomerQueueStatus(queueId, busy || cancelled);
   const mutation = useRef<AbortController | null>(null);
   const submitting = useRef(false);
@@ -43,10 +43,10 @@ function Ticket({ queueId }: { queueId: string }) {
     const prev = previousState.current;
     previousState.current = state;
     if (prev && prev !== 'called' && state === 'called') {
-      if (soundEnabled) playTurnChime();
+      sound.turnChime();
       toast.success(myCounter ? `It’s your turn! Head to ${myCounter.name}.` : 'It’s your turn! Head to your counter.');
     }
-  }, [state, soundEnabled, myCounter, toast]);
+  }, [state, sound, myCounter, toast]);
 
   // Update browser tab title when called so background tabs surface the turn immediately.
   useEffect(() => {
@@ -58,16 +58,24 @@ function Ticket({ queueId }: { queueId: string }) {
   }, [state, myCounter]);
 
   function toggleSound() {
-    setSoundEnabled(current => {
-      const next = !current;
-      if (next) {
-        playTurnChime();
-        toast.info('Sound alert on. You’ll hear a chime when called.');
-      } else {
-        toast.info('Sound alert muted.');
-      }
-      return next;
-    });
+    const next = sound.toggle('chime');
+    toast.info(next ? 'Sound alert on. You’ll hear a chime when called.' : 'Sound alert muted.');
+  }
+
+  function onTicketPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse') return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    event.currentTarget.style.setProperty('--ql-rx', `${((0.5 - y) * 6).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty('--ql-ry', `${((x - 0.5) * 6).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty('--ql-tx', `${Math.round(x * 100)}%`);
+    event.currentTarget.style.setProperty('--ql-ty', `${Math.round(y * 100)}%`);
+  }
+
+  function onTicketPointerLeave(event: PointerEvent<HTMLDivElement>) {
+    event.currentTarget.style.setProperty('--ql-rx', '0deg');
+    event.currentTarget.style.setProperty('--ql-ry', '0deg');
   }
 
   async function cancel() {
@@ -82,10 +90,14 @@ function Ticket({ queueId }: { queueId: string }) {
       if (!controller.signal.aborted) {
         setCancelled(true);
         setConfirm(false);
+        sound.pop();
         toast.info('You left the queue.');
       }
     } catch (failure) {
-      if (!controller.signal.aborted) setCancelError(cancellationErrorMessage(failure));
+      if (!controller.signal.aborted) {
+        sound.softError();
+        setCancelError(cancellationErrorMessage(failure));
+      }
     } finally {
       if (!controller.signal.aborted) { submitting.current = false; setBusy(false); }
     }
@@ -120,19 +132,23 @@ function Ticket({ queueId }: { queueId: string }) {
             {(state === 'waiting' || state === 'called') && (
               <button
                 type="button"
-                className={`ql-sound-toggle ${soundEnabled ? 'is-on' : ''}`}
-                aria-pressed={soundEnabled}
+                className={`ql-sound-toggle ${sound.enabled ? 'is-on' : ''}`}
+                aria-pressed={sound.enabled}
                 onClick={toggleSound}
               >
-                {soundEnabled ? <Volume2 size={16} aria-hidden="true" /> : <VolumeX size={16} aria-hidden="true" />}
-                <span>{soundEnabled ? 'Sound on' : 'Sound alert'}</span>
+                {sound.enabled ? <Volume2 size={16} aria-hidden="true" /> : <VolumeX size={16} aria-hidden="true" />}
+                <span>{sound.enabled ? 'Sound on' : 'Sound alert'}</span>
               </button>
             )}
             <div role="status" aria-live="polite"><StatusBadge state={state} /></div>
           </div>
         </div>
-        <div className="ql-status-layout"><Card className={`ql-ticket-card ql-ticket-stub ${state === 'called' ? 'ql-ticket-called' : ''}`}>
-          <span className="ql-ticket-icon" aria-hidden="true"><TicketIcon size={25} /></span>
+        <div className="ql-status-layout"><Card
+          className={`ql-ticket-card ql-ticket-stub ql-ticket-pass ${state === 'called' ? 'ql-ticket-called' : ''}`}
+          onPointerMove={onTicketPointerMove}
+          onPointerLeave={onTicketPointerLeave}
+        >
+          <span className={`ql-ticket-icon ${state === 'called' ? 'ql-sonar-rings' : ''}`} aria-hidden="true"><TicketIcon size={25} /></span>
           <p className="ql-eyebrow">YOUR QUEUE</p>
           <p className="ql-queue-number">{queue.name}</p>
           {state === 'waiting' && data.customerPosition && <div className="ql-position-summary">

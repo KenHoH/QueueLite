@@ -23,6 +23,7 @@ import {
 } from "../components/foundation";
 import { LiveValue } from "../components/LiveMotion";
 import { useToast } from "../components/Toast";
+import { useSound } from "../state/SoundContext";
 import { OperationsFeedback } from "./BusinessOperations";
 import { isBusinessId } from "./businessDisplay";
 import { PriorityBadge } from "./Dashboard";
@@ -77,6 +78,7 @@ function Workspace({ counterId }: { counterId: string }) {
 	);
 	const resource = useOperations(load, false);
 	const toast = useToast();
+	const sound = useSound();
 	const [busy, setBusy] = useState(false),
 		[error, setError] = useState(""),
 		[notice, setNotice] = useState(""),
@@ -108,24 +110,32 @@ function Workspace({ counterId }: { counterId: string }) {
 		try {
 			if (action === "call") {
 				const result = await callNextQueue(counterId, data.counter.businessId);
-				if ("queue" in result && result.queue === null)
+				if ("queue" in result && result.queue === null) {
+					sound.pop();
 					setNotice("No waiting customer available.");
-				else toast.success("Next customer called.");
+				} else {
+					sound.turnChime();
+					toast.success("Next customer called.");
+				}
 			} else if (queue) {
 				if (action === "process") {
 					await processCalledQueue(counterId, queue.id);
+					sound.stepSuccess();
 					toast.info(`Started serving ${queue.name}.`);
 				} else if (action === "complete") {
 					await removeQueueFromCounter(counterId, queue.id);
+					sound.stepSuccess();
 					toast.success(`Completed visit for ${queue.name}.`);
 				} else {
 					await skipQueue(counterId, queue.id);
+					sound.pop();
 					setNotice(
 						"Customer skipped. The scheduler selected the next available customer.",
 					);
 				}
 			}
 		} catch (failure) {
+			sound.softError();
 			setError(operationsError(failure));
 			setUncertain(true);
 		} finally {
@@ -137,6 +147,7 @@ function Workspace({ counterId }: { counterId: string }) {
 	}
 
 	function refresh() {
+		sound.pop();
 		setError("");
 		setNotice("");
 		setUncertain(false);

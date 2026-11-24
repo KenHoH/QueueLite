@@ -6,12 +6,15 @@ import { APIError } from '../api/errors';
 import { getMyQueues, getGuestQueues } from '../api/queues';
 import type { Queue } from '../api/types';
 import { Button, Card, EmptyState, InlineError, LoadingSkeleton, StatusBadge } from './foundation';
+import { QueueFlowVisual } from './LiveVisuals';
 import { useAppState } from '../state/AppState';
+import { useSound } from '../state/SoundContext';
 import { isActiveQueue } from '../pages/queueDisplay';
 
 type PreviewState = 'loading' | 'ready' | 'error' | 'unauthorized';
 export function JoinedQueuesPreview() {
   const { auth, refreshUser } = useAppState();
+  const sound = useSound();
   const [queues, setQueues] = useState<Queue[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<PreviewState>('loading');
@@ -39,12 +42,12 @@ export function JoinedQueuesPreview() {
   const guest = auth.status === 'guest';
   const displayed = queues;
   return <section className="ql-joined-queues" aria-labelledby="joined-queues-heading">
-    <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues {status === 'ready' && <span className="ql-count">{displayed.length}</span>}</h2><p className="ql-muted">A little freedom while you wait.</p></div>{status === 'ready' && <Button variant="secondary" onClick={() => setAttempt(value => value + 1)}><RefreshCw key={attempt} className={attempt > 0 ? 'ql-spin-once' : undefined} size={15} aria-hidden="true" />Refresh queues</Button>}</div>
+    <div className="ql-section-heading"><div><h2 id="joined-queues-heading">Joined queues {status === 'ready' && <span className="ql-count">{displayed.length}</span>}</h2><p className="ql-muted">A little freedom while you wait.</p></div>{status === 'ready' && <Button variant="secondary" onClick={() => { sound.pop(); setAttempt(value => value + 1); }}><RefreshCw key={attempt} className={attempt > 0 ? 'ql-spin-once' : undefined} size={15} aria-hidden="true" />Refresh queues</Button>}</div>
     {auth.status === 'loading' || status === 'loading' && auth.status !== 'error' ? <Card><LoadingSkeleton label="Loading joined queues" lines={2} /></Card>
       : auth.status === 'error' ? <Card><InlineError>Please retry the session check above to view your queues.</InlineError></Card>
       : status === 'unauthorized' && !guest ? <Card><InlineError>Your session has ended. Please sign in to view your queues.</InlineError><Link to="/login?returnTo=%2F">Sign in</Link></Card>
       : status === 'error' ? <Card><InlineError>We couldn’t load your queues.</InlineError><Button onClick={() => setAttempt(value => value + 1)}>Try again</Button></Card>
-      : !displayed.length ? <EmptyState compact title={guest ? 'No joined queues yet.' : 'You don’t have any active queues.'} description="Find a business and save your place. Recently joined queues may take a moment to appear here." />
+      : !displayed.length ? <EmptyState compact title={guest ? 'No joined queues yet.' : 'You don’t have any active queues.'} description="Find a business and save your place. Recently joined queues may take a moment to appear here." action={<QueueFlowVisual />} />
       : <div className="ql-active-queue-list">{displayed.map(queue => <Card asChild className="ql-active-queue" key={queue.id}><Link to={`/queue/${queue.id}`}><span className="ql-business-icon" aria-hidden="true"><Ticket size={24} /></span><div className="ql-active-business"><StatusBadge state={queue.state} /><h3>{names[queue.businessId] ?? 'Your queue'}</h3><p className="ql-meta">Your place, on your time.</p></div><div className="ql-active-number"><span className="ql-eyebrow">Your number</span><strong>{queue.name}</strong></div><span className="ql-active-link">View queue <ArrowRight size={17} aria-hidden="true" /></span></Link></Card>)}</div>}
   </section>;
 }

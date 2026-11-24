@@ -5,6 +5,7 @@ import { Button, Card, PageContainer } from "./components/foundation";
 import { AccountRoute, BusinessRoute } from "./components/RouteAccess";
 import { RouteEffects } from "./components/RouteEffects";
 import { ToastProvider } from "./components/Toast";
+import { SoundProvider } from "./state/SoundContext";
 import { ForbiddenPage, UnauthorizedPage } from "./pages/AccessPage";
 import { AuthPage } from "./pages/AuthPage";
 import BusinessDetail from "./pages/BusinessDetail";
@@ -26,10 +27,11 @@ import StaffCounters from "./pages/StaffCounters";
 export default function App() {
 	return (
 		<MotionConfig reducedMotion="user">
-			<ToastProvider>
-				<RouteEffects />
-				<ApplicationShell>
-				<Routes>
+			<SoundProvider>
+				<ToastProvider>
+					<RouteEffects />
+					<ApplicationShell>
+					<Routes>
 				<Route path="/" element={<Home />} />
 				<Route path="/business/:businessId" element={<BusinessDetail />} />
 				<Route path="/qr/:businessId" element={<QueueQRLanding />} />
@@ -173,9 +175,10 @@ export default function App() {
 						</PageContainer>
 					}
 				/>
-				</Routes>
-				</ApplicationShell>
-			</ToastProvider>
+					</Routes>
+					</ApplicationShell>
+				</ToastProvider>
+			</SoundProvider>
 		</MotionConfig>
 	);
 }

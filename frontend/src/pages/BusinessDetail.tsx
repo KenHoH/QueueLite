@@ -8,7 +8,6 @@ import {
 	Phone,
 	Check,
 	Store,
-	Ticket,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -24,7 +23,9 @@ import {
 	LoadingSkeleton,
 	PageContainer,
 } from "../components/foundation";
+import { QueueFlowVisual } from "../components/LiveVisuals";
 import { useToast } from "../components/Toast";
+import { useSound } from "../state/SoundContext";
 import { businessHours, isBusinessId } from "./businessDisplay";
 
 type DetailState =
@@ -38,6 +39,7 @@ type DetailState =
 export default function BusinessDetail() {
 	const { businessId } = useParams();
 	const toast = useToast();
+	const sound = useSound();
 	const [attempt, setAttempt] = useState(0);
 	const [copiedField, setCopiedField] = useState<"email" | "phone" | null>(null);
 	const copyTimer = useRef<number | null>(null);
@@ -50,6 +52,7 @@ export default function BusinessDetail() {
 		try {
 			await navigator.clipboard.writeText(value);
 			setCopiedField(kind);
+			sound.stepSuccess();
 			if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
 			copyTimer.current = window.setTimeout(() => setCopiedField(null), 1800);
 			toast.success(kind === "email" ? "Email copied." : "Phone number copied.");
@@ -118,7 +121,7 @@ export default function BusinessDetail() {
           </section>
           <Card asChild className="ql-business-information"><aside>
             <h2>Business information</h2>
-            <div className="ql-join-preview"><Ticket size={28} aria-hidden="true" /><h3>A little less waiting.</h3><p>Save your place, then follow your ticket for updates.</p></div>
+            <div className="ql-join-preview"><QueueFlowVisual /><h3>A little less waiting.</h3><p>Save your place, then follow your ticket for updates.</p></div>
             {current.business.operational ? <Button asChild className="ql-join-link"><Link to={`/business/${encodeURIComponent(current.business.id)}/join`}>Join queue <ArrowRight size={17} aria-hidden="true" /></Link></Button> : <Button className="ql-join-link" disabled>Join queue</Button>}
             <p className="ql-meta ql-join-note">{current.business.operational ? 'No standing around. No account needed.' : 'This business is currently unavailable.'}</p>
           </aside></Card>
